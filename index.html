@@ -408,7 +408,7 @@ function parseRows(rows) {
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
     c.displayCompany = c.newCompany || c.existingCompany || '';
 
-    const done = s => !s || ['sent','done','faxed','complete','none needed','n/a'].some(x => s.toLowerCase().includes(x));
+    const done = s => !s || ['sent','done','faxed','complete','none needed','n/a','no replacement','no rep','not needed','no need','called on','sent owner'].some(x => s.toLowerCase().includes(x));
     c.needsStopPAC   = !done(c.stopPAC);
     c.needsCX        = !done(c.cxPolicy);
     c.needsSurrender = !done(c.surrender);
@@ -749,7 +749,7 @@ function genSurrender(){
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
-  const done=s=>!s||['sent','done','faxed','complete','none needed','n/a'].some(x=>s.toLowerCase().includes(x));
+  const done=s=>!s||['sent','done','faxed','complete','none needed','n/a','no replacement','no rep','not needed','no need','called on','sent owner'].some(x=>s.toLowerCase().includes(x));
   const pending   =allClients.filter(c=>!done(c.stopPAC)||!done(c.cxPolicy)||!done(c.surrender));
   const stopPACs  =allClients.filter(c=>!done(c.stopPAC));
   const surrenders=allClients.filter(c=>!done(c.surrender));
