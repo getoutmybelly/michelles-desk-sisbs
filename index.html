@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Michelle's Desk</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+  :root {
+    --ink:#1a1a2e; --paper:#faf8f5; --cream:#f2ede6; --sage:#5c7a6b; --sage-light:#e8f0ec;
+    --rust:#c4501a; --rust-light:#fdf0eb; --gold:#b8923a; --gold-light:#fdf6e8;
+    --green:#2d7a4f; --green-light:#e8f5ee;
+    --border:#ddd8d0; --muted:#7a7570; --shadow:0 2px 12px rgba(26,26,46,.08); --shadow-md:0 4px 24px rgba(26,26,46,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;font-size:16px;line-height:1.5;}
+
+  /* HEADER */
+  .header{background:var(--ink);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .header-title{font-family:'DM Serif Display',serif;color:var(--paper);font-size:20px;}
+  .header-sub{color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
+  .header-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .badge{background:var(--sage);color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;display:none;}
+  .hdr-btn{background:rgba(255,255,255,.12);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;display:none;transition:background .2s;white-space:nowrap;}
+  .hdr-btn:hover{background:rgba(255,255,255,.22);}
+  .hdr-btn.signed-in{background:rgba(92,122,107,.4);}
+  .last-sync{font-size:10px;color:rgba(255,255,255,.35);margin-top:1px;}
+
+  .main{max-width:900px;margin:0 auto;padding:22px 18px;}
+
+  /* SIGN IN PROMPT */
+  .signin-prompt{background:white;border:1.5px solid var(--border);border-radius:16px;padding:36px 24px;text-align:center;margin-bottom:24px;}
+  .signin-prompt.hidden{display:none;}
+  .signin-icon{font-size:36px;margin-bottom:12px;}
+  .signin-title{font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:8px;}
+  .signin-sub{color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.6;}
+  .signin-note{font-size:12px;color:var(--muted);margin-top:14px;}
+
+  /* LOADING */
+  .loading-state{text-align:center;padding:64px 24px;display:none;}
+  .loading-spinner{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--sage);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-title{font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:6px;}
+  .loading-sub{color:var(--muted);font-size:13px;}
+
+  /* ERROR */
+  .error-state{background:var(--rust-light);border:1.5px solid var(--rust);border-radius:14px;padding:22px;margin-bottom:22px;display:none;}
+  .error-title{font-weight:600;color:var(--rust);margin-bottom:5px;}
+  .error-msg{font-size:13px;color:var(--ink);}
+  .retry-btn{margin-top:12px;background:var(--rust);color:#fff;border:none;padding:9px 20px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;}
+
+  /* SEARCH */
+  .search-section{display:none;margin-bottom:14px;}
+  .search-section.visible{display:block;}
+  .search-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
+  .search-wrap{position:relative;}
+  .search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:17px;color:var(--muted);pointer-events:none;}
+  .search-input{width:100%;padding:13px 13px 13px 42px;border:2px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:16px;background:#fff;color:var(--ink);outline:none;transition:border-color .2s;}
+  .search-input:focus{border-color:var(--sage);}
+
+  /* CLIENT LIST */
+  .client-list{display:none;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto;margin-bottom:18px;padding-right:3px;}
+  .client-list.visible{display:flex;}
+  .client-card{background:#fff;border:1.5px solid var(--border);border-radius:11px;padding:12px 15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;}
+  .client-card:hover{border-color:var(--sage);background:var(--sage-light);transform:translateX(2px);}
+  .client-name{font-weight:600;font-size:15px;}
+  .client-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .pills{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;}
+  .pill{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;letter-spacing:.03em;white-space:nowrap;}
+  .pill-stop{background:var(--rust-light);color:var(--rust);}
+  .pill-cx{background:#fde8f5;color:#8b2460;}
+  .pill-surr{background:var(--gold-light);color:var(--gold);}
+  .pill-visits{background:#e8f0fd;color:#2a4da0;}
+
+  /* DETAIL PANEL */
+  .detail-panel{display:none;background:#fff;border-radius:16px;border:1.5px solid var(--border);overflow:hidden;box-shadow:var(--shadow-md);margin-bottom:22px;}
+  .detail-panel.visible{display:block;}
+  .detail-header{background:var(--ink);padding:17px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  .detail-name{font-family:'DM Serif Display',serif;font-size:23px;color:#fff;line-height:1.2;}
+  .detail-sub{color:var(--gold);font-size:13px;font-weight:500;margin-top:3px;}
+  .close-btn{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .close-btn:hover{background:rgba(255,255,255,.28);}
+  .detail-body{padding:17px 20px;}
+
+  /* VISIT TABS */
+  .visit-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+  .visit-tabs{display:flex;gap:5px;margin-bottom:14px;flex-wrap:wrap;}
+  .visit-tab{padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;}
+  .visit-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .visit-tab:hover:not(.active){border-color:var(--sage);color:var(--sage);}
+
+  /* INFO GRID */
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px 18px;margin-bottom:14px;}
+  @media(max-width:540px){.info-grid,.coverage-row,.followup-grid{grid-template-columns:1fr!important;}}
+  .info-item label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px;}
+  .info-item span{font-size:14px;color:var(--ink);}
+  .info-item span.empty{color:#ccc;font-style:italic;font-size:12px;}
+  .info-full{grid-column:1/-1;}
+
+  /* COVERAGE */
+  .coverage-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
+  .cov-block{background:var(--cream);border-radius:9px;padding:11px 13px;}
+  .cov-block.new{background:var(--sage-light);}
+  .cov-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px;}
+  .cov-block.new .cov-title{color:var(--sage);}
+  .cov-line{font-size:13px;color:var(--ink);margin-bottom:2px;}
+  .cov-line b{font-weight:600;}
+
+  /* ACTIONS */
+  .actions-section{border-top:1.5px solid var(--cream);padding-top:14px;}
+  .actions-title{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  .action-buttons{display:flex;flex-direction:column;gap:9px;}
+
+  .action-btn{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:11px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;text-align:left;background:#fff;transition:all .15s;width:100%;}
+  .btn-icon{font-size:19px;flex-shrink:0;}
+  .btn-text{flex:1;}
+  .btn-label{display:block;font-weight:600;}
+  .btn-sub{display:block;font-size:12px;font-weight:400;opacity:.7;margin-top:1px;}
+  .btn-arrow{font-size:15px;opacity:.35;}
+  .btn-stop{border-color:var(--rust);color:var(--rust);}
+  .btn-stop:hover{background:var(--rust-light);}
+  .btn-surr{border-color:var(--gold);color:var(--gold);}
+  .btn-surr:hover{background:var(--gold-light);}
+
+  /* MARK AS SENT BUTTONS */
+  .sent-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  .mark-sent-btn{display:flex;align-items:center;gap:7px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--green);color:var(--green);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;transition:all .15s;flex:1;min-width:140px;}
+  .mark-sent-btn:hover{background:var(--green-light);}
+  .mark-sent-btn.loading{opacity:.6;pointer-events:none;}
+  .mark-sent-btn.done{background:var(--green-light);border-color:var(--green);}
+  .sent-divider{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;margin-top:14px;}
+
+  .notes-box{background:var(--cream);border-radius:9px;padding:11px 13px;font-size:13px;color:var(--muted);margin-top:10px;line-height:1.6;}
+  .notes-box b{color:var(--ink);}
+
+  /* DASHBOARD */
+  .dashboard-section{display:none;margin-top:4px;}
+  .dashboard-section.visible{display:block;}
+  .section-divider{display:flex;align-items:center;gap:11px;margin-bottom:14px;}
+  .section-divider h2{font-family:'DM Serif Display',serif;font-size:19px;white-space:nowrap;}
+  .divider-line{flex:1;height:1px;background:var(--border);}
+  .stats-row{display:flex;gap:9px;margin-bottom:18px;flex-wrap:wrap;}
+  .stat-box{background:#fff;border:1.5px solid var(--border);border-radius:9px;padding:11px 14px;flex:1;min-width:80px;}
+  .stat-number{font-family:'DM Serif Display',serif;font-size:24px;color:var(--ink);line-height:1;}
+  .stat-label{font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;}
+  .stat-box.alert{border-color:var(--rust);}
+  .stat-box.alert .stat-number{color:var(--rust);}
+  .followup-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:22px;}
+  .followup-card{background:#fff;border:1.5px solid var(--border);border-radius:11px;padding:13px;cursor:pointer;transition:all .15s;}
+  .followup-card:hover{border-color:var(--rust);transform:translateY(-1px);box-shadow:var(--shadow);}
+  .followup-name{font-weight:600;font-size:14px;}
+  .followup-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .followup-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px;}
+  .no-results{text-align:center;padding:28px;color:var(--muted);font-size:14px;}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 20px;border-radius:50px;font-size:13px;font-weight:500;opacity:0;transition:all .3s;z-index:999;pointer-events:none;white-space:nowrap;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .client-list::-webkit-scrollbar{width:3px;}
+  .client-list::-webkit-scrollbar-track{background:var(--cream);}
+  .client-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">Michelle's Desk</div>
+    <div class="header-sub">Insurance Paperwork Tool</div>
+    <div class="last-sync" id="lastSync"></div>
+  </div>
+  <div class="header-right">
+    <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
+    <button class="hdr-btn signed-in" id="signedInBtn" style="display:none"></button>
+    <div class="badge" id="badge"></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- SIGN IN PROMPT -->
+  <div class="signin-prompt" id="signinPrompt">
+    <div class="signin-icon">🔐</div>
+    <div class="signin-title">Sign in to get started</div>
+    <div class="signin-sub">Sign in with the Google account that owns the spreadsheet.<br>This lets the tool read your clients and mark items as sent.</div>
+    <div id="googleSignInBtn"></div>
+    <div class="signin-note">Your data stays in your Google account. Nothing is stored elsewhere.</div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-state" id="loadingState">
+    <div class="loading-spinner"></div>
+    <div class="loading-title">Loading your clients…</div>
+    <div class="loading-sub">Pulling from Google Sheets</div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-state" id="errorState">
+    <div class="error-title">Couldn't load data</div>
+    <div class="error-msg" id="errorMsg"></div>
+    <button class="retry-btn" onclick="loadFromSheets()">Try Again</button>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-section" id="searchSection">
+    <label class="search-label">Find a Client</label>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="searchInput" type="text" placeholder="Name, city, or policy number…" autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+  </div>
+
+  <div class="client-list" id="clientList"></div>
+
+  <!-- CLIENT DETAIL -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-name" id="detailName"></div>
+        <div class="detail-sub" id="detailSub"></div>
+      </div>
+      <button class="close-btn" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-body" id="detailBody"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="dashboard-section" id="dashboardSection">
+    <div class="section-divider">
+      <h2>Follow-Up Pipeline</h2>
+      <div class="divider-line"></div>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="followup-grid" id="followupGrid"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const { jsPDF } = window.jspdf;
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const SHEET_ID    = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
+const CLIENT_ID   = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
+const SHEET_TAB   = 'Clients';
+const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
+
+// Column indices for write-back (0-based, matching the sheet)
+const COL_STOP_PAC  = 46;
+const COL_CX_POLICY = 47;
+const COL_SURRENDER = 48;
+
+let accessToken    = null;
+let clientGroups   = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
+let rowIndexMap    = {}; // fullName key → array of sheet row numbers (1-based)
+
+// ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: handleCredential,
+    auto_select: true,
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('googleSignInBtn'),
+    { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240 }
+  );
+  // Also try token client for full write scope
+  initTokenClient();
+});
+
+let tokenClient;
+function initTokenClient() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (resp) => {
+      if (resp.error) { showError('Sign-in failed: ' + resp.error); return; }
+      accessToken = resp.access_token;
+      document.getElementById('signinPrompt').classList.add('hidden');
+      loadFromSheets();
+    },
+  });
+}
+
+function handleCredential(response) {
+  // ID token received — now get an access token with write scope
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function signIn() {
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+// Override the Google button click to use our token flow
+document.addEventListener('click', e => {
+  if (e.target.closest('#googleSignInBtn')) {
+    e.preventDefault();
+    e.stopPropagation();
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
+}, true);
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+async function loadFromSheets() {
+  if (!accessToken) { tokenClient.requestAccessToken({ prompt: '' }); return; }
+  showLoading(true); hideError();
+
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (resp.status === 401) {
+      accessToken = null;
+      tokenClient.requestAccessToken({ prompt: '' });
+      return;
+    }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    parseRows(data.values || []);
+
+    showLoading(false);
+    document.getElementById('searchSection').classList.add('visible');
+    document.getElementById('dashboardSection').classList.add('visible');
+
+    const badge = document.getElementById('badge');
+    badge.textContent = `${allClients.length} clients`;
+    badge.style.display = 'block';
+    document.getElementById('refreshBtn').style.display = 'block';
+
+    const now = new Date();
+    document.getElementById('lastSync').textContent =
+      `Synced ${now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
+
+    renderDashboard();
+    toast(`✓ ${allClients.length} clients loaded`);
+
+    // Re-render detail if open
+    if (selectedGroup) renderDetail();
+
+  } catch(err) {
+    showLoading(false);
+    showError(err.message);
+    console.error(err);
+  }
+}
+
+function parseRows(rows) {
+  const clients = [], groups = {}, rowMap = {};
+
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    const firstName = cl(r[1]);
+    if (!firstName) continue;
+
+    const c = {
+      sheetRowNumber: i + 1, // 1-based for Sheets API
+      rowType:         cl(r[0]),
+      firstName,
+      lastName:        cl(r[3]) || cl(r[2]),
+      spouse:          cl(r[2]),
+      address:         cl(r[4]),
+      city:            cl(r[5]),
+      county:          cl(r[6]),
+      state:           cl(r[7]),
+      zip:             cl(r[8]),
+      leadDate:        fmtDate(r[9]),
+      phone:           fmtPhone(r[10]),
+      dob:             fmtDate(r[11]),
+      age:             cl(r[12]),
+      tobacco:         cl(r[13]),
+      ssType:          cl(r[14]),
+      bank:            cl(r[15]),
+      checkDate:       cl(r[16]),
+      currentCov:      cl(r[17]),
+      existingCompany: cl(r[18]),
+      existingFace:    cl(r[19]),
+      existingPremium: cl(r[20]),
+      existingPolicy:  cl(r[21]),
+      cashValue:       cl(r[25]),
+      ssn:             cl(r[35]),
+      newCompany:      cl(r[38]),
+      newFace:         cl(r[39]),
+      newPremium:      cl(r[40]),
+      apptDate:        fmtDate(r[41]),
+      effectiveDate:   fmtDate(r[42]),
+      payDate:         cl(r[43]),
+      stopPAC:         cl(r[46]),
+      cxPolicy:        cl(r[47]),
+      surrender:       cl(r[48]),
+      other:           cl(r[50]),
+      beneficiary:     cl(r[51]),
+      paymentInfo:     cl(r[52]),
+      notes:           cl(r[53]),
+    };
+
+    c.fullName       = [c.firstName, c.lastName].filter(Boolean).join(' ');
+    c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
+    c.displayCompany = c.newCompany || c.existingCompany || '';
+
+    const done = s => !s || ['sent','done','faxed','complete','none needed','n/a'].some(x => s.toLowerCase().includes(x));
+    c.needsStopPAC   = !done(c.stopPAC);
+    c.needsCX        = !done(c.cxPolicy);
+    c.needsSurrender = !done(c.surrender);
+    c.hasPending     = c.needsStopPAC || c.needsCX || c.needsSurrender;
+
+    clients.push(c);
+    const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  }
+
+  allClients   = clients;
+  clientGroups = groups;
+}
+
+// ── MARK AS SENT (write back to sheet) ───────────────────────────────────────
+async function markSent(type) {
+  const c = selectedGroup[activeVisitIdx];
+  if (!accessToken) { toast('Sign in first to mark as sent'); return; }
+
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
+  const value = `Sent ${today}`;
+
+  let col, btnId;
+  if (type === 'stopPAC')   { col = COL_STOP_PAC;  btnId = 'markStopBtn'; }
+  if (type === 'cxPolicy')  { col = COL_CX_POLICY; btnId = 'markCXBtn'; }
+  if (type === 'surrender') { col = COL_SURRENDER;  btnId = 'markSurrBtn'; }
+
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.classList.add('loading'); btn.textContent = 'Saving…'; }
+
+  // Convert column index to A1 notation letter
+  const colLetter = colToLetter(col);
+  const row = c.sheetRowNumber;
+  const range = `${SHEET_TAB}!${colLetter}${row}`;
+
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ values: [[value]] }),
+      }
+    );
+
+    if (resp.status === 401) {
+      accessToken = null;
+      tokenClient.requestAccessToken({ prompt: '' });
+      return;
+    }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+
+    // Update local data
+    if (type === 'stopPAC')   c.stopPAC  = value;
+    if (type === 'cxPolicy')  c.cxPolicy = value;
+    if (type === 'surrender') c.surrender = value;
+
+    c.needsStopPAC   = false;
+    c.needsCX        = false;
+    c.needsSurrender = false;
+    if (type === 'stopPAC')   c.needsStopPAC   = false;
+    if (type === 'cxPolicy')  c.needsCX        = false;
+    if (type === 'surrender') c.needsSurrender = false;
+    c.hasPending = c.needsStopPAC || c.needsCX || c.needsSurrender;
+
+    if (btn) { btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Marked as Sent'; btn.disabled = true; }
+
+    renderDashboard();
+    toast(`✓ Updated in Google Sheets`);
+
+  } catch(err) {
+    if (btn) { btn.classList.remove('loading'); btn.textContent = 'Try Again'; }
+    toast('Could not save — check connection');
+    console.error(err);
+  }
+}
+
+function colToLetter(col) {
+  // Convert 0-based column index to A1 letter(s)
+  let letter = '';
+  let n = col;
+  while (n >= 0) {
+    letter = String.fromCharCode((n % 26) + 65) + letter;
+    n = Math.floor(n / 26) - 1;
+  }
+  return letter;
+}
+
+// ── SEARCH ────────────────────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', function() {
+  const q = this.value.trim().toLowerCase();
+  const list = document.getElementById('clientList');
+  if (!q) { list.classList.remove('visible'); list.innerHTML=''; return; }
+
+  const matched = [];
+  for (const [key, visits] of Object.entries(clientGroups)) {
+    const best = visits[visits.length-1];
+    const qPhone = q.replace(/\D/g,'');
+    if (
+      best.fullName.toLowerCase().includes(q) ||
+      best.displayCompany.toLowerCase().includes(q) ||
+      best.city.toLowerCase().includes(q) ||
+      best.existingPolicy.includes(q) ||
+      (qPhone.length>3 && best.phone.replace(/\D/g,'').includes(qPhone))
+    ) matched.push({ key, visits, best });
+    if (matched.length>=25) break;
+  }
+
+  if (!matched.length) {
+    list.innerHTML='<div class="no-results">No clients found</div>';
+    list.classList.add('visible'); return;
+  }
+
+  list.innerHTML = matched.map(({ key, visits, best }) => {
+    const pills = buildPills(best);
+    const vp = visits.length>1 ? `<span class="pill pill-visits">${visits.length} visits</span>` : '';
+    const meta = [best.displayCompany,best.city,best.state].filter(Boolean).join(' · ')||'No details on file';
+    return `<div class="client-card" onclick="openGroup('${esc(key)}')">
+      <div><div class="client-name">${best.fullName}</div><div class="client-meta">${meta}</div></div>
+      <div class="pills">${vp}${pills}</div>
+    </div>`;
+  }).join('');
+  list.classList.add('visible');
+});
+
+function buildPills(c) {
+  return (c.needsStopPAC   ? '<span class="pill pill-stop">Stop PAC</span>' : '')
+       + (c.needsCX        ? '<span class="pill pill-cx">CX Policy</span>' : '')
+       + (c.needsSurrender ? '<span class="pill pill-surr">Surrender</span>' : '');
+}
+
+// ── DETAIL ────────────────────────────────────────────────────────────────────
+function openGroup(key) {
+  selectedGroup = clientGroups[key]; if (!selectedGroup) return;
+  activeVisitIdx = selectedGroup.length-1;
+  document.getElementById('searchInput').value='';
+  document.getElementById('clientList').classList.remove('visible');
+  renderDetail();
+  document.getElementById('detailPanel').classList.add('visible');
+  setTimeout(()=>document.getElementById('detailPanel').scrollIntoView({behavior:'smooth',block:'start'}),50);
+}
+
+function renderDetail() {
+  const c = selectedGroup[activeVisitIdx];
+  const multi = selectedGroup.length>1;
+
+  document.getElementById('detailName').textContent = c.fullName;
+  document.getElementById('detailSub').textContent =
+    [c.displayCompany, c.existingPolicy?`Policy #${c.existingPolicy}`:''].filter(Boolean).join(' · ')
+    ||(c.newCompany?`Placing with ${c.newCompany}`:'No policy on file');
+
+  let h = '';
+
+  if (multi) {
+    h += '<div class="visit-label">Client Visits — tap to switch</div><div class="visit-tabs">';
+    selectedGroup.forEach((v,i)=>{
+      const lbl = v.leadDate||v.apptDate||`Visit ${i+1}`;
+      h += `<button class="visit-tab${i===activeVisitIdx?' active':''}" onclick="switchVisit(${i})">${lbl}</button>`;
+    });
+    h += '</div>';
+  }
+
+  h += '<div class="info-grid">';
+  h += ii('Address',c.fullAddress,true);
+  h += ii('Phone',c.phone);
+  h += ii('Date of Birth',c.dob);
+  h += ii('Age',c.age);
+  h += ii('Social Security #',c.ssn?`···-··-${c.ssn.slice(-4)}`:'');
+  h += ii('SS / Disability',c.ssType);
+  h += ii('Bank',c.bank);
+  h += ii('Pay Week',c.checkDate);
+  h += ii('Tobacco',c.tobacco);
+  if (c.beneficiary) h += ii('Beneficiary',c.beneficiary,true);
+  if (c.paymentInfo) h += ii('Payment / Bank Info',c.paymentInfo,true);
+  h += '</div>';
+
+  const hasExist = c.existingCompany||c.existingFace||c.existingPremium||c.existingPolicy;
+  const hasNew   = c.newCompany||c.newFace||c.newPremium;
+  if (hasExist||hasNew) {
+    h += '<div class="coverage-row">';
+    if (hasExist) h += `<div class="cov-block"><div class="cov-title">Current Coverage</div>
+      ${c.existingCompany?`<div class="cov-line"><b>${c.existingCompany}</b></div>`:''}
+      ${c.existingPolicy?`<div class="cov-line">Policy # ${c.existingPolicy}</div>`:''}
+      ${c.existingFace?`<div class="cov-line">Face: <b>${c.existingFace}</b></div>`:''}
+      ${c.existingPremium?`<div class="cov-line">Premium: <b>$${c.existingPremium}/mo</b></div>`:''}
+      ${c.cashValue?`<div class="cov-line">Cash Value: ${c.cashValue}</div>`:''}</div>`;
+    if (hasNew) h += `<div class="cov-block new"><div class="cov-title">New / Qualifying</div>
+      ${c.newCompany?`<div class="cov-line"><b>${c.newCompany}</b></div>`:''}
+      ${c.newFace?`<div class="cov-line">Face: <b>${c.newFace}</b></div>`:''}
+      ${c.newPremium?`<div class="cov-line">Premium: <b>$${c.newPremium}/mo</b></div>`:''}
+      ${c.apptDate?`<div class="cov-line">Appt: ${c.apptDate}</div>`:''}
+      ${c.effectiveDate?`<div class="cov-line">Effective: ${c.effectiveDate}</div>`:''}</div>`;
+    h += '</div>';
+  }
+
+  // Generate paperwork buttons
+  h += `<div class="actions-section"><div class="actions-title">Generate Paperwork</div><div class="action-buttons">
+    <button class="action-btn btn-stop" onclick="genStopPAC()">
+      <span class="btn-icon">🛑</span>
+      <span class="btn-text"><span class="btn-label">Stop PAC Form</span><span class="btn-sub">Cancel auto-withdrawal · ${c.displayCompany||'carrier'}</span></span>
+      <span class="btn-arrow">→</span>
+    </button>
+    <button class="action-btn btn-surr" onclick="genSurrender()">
+      <span class="btn-icon">📋</span>
+      <span class="btn-text"><span class="btn-label">Surrender / Cancellation Form</span><span class="btn-sub">American-Amicable · Policy #${c.existingPolicy||'___'}</span></span>
+      <span class="btn-arrow">→</span>
+    </button>
+  </div>`;
+
+  // Mark as Sent buttons — only show for items that still need action
+  const sentButtons = [];
+  if (c.needsStopPAC)
+    sentButtons.push(`<button class="mark-sent-btn" id="markStopBtn" onclick="markSent('stopPAC')">✓ Mark Stop PAC Sent</button>`);
+  if (c.needsCX)
+    sentButtons.push(`<button class="mark-sent-btn" id="markCXBtn" onclick="markSent('cxPolicy')">✓ Mark CX Policy Sent</button>`);
+  if (c.needsSurrender)
+    sentButtons.push(`<button class="mark-sent-btn" id="markSurrBtn" onclick="markSent('surrender')">✓ Mark Surrender Sent</button>`);
+
+  if (sentButtons.length) {
+    h += `<div class="sent-divider">Mark as Sent — updates your Google Sheet instantly</div>`;
+    h += `<div class="sent-row">${sentButtons.join('')}</div>`;
+  }
+
+  h += '</div>'; // close actions-section
+
+  // Status flags + notes
+  const flags = [
+    c.stopPAC  ?`Stop PAC: ${c.stopPAC}`:'',
+    c.cxPolicy ?`CX Policy: ${c.cxPolicy}`:'',
+    c.surrender?`Surrender: ${c.surrender}`:'',
+    c.other    ?`Other: ${c.other}`:'',
+  ].filter(Boolean);
+  if (flags.length||c.notes) {
+    h += '<div class="notes-box">';
+    h += flags.map(f=>`<div>${f}</div>`).join('');
+    if (c.notes) h += `<div style="margin-top:${flags.length?6:0}px"><b>Notes:</b> ${c.notes}</div>`;
+    h += '</div>';
+  }
+
+  document.getElementById('detailBody').innerHTML = h;
+}
+
+function ii(label,value,full=false){
+  const empty=!value||!String(value).trim();
+  return `<div class="info-item${full?' info-full':''}"><label>${label}</label><span class="${empty?'empty':''}">${empty?'Not on file':value}</span></div>`;
+}
+function switchVisit(i){activeVisitIdx=i;renderDetail();}
+function closeDetail(){document.getElementById('detailPanel').classList.remove('visible');selectedGroup=null;}
+
+// ── PDF: STOP PAC ─────────────────────────────────────────────────────────────
+function genStopPAC(){
+  const c=selectedGroup[activeVisitIdx];
+  const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=72;let y=M;
+  doc.setFillColor(26,26,46);doc.rect(0,0,W,78,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(20);
+  doc.text('Stop PAC – Send a Bill',M,36);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(184,146,58);
+  doc.text(`Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`,M,56);
+  y=106;doc.setTextColor(26,26,46);doc.setFontSize(12);doc.setFont('helvetica','normal');
+  const co=c.existingCompany||c.newCompany||c.displayCompany||'________________________';
+  const pol=c.existingPolicy||'________________________';
+  doc.text(`Dear ${co},`,M,y);y+=30;
+  const bl=doc.splitTextToSize(`I would like to cancel the automatic withdrawal from my bank for policy #${pol} effective today.`,W-M*2);
+  doc.text(bl,M,y);y+=bl.length*17+14;
+  doc.text('I do NOT want anyone from your company to call me on the phone or stop by.',M,y);y+=20;
+  doc.text('I want to be placed on your "Do NOT Call List."',M,y);y+=28;
+  doc.text('Please send the Bill for this Policy to:',M,y);y+=22;
+  doc.setDrawColor(200,200,200);doc.setLineWidth(1);doc.rect(M,y,W-M*2,158);y+=18;
+  const lx=M+14,le=W-M-14,lh=22,lw=160;
+  function fl(label,value){
+    doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text(label,lx,y);
+    doc.setFont('helvetica','normal');doc.line(lx+lw,y+3,le,y+3);
+    if(value){doc.setFontSize(11);doc.text(value,lx+lw+4,y);}y+=lh;
+  }
+  fl('Name',c.fullName);fl('Address',c.address);
+  fl('City / St. / ZIP',[c.city,c.state,c.zip].filter(Boolean).join('   '));
+  fl('Phone No.',c.phone);fl('Birth Date',c.dob);
+  fl('Social Security No. (Required)',c.ssn||'___  –  ___  –  ____');
+  y+=18;const sy=y+38;
+  doc.line(M,sy,M+240,sy);doc.setFontSize(10);doc.text('Signed',M,sy+13);
+  doc.line(M+260,sy,M+370,sy);doc.text('Date',M+260,sy+13);
+  const wy=sy+48;
+  doc.line(M,wy,M+240,wy);doc.text('Witness',M,wy+13);
+  doc.line(M+260,wy,M+370,wy);doc.text('Date',M+260,wy+13);
+  doc.setFontSize(8);doc.setTextColor(160,160,160);
+  doc.text(`${c.fullName} · Policy: ${pol} · ${co}`,M,748);
+  doc.save(`StopPAC_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Stop PAC PDF ready — open in PDF Expert');
+}
+
+// ── PDF: SURRENDER ────────────────────────────────────────────────────────────
+function genSurrender(){
+  const c=selectedGroup[activeVisitIdx];
+  const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=60;let y=M;
+  doc.setFillColor(26,26,46);doc.rect(0,0,W,78,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(17);
+  doc.text('Policy Cancellation Request',M,34);
+  doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(184,146,58);
+  doc.text('American-Amicable Group of Companies',M,50);
+  doc.text(`Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`,M,64);
+  y=104;doc.setTextColor(26,26,46);doc.setFontSize(11);
+  function fld(label,value,lw2=280){
+    doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text(label+':',M,y);
+    const tw=doc.getTextWidth(label+': ');
+    doc.setFont('helvetica','normal');doc.line(M+tw,y+3,M+tw+lw2,y+3);
+    if(value){doc.setFontSize(11);doc.text(value,M+tw+3,y);}y+=24;
+  }
+  fld('Policy Number',c.existingPolicy,240);fld("Insured's Name",c.fullName,250);
+  fld("Policy Owner's Name",c.fullName,230);fld('DOB',c.dob,130);y+=2;
+  fld('Address',c.address,340);
+  fld('City, State, Zip',[c.city,c.state,c.zip].filter(Boolean).join(', '),270);
+  fld('SS#',c.ssn,160);fld('Phone No.',c.phone,190);y+=8;
+  doc.setFont('helvetica','normal');doc.setFontSize(11);
+  doc.text('I wish to cancel my policy and receive any policy values due me.',M,y);y+=22;
+  fld('Reason for cancellation','',350);y+=6;
+  doc.rect(M,y-11,11,11);doc.text('Direct deposit to my bank account (attach voided check)',M+16,y);y+=20;
+  doc.rect(M,y-11,11,11);doc.text('Mail check to the address above',M+16,y);y+=30;
+  doc.setFont('helvetica','italic');doc.setFontSize(8.5);doc.setTextColor(110,110,110);
+  doc.text(doc.splitTextToSize('If there is a taxable gain, the Company will report the gain to the IRS and issue a 1099-R. Unless the box below is checked, taxes will be withheld.',W-M*2),M,y);
+  y+=28;doc.setFont('helvetica','normal');doc.setFontSize(11);doc.setTextColor(26,26,46);
+  doc.rect(M,y-11,11,11);doc.text('Do NOT withhold taxes',M+16,y);y+=40;
+  doc.line(M,y,M+270,y);doc.setFontSize(10);doc.text("Policy Owner's Signature",M,y+13);
+  doc.line(M+290,y,M+430,y);doc.text('Date',M+290,y+13);
+  doc.setFontSize(8);doc.setTextColor(160,160,160);
+  doc.text('American-Amicable Life Insurance Company of Texas · PO Box 2549, Waco TX 76702-2549 · Fax: 254-297-2105',M,748);
+  doc.save(`Surrender_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Surrender form ready — open in PDF Expert');
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function renderDashboard(){
+  const done=s=>!s||['sent','done','faxed','complete','none needed','n/a'].some(x=>s.toLowerCase().includes(x));
+  const pending   =allClients.filter(c=>!done(c.stopPAC)||!done(c.cxPolicy)||!done(c.surrender));
+  const stopPACs  =allClients.filter(c=>!done(c.stopPAC));
+  const surrenders=allClients.filter(c=>!done(c.surrender));
+  const dupeCount =Object.values(clientGroups).filter(g=>g.length>1).length;
+
+  document.getElementById('statsRow').innerHTML=`
+    <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
+    <div class="stat-box"><div class="stat-number">${stopPACs.length}</div><div class="stat-label">Stop PACs</div></div>
+    <div class="stat-box"><div class="stat-number">${surrenders.length}</div><div class="stat-label">Surrenders</div></div>
+    <div class="stat-box"><div class="stat-number">${dupeCount}</div><div class="stat-label">Multi-Visit</div></div>`;
+
+  if(!pending.length){
+    document.getElementById('followupGrid').innerHTML='<div class="no-results" style="grid-column:1/-1">🎉 All caught up!</div>';
+    return;
+  }
+  document.getElementById('followupGrid').innerHTML=pending.slice(0,24).map(c=>{
+    const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+    return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
+      <div class="followup-name">${c.fullName}</div>
+      <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+      <div class="followup-tags">${buildPills(c)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
+function fmtPhone(v){
+  const s=cl(v);if(!s)return'';
+  const d=s.replace(/\D/g,'');
+  if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+  if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+  return s;
+}
+function fmtDate(v){
+  if(!v)return'';const s=String(v).trim();
+  if(!s||s.toLowerCase()==='nan')return'';
+  if(/^\d{5,6}$/.test(s)){const d=new Date(Math.round((parseFloat(s)-25569)*86400*1000));if(!isNaN(d))return`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;}
+  const d=new Date(s);
+  if(!isNaN(d.getTime())){const yr=d.getFullYear();if(yr>1900&&yr<2100)return`${d.getMonth()+1}/${d.getDate()}/${yr}`;}
+  return s;
+}
+function esc(k){return k.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+function todayStr(){const d=new Date();return`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;}
+function showLoading(show){document.getElementById('loadingState').style.display=show?'block':'none';}
+function showError(msg){document.getElementById('errorMsg').textContent=msg;document.getElementById('errorState').style.display='block';}
+function hideError(){document.getElementById('errorState').style.display='none';}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}
+</script>
+</body>
+</html>
