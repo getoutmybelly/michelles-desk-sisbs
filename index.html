@@ -11,13 +11,11 @@
   :root {
     --ink:#1a1a2e; --paper:#faf8f5; --cream:#f2ede6; --sage:#5c7a6b; --sage-light:#e8f0ec;
     --rust:#c4501a; --rust-light:#fdf0eb; --gold:#b8923a; --gold-light:#fdf6e8;
-    --green:#2d7a4f; --green-light:#e8f5ee;
+    --green:#2d7a4f; --green-light:#e8f5ee; --blue:#2a4da0; --blue-light:#e8f0fd;
     --border:#ddd8d0; --muted:#7a7570; --shadow:0 2px 12px rgba(26,26,46,.08); --shadow-md:0 4px 24px rgba(26,26,46,.12);
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'DM Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;font-size:16px;line-height:1.5;}
-
-  /* HEADER */
   .header{background:var(--ink);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
   .header-title{font-family:'DM Serif Display',serif;color:var(--paper);font-size:20px;}
   .header-sub{color:var(--gold);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
@@ -25,12 +23,9 @@
   .badge{background:var(--sage);color:#fff;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;display:none;}
   .hdr-btn{background:rgba(255,255,255,.12);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;display:none;transition:background .2s;white-space:nowrap;}
   .hdr-btn:hover{background:rgba(255,255,255,.22);}
-  .hdr-btn.signed-in{background:rgba(92,122,107,.4);}
   .last-sync{font-size:10px;color:rgba(255,255,255,.35);margin-top:1px;}
-
   .main{max-width:900px;margin:0 auto;padding:22px 18px;}
 
-  /* SIGN IN PROMPT */
   .signin-prompt{background:white;border:1.5px solid var(--border);border-radius:16px;padding:36px 24px;text-align:center;margin-bottom:24px;}
   .signin-prompt.hidden{display:none;}
   .signin-icon{font-size:36px;margin-bottom:12px;}
@@ -38,20 +33,17 @@
   .signin-sub{color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.6;}
   .signin-note{font-size:12px;color:var(--muted);margin-top:14px;}
 
-  /* LOADING */
   .loading-state{text-align:center;padding:64px 24px;display:none;}
   .loading-spinner{width:38px;height:38px;border:3px solid var(--border);border-top-color:var(--sage);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .loading-title{font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:6px;}
   .loading-sub{color:var(--muted);font-size:13px;}
 
-  /* ERROR */
   .error-state{background:var(--rust-light);border:1.5px solid var(--rust);border-radius:14px;padding:22px;margin-bottom:22px;display:none;}
   .error-title{font-weight:600;color:var(--rust);margin-bottom:5px;}
   .error-msg{font-size:13px;color:var(--ink);}
   .retry-btn{margin-top:12px;background:var(--rust);color:#fff;border:none;padding:9px 20px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;}
 
-  /* SEARCH */
   .search-section{display:none;margin-bottom:14px;}
   .search-section.visible{display:block;}
   .search-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;display:block;}
@@ -60,7 +52,6 @@
   .search-input{width:100%;padding:13px 13px 13px 42px;border:2px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:16px;background:#fff;color:var(--ink);outline:none;transition:border-color .2s;}
   .search-input:focus{border-color:var(--sage);}
 
-  /* CLIENT LIST */
   .client-list{display:none;flex-direction:column;gap:7px;max-height:340px;overflow-y:auto;margin-bottom:18px;padding-right:3px;}
   .client-list.visible{display:flex;}
   .client-card{background:#fff;border:1.5px solid var(--border);border-radius:11px;padding:12px 15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;}
@@ -72,9 +63,9 @@
   .pill-stop{background:var(--rust-light);color:var(--rust);}
   .pill-cx{background:#fde8f5;color:#8b2460;}
   .pill-surr{background:var(--gold-light);color:var(--gold);}
-  .pill-visits{background:#e8f0fd;color:#2a4da0;}
+  .pill-visits{background:var(--blue-light);color:var(--blue);}
+  .pill-due{background:#fff3e0;color:#e65100;}
 
-  /* DETAIL PANEL */
   .detail-panel{display:none;background:#fff;border-radius:16px;border:1.5px solid var(--border);overflow:hidden;box-shadow:var(--shadow-md);margin-bottom:22px;}
   .detail-panel.visible{display:block;}
   .detail-header{background:var(--ink);padding:17px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
@@ -84,22 +75,18 @@
   .close-btn:hover{background:rgba(255,255,255,.28);}
   .detail-body{padding:17px 20px;}
 
-  /* VISIT TABS */
   .visit-label{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
   .visit-tabs{display:flex;gap:5px;margin-bottom:14px;flex-wrap:wrap;}
   .visit-tab{padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif;}
   .visit-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
-  .visit-tab:hover:not(.active){border-color:var(--sage);color:var(--sage);}
 
-  /* INFO GRID */
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px 18px;margin-bottom:14px;}
-  @media(max-width:540px){.info-grid,.coverage-row,.followup-grid{grid-template-columns:1fr!important;}}
+  @media(max-width:540px){.info-grid,.coverage-row,.followup-grid,.action-row{grid-template-columns:1fr!important;}}
   .info-item label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px;}
   .info-item span{font-size:14px;color:var(--ink);}
   .info-item span.empty{color:#ccc;font-style:italic;font-size:12px;}
   .info-full{grid-column:1/-1;}
 
-  /* COVERAGE */
   .coverage-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
   .cov-block{background:var(--cream);border-radius:9px;padding:11px 13px;}
   .cov-block.new{background:var(--sage-light);}
@@ -108,34 +95,48 @@
   .cov-line{font-size:13px;color:var(--ink);margin-bottom:2px;}
   .cov-line b{font-weight:600;}
 
-  /* ACTIONS */
   .actions-section{border-top:1.5px solid var(--cream);padding-top:14px;}
   .actions-title{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
-  .action-buttons{display:flex;flex-direction:column;gap:9px;}
 
-  .action-btn{display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:11px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;text-align:left;background:#fff;transition:all .15s;width:100%;}
-  .btn-icon{font-size:19px;flex-shrink:0;}
-  .btn-text{flex:1;}
-  .btn-label{display:block;font-weight:600;}
-  .btn-sub{display:block;font-size:12px;font-weight:400;opacity:.7;margin-top:1px;}
-  .btn-arrow{font-size:15px;opacity:.35;}
-  .btn-stop{border-color:var(--rust);color:var(--rust);}
-  .btn-stop:hover{background:var(--rust-light);}
-  .btn-surr{border-color:var(--gold);color:var(--gold);}
-  .btn-surr:hover{background:var(--gold-light);}
+  /* ACTION BLOCKS — one per action type */
+  .action-block{border:1.5px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:10px;}
+  .action-block.stop{border-color:var(--rust);}
+  .action-block.cx{border-color:#8b2460;}
+  .action-block.surr{border-color:var(--gold);}
+  .action-block-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .action-block-title{font-weight:600;font-size:14px;display:flex;align-items:center;gap:7px;}
+  .action-block.stop .action-block-title{color:var(--rust);}
+  .action-block.cx .action-block-title{color:#8b2460;}
+  .action-block.surr .action-block-title{color:var(--gold);}
+  .action-block-status{font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;}
+  .status-pending{background:var(--rust-light);color:var(--rust);}
+  .status-done{background:var(--green-light);color:var(--green);}
+  .action-block-body{display:flex;flex-direction:column;gap:8px;}
+  .action-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 
-  /* MARK AS SENT BUTTONS */
-  .sent-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
-  .mark-sent-btn{display:flex;align-items:center;gap:7px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--green);color:var(--green);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;transition:all .15s;flex:1;min-width:140px;}
-  .mark-sent-btn:hover{background:var(--green-light);}
-  .mark-sent-btn.loading{opacity:.6;pointer-events:none;}
-  .mark-sent-btn.done{background:var(--green-light);border-color:var(--green);}
-  .sent-divider{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;margin-top:14px;}
+  .action-btn{display:flex;align-items:center;gap:8px;padding:10px 13px;border-radius:9px;border:1.5px solid;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;background:#fff;transition:all .15s;width:100%;}
+  .btn-generate-stop{border-color:var(--rust);color:var(--rust);}
+  .btn-generate-stop:hover{background:var(--rust-light);}
+  .btn-generate-surr{border-color:var(--gold);color:var(--gold);}
+  .btn-generate-surr:hover{background:var(--gold-light);}
+  .btn-cal{border-color:var(--blue);color:var(--blue);}
+  .btn-cal:hover{background:var(--blue-light);}
+  .btn-sent{border-color:var(--green);color:var(--green);}
+  .btn-sent:hover{background:var(--green-light);}
+  .btn-sent.done{background:var(--green-light);opacity:.7;cursor:default;}
+  .btn-sent.loading{opacity:.5;pointer-events:none;}
+
+  /* Due date input */
+  .due-row{display:flex;align-items:center;gap:8px;}
+  .due-label{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;}
+  .due-input{flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);background:#fff;outline:none;}
+  .due-input:focus{border-color:var(--sage);}
+  .due-save-btn{padding:7px 13px;border-radius:8px;border:1.5px solid var(--sage);color:var(--sage);background:#fff;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  .due-save-btn:hover{background:var(--sage-light);}
 
   .notes-box{background:var(--cream);border-radius:9px;padding:11px 13px;font-size:13px;color:var(--muted);margin-top:10px;line-height:1.6;}
   .notes-box b{color:var(--ink);}
 
-  /* DASHBOARD */
   .dashboard-section{display:none;margin-top:4px;}
   .dashboard-section.visible{display:block;}
   .section-divider{display:flex;align-items:center;gap:11px;margin-bottom:14px;}
@@ -155,7 +156,6 @@
   .followup-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px;}
   .no-results{text-align:center;padding:28px;color:var(--muted);font-size:14px;}
 
-  /* TOAST */
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:10px 20px;border-radius:50px;font-size:13px;font-weight:500;opacity:0;transition:all .3s;z-index:999;pointer-events:none;white-space:nowrap;}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   .client-list::-webkit-scrollbar{width:3px;}
@@ -173,37 +173,31 @@
   </div>
   <div class="header-right">
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
-    <button class="hdr-btn signed-in" id="signedInBtn" style="display:none"></button>
     <div class="badge" id="badge"></div>
   </div>
 </div>
 
 <div class="main">
-
-  <!-- SIGN IN PROMPT -->
   <div class="signin-prompt" id="signinPrompt">
     <div class="signin-icon">🔐</div>
     <div class="signin-title">Sign in to get started</div>
-    <div class="signin-sub">Sign in with the Google account that owns the spreadsheet.<br>This lets the tool read your clients and mark items as sent.</div>
+    <div class="signin-sub">Sign in with the Google account that owns the spreadsheet.<br>This lets the tool read your clients, mark items sent, and add calendar reminders.</div>
     <div id="googleSignInBtn"></div>
     <div class="signin-note">Your data stays in your Google account. Nothing is stored elsewhere.</div>
   </div>
 
-  <!-- LOADING -->
   <div class="loading-state" id="loadingState">
     <div class="loading-spinner"></div>
     <div class="loading-title">Loading your clients…</div>
     <div class="loading-sub">Pulling from Google Sheets</div>
   </div>
 
-  <!-- ERROR -->
   <div class="error-state" id="errorState">
     <div class="error-title">Couldn't load data</div>
     <div class="error-msg" id="errorMsg"></div>
     <button class="retry-btn" onclick="loadFromSheets()">Try Again</button>
   </div>
 
-  <!-- SEARCH -->
   <div class="search-section" id="searchSection">
     <label class="search-label">Find a Client</label>
     <div class="search-wrap">
@@ -214,7 +208,6 @@
 
   <div class="client-list" id="clientList"></div>
 
-  <!-- CLIENT DETAIL -->
   <div class="detail-panel" id="detailPanel">
     <div class="detail-header">
       <div>
@@ -226,7 +219,6 @@
     <div class="detail-body" id="detailBody"></div>
   </div>
 
-  <!-- DASHBOARD -->
   <div class="dashboard-section" id="dashboardSection">
     <div class="section-divider">
       <h2>Follow-Up Pipeline</h2>
@@ -235,7 +227,6 @@
     <div class="stats-row" id="statsRow"></div>
     <div class="followup-grid" id="followupGrid"></div>
   </div>
-
 </div>
 
 <div class="toast" id="toast"></div>
@@ -244,32 +235,73 @@
 const { jsPDF } = window.jspdf;
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const SHEET_ID    = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
-const CLIENT_ID   = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
-const SHEET_TAB   = 'Clients';
-const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets';
+const SHEET_ID  = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
+const CLIENT_ID = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
+const SHEET_TAB = 'Clients';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events';
 
-// Column indices for write-back (0-based, matching the sheet)
-const COL_STOP_PAC  = 46;
-const COL_CX_POLICY = 47;
-const COL_SURRENDER = 48;
+// Column indices (0-based)
+const COL = {
+  STOP_PAC:      46, // AU old status (kept for notes display)
+  CX_POLICY:     47,
+  SURRENDER:     48,
+  STOP_PAC_DUE:  46, // AU
+  STOP_PAC_SENT: 47, // AV
+  CX_DUE:        48, // AW
+  CX_SENT:       49, // AX
+  SURR_DUE:      50, // AY
+  SURR_SENT:     51, // AZ
+};
 
-let accessToken    = null;
-let clientGroups   = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
-let rowIndexMap    = {}; // fullName key → array of sheet row numbers (1-based)
+// Recalculate based on AU=46 (0-based: A=0, so AU = 20*1 + 20 = 46)
+// AU=46, AV=47, AW=48, AX=49, AY=50, AZ=51
+const COLS = {
+  STOP_PAC_DUE:  46,
+  STOP_PAC_SENT: 47,
+  CX_DUE:        48,
+  CX_SENT:       49,
+  SURR_DUE:      50,
+  SURR_SENT:     51,
+  // Legacy status columns (keep reading for notes)
+  OLD_STOP:      46,
+  OLD_CX:        47,
+  OLD_SURR:      48,
+  BENEFICIARY:   51,
+  PAYMENT:       52,
+  NOTES:         53,
+};
+
+// Wait — AU is col 46 (0-based). Let's verify:
+// A=0,B=1...Z=25,AA=26,AB=27...AZ=51,BA=52
+// A=0 Z=25 AA=26 AZ=51 — so AU = 26+20 = 46. ✓
+// AV=47, AW=48, AX=49, AY=50, AZ=51 ✓
+// That means old col 46(AU),47(AV),48(AX) were Stop PAC, CX, Surrender
+// New cols are the same letters — she ADDED these at the end
+// Per conversation: she added AU=Stop PAC Due, AV=Stop PAC Sent, AW=CX Due, AX=CX Sent, AY=Surrender Due, AZ=Surrender Sent
+// Old Stop PAC was col 46, old CX was 47, old Surrender was 48
+// The new columns START at AU=46 — so the old columns (46,47,48) are now REPLACED by the new schema
+// New reading schema:
+const C = {
+  STOP_DUE:  46, // AU
+  STOP_SENT: 47, // AV
+  CX_DUE:    48, // AW
+  CX_SENT:   49, // AX
+  SURR_DUE:  50, // AY
+  SURR_SENT: 51, // AZ
+  OTHER:     50, // AY (was col 50 before — now repurposed; keep notes at 53)
+  BENEFICIARY: 51,
+  PAYMENT:   52,
+  NOTES:     53,
+};
+
+let accessToken = null;
+let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  google.accounts.id.initialize({
-    client_id: CLIENT_ID,
-    callback: handleCredential,
-    auto_select: true,
-  });
-  google.accounts.id.renderButton(
-    document.getElementById('googleSignInBtn'),
-    { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240 }
-  );
-  // Also try token client for full write scope
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredential, auto_select: true });
+  google.accounts.id.renderButton(document.getElementById('googleSignInBtn'),
+    { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240 });
   initTokenClient();
 });
 
@@ -286,89 +318,53 @@ function initTokenClient() {
     },
   });
 }
-
-function handleCredential(response) {
-  // ID token received — now get an access token with write scope
-  tokenClient.requestAccessToken({ prompt: '' });
-}
-
-function signIn() {
-  tokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-// Override the Google button click to use our token flow
+function handleCredential() { tokenClient.requestAccessToken({ prompt: '' }); }
 document.addEventListener('click', e => {
   if (e.target.closest('#googleSignInBtn')) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     tokenClient.requestAccessToken({ prompt: 'consent' });
   }
 }, true);
 
-// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+// ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadFromSheets() {
   if (!accessToken) { tokenClient.requestAccessToken({ prompt: '' }); return; }
   showLoading(true); hideError();
-
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`;
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    if (resp.status === 401) {
-      accessToken = null;
-      tokenClient.requestAccessToken({ prompt: '' });
-      return;
-    }
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
-    }
-
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (resp.status === 401) { accessToken = null; tokenClient.requestAccessToken({ prompt: '' }); return; }
+    if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
     const data = await resp.json();
     parseRows(data.values || []);
-
     showLoading(false);
     document.getElementById('searchSection').classList.add('visible');
     document.getElementById('dashboardSection').classList.add('visible');
-
-    const badge = document.getElementById('badge');
-    badge.textContent = `${allClients.length} clients`;
-    badge.style.display = 'block';
+    document.getElementById('badge').textContent = `${allClients.length} clients`;
+    document.getElementById('badge').style.display = 'block';
     document.getElementById('refreshBtn').style.display = 'block';
-
-    const now = new Date();
     document.getElementById('lastSync').textContent =
-      `Synced ${now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
-
+      `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
     renderDashboard();
-    toast(`✓ ${allClients.length} clients loaded`);
-
-    // Re-render detail if open
     if (selectedGroup) renderDetail();
-
+    toast(`✓ ${allClients.length} clients loaded`);
   } catch(err) {
-    showLoading(false);
-    showError(err.message);
-    console.error(err);
+    showLoading(false); showError(err.message); console.error(err);
   }
 }
 
 function parseRows(rows) {
-  const clients = [], groups = {}, rowMap = {};
-
+  const clients = [], groups = {};
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
     const firstName = cl(r[1]);
     if (!firstName) continue;
-
     const c = {
-      sheetRowNumber: i + 1, // 1-based for Sheets API
-      rowType:         cl(r[0]),
+      sheetRow:        i + 1,
       firstName,
       lastName:        cl(r[3]) || cl(r[2]),
-      spouse:          cl(r[2]),
       address:         cl(r[4]),
       city:            cl(r[5]),
       county:          cl(r[6]),
@@ -382,7 +378,6 @@ function parseRows(rows) {
       ssType:          cl(r[14]),
       bank:            cl(r[15]),
       checkDate:       cl(r[16]),
-      currentCov:      cl(r[17]),
       existingCompany: cl(r[18]),
       existingFace:    cl(r[19]),
       existingPremium: cl(r[20]),
@@ -395,113 +390,140 @@ function parseRows(rows) {
       apptDate:        fmtDate(r[41]),
       effectiveDate:   fmtDate(r[42]),
       payDate:         cl(r[43]),
-      stopPAC:         cl(r[46]),
-      cxPolicy:        cl(r[47]),
-      surrender:       cl(r[48]),
-      other:           cl(r[50]),
+      // New due/sent columns
+      stopDue:         fmtDate(r[C.STOP_DUE]),
+      stopSent:        cl(r[C.STOP_SENT]),
+      cxDue:           fmtDate(r[C.CX_DUE]),
+      cxSent:          cl(r[C.CX_SENT]),
+      surrDue:         fmtDate(r[C.SURR_DUE]),
+      surrSent:        cl(r[C.SURR_SENT]),
       beneficiary:     cl(r[51]),
       paymentInfo:     cl(r[52]),
       notes:           cl(r[53]),
     };
-
     c.fullName       = [c.firstName, c.lastName].filter(Boolean).join(' ');
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
     c.displayCompany = c.newCompany || c.existingCompany || '';
-
-    const done = s => !s || ['sent','done','faxed','complete','none needed','n/a','no replacement','no rep','not needed','no need','called on','sent owner'].some(x => s.toLowerCase().includes(x));
-    c.needsStopPAC   = !done(c.stopPAC);
-    c.needsCX        = !done(c.cxPolicy);
-    c.needsSurrender = !done(c.surrender);
-    c.hasPending     = c.needsStopPAC || c.needsCX || c.needsSurrender;
-
+    // Pending = has a Due date AND no Sent date yet
+    c.stopPending  = !!c.stopDue  && !c.stopSent;
+    c.cxPending    = !!c.cxDue   && !c.cxSent;
+    c.surrPending  = !!c.surrDue && !c.surrSent;
+    c.hasPending   = c.stopPending || c.cxPending || c.surrPending;
     clients.push(c);
     const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     if (!groups[key]) groups[key] = [];
     groups[key].push(c);
   }
-
-  allClients   = clients;
+  allClients = clients;
   clientGroups = groups;
 }
 
-// ── MARK AS SENT (write back to sheet) ───────────────────────────────────────
-async function markSent(type) {
+// ── WRITE BACK ────────────────────────────────────────────────────────────────
+async function writeCell(row, colIdx, value) {
+  const range = `${SHEET_TAB}!${colToLetter(colIdx)}${row}`;
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[value]] }),
+    }
+  );
+  if (resp.status === 401) { accessToken = null; tokenClient.requestAccessToken({ prompt: '' }); throw new Error('auth'); }
+  if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
+}
+
+async function markSent(type, btnId) {
   const c = selectedGroup[activeVisitIdx];
-  if (!accessToken) { toast('Sign in first to mark as sent'); return; }
-
-  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
-  const value = `Sent ${today}`;
-
-  let col, btnId;
-  if (type === 'stopPAC')   { col = COL_STOP_PAC;  btnId = 'markStopBtn'; }
-  if (type === 'cxPolicy')  { col = COL_CX_POLICY; btnId = 'markCXBtn'; }
-  if (type === 'surrender') { col = COL_SURRENDER;  btnId = 'markSurrBtn'; }
-
+  if (!accessToken) { toast('Sign in first'); return; }
   const btn = document.getElementById(btnId);
   if (btn) { btn.classList.add('loading'); btn.textContent = 'Saving…'; }
-
-  // Convert column index to A1 notation letter
-  const colLetter = colToLetter(col);
-  const row = c.sheetRowNumber;
-  const range = `${SHEET_TAB}!${colLetter}${row}`;
-
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
   try {
-    const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ values: [[value]] }),
-      }
-    );
-
-    if (resp.status === 401) {
-      accessToken = null;
-      tokenClient.requestAccessToken({ prompt: '' });
-      return;
-    }
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
-    }
-
-    // Update local data
-    if (type === 'stopPAC')   c.stopPAC  = value;
-    if (type === 'cxPolicy')  c.cxPolicy = value;
-    if (type === 'surrender') c.surrender = value;
-
-    c.needsStopPAC   = false;
-    c.needsCX        = false;
-    c.needsSurrender = false;
-    if (type === 'stopPAC')   c.needsStopPAC   = false;
-    if (type === 'cxPolicy')  c.needsCX        = false;
-    if (type === 'surrender') c.needsSurrender = false;
-    c.hasPending = c.needsStopPAC || c.needsCX || c.needsSurrender;
-
-    if (btn) { btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Marked as Sent'; btn.disabled = true; }
-
+    let colIdx;
+    if (type==='stop') { colIdx = C.STOP_SENT; c.stopSent = today; c.stopPending = false; }
+    if (type==='cx')   { colIdx = C.CX_SENT;   c.cxSent   = today; c.cxPending   = false; }
+    if (type==='surr') { colIdx = C.SURR_SENT;  c.surrSent = today; c.surrPending = false; }
+    c.hasPending = c.stopPending || c.cxPending || c.surrPending;
+    await writeCell(c.sheetRow, colIdx, today);
+    if (btn) { btn.classList.remove('loading'); btn.classList.add('done'); btn.innerHTML = '✓ Sent'; btn.disabled = true; }
     renderDashboard();
-    toast(`✓ Updated in Google Sheets`);
-
+    toast('✓ Marked sent in Google Sheets');
   } catch(err) {
     if (btn) { btn.classList.remove('loading'); btn.textContent = 'Try Again'; }
     toast('Could not save — check connection');
-    console.error(err);
   }
 }
 
-function colToLetter(col) {
-  // Convert 0-based column index to A1 letter(s)
-  let letter = '';
-  let n = col;
-  while (n >= 0) {
-    letter = String.fromCharCode((n % 26) + 65) + letter;
-    n = Math.floor(n / 26) - 1;
+async function saveDue(type, inputId) {
+  const c = selectedGroup[activeVisitIdx];
+  const input = document.getElementById(inputId);
+  const val = input ? input.value : '';
+  if (!val) { toast('Enter a date first'); return; }
+  const formatted = fmtDate(val) || val;
+  try {
+    let colIdx;
+    if (type==='stop') { colIdx = C.STOP_DUE; c.stopDue = formatted; c.stopPending = !c.stopSent; }
+    if (type==='cx')   { colIdx = C.CX_DUE;   c.cxDue   = formatted; c.cxPending   = !c.cxSent; }
+    if (type==='surr') { colIdx = C.SURR_DUE;  c.surrDue = formatted; c.surrPending = !c.surrSent; }
+    c.hasPending = c.stopPending || c.cxPending || c.surrPending;
+    await writeCell(c.sheetRow, colIdx, val);
+    renderDashboard();
+    toast('✓ Due date saved');
+  } catch(err) {
+    toast('Could not save due date');
   }
-  return letter;
+}
+
+// ── GOOGLE CALENDAR ───────────────────────────────────────────────────────────
+async function addToCalendar(type) {
+  const c = selectedGroup[activeVisitIdx];
+  if (!accessToken) { toast('Sign in first'); return; }
+  let dueDate, title, desc;
+  if (type==='stop') {
+    dueDate = c.stopDue; title = `Stop PAC — ${c.fullName}`;
+    desc = `Send Stop PAC form\nCompany: ${c.displayCompany}\nPolicy: ${c.existingPolicy}\nPhone: ${c.phone}`;
+  }
+  if (type==='cx') {
+    dueDate = c.cxDue; title = `CX Policy — ${c.fullName}`;
+    desc = `Cancel policy\nCompany: ${c.displayCompany}\nPolicy: ${c.existingPolicy}\nPhone: ${c.phone}`;
+  }
+  if (type==='surr') {
+    dueDate = c.surrDue; title = `Surrender Form — ${c.fullName}`;
+    desc = `Send Surrender/Cancellation form\nCompany: ${c.displayCompany}\nPolicy: ${c.existingPolicy}\nPhone: ${c.phone}`;
+  }
+  if (!dueDate) { toast('Set a due date first'); return; }
+
+  // Parse date to ISO format
+  let isoDate;
+  try {
+    const d = new Date(dueDate);
+    if (isNaN(d.getTime())) throw new Error('bad date');
+    isoDate = d.toISOString().split('T')[0];
+  } catch {
+    toast('Could not parse due date — use MM/DD/YYYY format');
+    return;
+  }
+
+  try {
+    const event = {
+      summary: title,
+      description: desc,
+      start: { date: isoDate },
+      end:   { date: isoDate },
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 480 }] },
+    };
+    const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message); }
+    toast(`✓ Added to Google Calendar — ${isoDate}`);
+  } catch(err) {
+    toast('Could not add to calendar');
+    console.error(err);
+  }
 }
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
@@ -509,42 +531,32 @@ document.getElementById('searchInput').addEventListener('input', function() {
   const q = this.value.trim().toLowerCase();
   const list = document.getElementById('clientList');
   if (!q) { list.classList.remove('visible'); list.innerHTML=''; return; }
-
   const matched = [];
   for (const [key, visits] of Object.entries(clientGroups)) {
     const best = visits[visits.length-1];
-    const qPhone = q.replace(/\D/g,'');
-    if (
-      best.fullName.toLowerCase().includes(q) ||
-      best.displayCompany.toLowerCase().includes(q) ||
-      best.city.toLowerCase().includes(q) ||
-      best.existingPolicy.includes(q) ||
-      (qPhone.length>3 && best.phone.replace(/\D/g,'').includes(qPhone))
-    ) matched.push({ key, visits, best });
+    const qp = q.replace(/\D/g,'');
+    if (best.fullName.toLowerCase().includes(q) || best.displayCompany.toLowerCase().includes(q) ||
+        best.city.toLowerCase().includes(q) || best.existingPolicy.includes(q) ||
+        (qp.length>3 && best.phone.replace(/\D/g,'').includes(qp)))
+      matched.push({ key, visits, best });
     if (matched.length>=25) break;
   }
-
-  if (!matched.length) {
-    list.innerHTML='<div class="no-results">No clients found</div>';
-    list.classList.add('visible'); return;
-  }
-
+  if (!matched.length) { list.innerHTML='<div class="no-results">No clients found</div>'; list.classList.add('visible'); return; }
   list.innerHTML = matched.map(({ key, visits, best }) => {
-    const pills = buildPills(best);
     const vp = visits.length>1 ? `<span class="pill pill-visits">${visits.length} visits</span>` : '';
     const meta = [best.displayCompany,best.city,best.state].filter(Boolean).join(' · ')||'No details on file';
     return `<div class="client-card" onclick="openGroup('${esc(key)}')">
       <div><div class="client-name">${best.fullName}</div><div class="client-meta">${meta}</div></div>
-      <div class="pills">${vp}${pills}</div>
+      <div class="pills">${vp}${buildPills(best)}</div>
     </div>`;
   }).join('');
   list.classList.add('visible');
 });
 
 function buildPills(c) {
-  return (c.needsStopPAC   ? '<span class="pill pill-stop">Stop PAC</span>' : '')
-       + (c.needsCX        ? '<span class="pill pill-cx">CX Policy</span>' : '')
-       + (c.needsSurrender ? '<span class="pill pill-surr">Surrender</span>' : '');
+  return (c.stopPending  ? '<span class="pill pill-stop">Stop PAC</span>' : '')
+       + (c.cxPending    ? '<span class="pill pill-cx">CX Policy</span>' : '')
+       + (c.surrPending  ? '<span class="pill pill-surr">Surrender</span>' : '');
 }
 
 // ── DETAIL ────────────────────────────────────────────────────────────────────
@@ -560,17 +572,15 @@ function openGroup(key) {
 
 function renderDetail() {
   const c = selectedGroup[activeVisitIdx];
-  const multi = selectedGroup.length>1;
-
   document.getElementById('detailName').textContent = c.fullName;
   document.getElementById('detailSub').textContent =
     [c.displayCompany, c.existingPolicy?`Policy #${c.existingPolicy}`:''].filter(Boolean).join(' · ')
-    ||(c.newCompany?`Placing with ${c.newCompany}`:'No policy on file');
+    || (c.newCompany?`Placing with ${c.newCompany}`:'No policy on file');
 
   let h = '';
 
-  if (multi) {
-    h += '<div class="visit-label">Client Visits — tap to switch</div><div class="visit-tabs">';
+  if (selectedGroup.length>1) {
+    h += '<div class="visit-label">Client Visits</div><div class="visit-tabs">';
     selectedGroup.forEach((v,i)=>{
       const lbl = v.leadDate||v.apptDate||`Visit ${i+1}`;
       h += `<button class="visit-tab${i===activeVisitIdx?' active':''}" onclick="switchVisit(${i})">${lbl}</button>`;
@@ -589,7 +599,7 @@ function renderDetail() {
   h += ii('Pay Week',c.checkDate);
   h += ii('Tobacco',c.tobacco);
   if (c.beneficiary) h += ii('Beneficiary',c.beneficiary,true);
-  if (c.paymentInfo) h += ii('Payment / Bank Info',c.paymentInfo,true);
+  if (c.paymentInfo) h += ii('Payment Info',c.paymentInfo,true);
   h += '</div>';
 
   const hasExist = c.existingCompany||c.existingFace||c.existingPremium||c.existingPolicy;
@@ -611,51 +621,71 @@ function renderDetail() {
     h += '</div>';
   }
 
-  // Generate paperwork buttons
-  h += `<div class="actions-section"><div class="actions-title">Generate Paperwork</div><div class="action-buttons">
-    <button class="action-btn btn-stop" onclick="genStopPAC()">
-      <span class="btn-icon">🛑</span>
-      <span class="btn-text"><span class="btn-label">Stop PAC Form</span><span class="btn-sub">Cancel auto-withdrawal · ${c.displayCompany||'carrier'}</span></span>
-      <span class="btn-arrow">→</span>
-    </button>
-    <button class="action-btn btn-surr" onclick="genSurrender()">
-      <span class="btn-icon">📋</span>
-      <span class="btn-text"><span class="btn-label">Surrender / Cancellation Form</span><span class="btn-sub">American-Amicable · Policy #${c.existingPolicy||'___'}</span></span>
-      <span class="btn-arrow">→</span>
-    </button>
-  </div>`;
+  h += `<div class="actions-section"><div class="actions-title">Actions & Paperwork</div>`;
 
-  // Mark as Sent buttons — only show for items that still need action
-  const sentButtons = [];
-  if (c.needsStopPAC)
-    sentButtons.push(`<button class="mark-sent-btn" id="markStopBtn" onclick="markSent('stopPAC')">✓ Mark Stop PAC Sent</button>`);
-  if (c.needsCX)
-    sentButtons.push(`<button class="mark-sent-btn" id="markCXBtn" onclick="markSent('cxPolicy')">✓ Mark CX Policy Sent</button>`);
-  if (c.needsSurrender)
-    sentButtons.push(`<button class="mark-sent-btn" id="markSurrBtn" onclick="markSent('surrender')">✓ Mark Surrender Sent</button>`);
+  // STOP PAC BLOCK
+  h += actionBlock('stop', '🛑 Stop PAC', c.stopDue, c.stopSent, c.stopPending,
+    `<button class="action-btn btn-generate-stop" onclick="genStopPAC()">📄 Generate Form</button>`);
 
-  if (sentButtons.length) {
-    h += `<div class="sent-divider">Mark as Sent — updates your Google Sheet instantly</div>`;
-    h += `<div class="sent-row">${sentButtons.join('')}</div>`;
-  }
+  // CX POLICY BLOCK
+  h += actionBlock('cx', '📞 CX Policy', c.cxDue, c.cxSent, c.cxPending, '');
 
-  h += '</div>'; // close actions-section
+  // SURRENDER BLOCK
+  h += actionBlock('surr', '📋 Surrender', c.surrDue, c.surrSent, c.surrPending,
+    `<button class="action-btn btn-generate-surr" onclick="genSurrender()">📄 Generate Form</button>`);
 
-  // Status flags + notes
-  const flags = [
-    c.stopPAC  ?`Stop PAC: ${c.stopPAC}`:'',
-    c.cxPolicy ?`CX Policy: ${c.cxPolicy}`:'',
-    c.surrender?`Surrender: ${c.surrender}`:'',
-    c.other    ?`Other: ${c.other}`:'',
-  ].filter(Boolean);
-  if (flags.length||c.notes) {
-    h += '<div class="notes-box">';
-    h += flags.map(f=>`<div>${f}</div>`).join('');
-    if (c.notes) h += `<div style="margin-top:${flags.length?6:0}px"><b>Notes:</b> ${c.notes}</div>`;
-    h += '</div>';
-  }
+  h += '</div>';
+
+  if (c.notes) h += `<div class="notes-box"><b>Notes:</b> ${c.notes}</div>`;
 
   document.getElementById('detailBody').innerHTML = h;
+}
+
+function actionBlock(type, title, due, sent, pending, extraBtn) {
+  const statusHtml = sent
+    ? `<span class="action-block-status status-done">✓ Sent ${sent}</span>`
+    : (pending ? `<span class="action-block-status status-pending">Pending</span>` : `<span class="action-block-status" style="background:var(--cream);color:var(--muted)">No due date</span>`);
+
+  let dueSection = '';
+  if (!sent) {
+    dueSection = `<div class="due-row">
+      <span class="due-label">Due date:</span>
+      <input class="due-input" id="due_${type}" type="date" value="${toInputDate(due)}">
+      <button class="due-save-btn" onclick="saveDue('${type}','due_${type}')">Save</button>
+    </div>`;
+  } else {
+    dueSection = due ? `<div style="font-size:12px;color:var(--muted)">Due: ${due} · Sent: ${sent}</div>` : '';
+  }
+
+  const calBtn = due && !sent
+    ? `<button class="action-btn btn-cal" onclick="addToCalendar('${type}')">📅 Add to Calendar</button>` : '';
+  const sentBtn = pending
+    ? `<button class="action-btn btn-sent" id="sent_${type}" onclick="markSent('${type}','sent_${type}')">✓ Mark as Sent</button>` : '';
+
+  return `<div class="action-block ${type}">
+    <div class="action-block-header">
+      <div class="action-block-title">${title}</div>
+      ${statusHtml}
+    </div>
+    <div class="action-block-body">
+      ${dueSection}
+      <div class="action-row">
+        ${extraBtn}
+        ${calBtn}
+        ${sentBtn}
+      </div>
+    </div>
+  </div>`;
+}
+
+function toInputDate(d) {
+  if (!d) return '';
+  const p = d.split('/');
+  if (p.length===3) {
+    const yr = p[2].length===2 ? '20'+p[2] : p[2];
+    return `${yr}-${p[0].padStart(2,'0')}-${p[1].padStart(2,'0')}`;
+  }
+  return '';
 }
 
 function ii(label,value,full=false){
@@ -704,7 +734,7 @@ function genStopPAC(){
   doc.setFontSize(8);doc.setTextColor(160,160,160);
   doc.text(`${c.fullName} · Policy: ${pol} · ${co}`,M,748);
   doc.save(`StopPAC_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
-  toast('✓ Stop PAC PDF ready — open in PDF Expert');
+  toast('✓ Stop PAC PDF ready');
 }
 
 // ── PDF: SURRENDER ────────────────────────────────────────────────────────────
@@ -744,32 +774,31 @@ function genSurrender(){
   doc.setFontSize(8);doc.setTextColor(160,160,160);
   doc.text('American-Amicable Life Insurance Company of Texas · PO Box 2549, Waco TX 76702-2549 · Fax: 254-297-2105',M,748);
   doc.save(`Surrender_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
-  toast('✓ Surrender form ready — open in PDF Expert');
+  toast('✓ Surrender form ready');
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
-  const done=s=>!s||['sent','done','faxed','complete','none needed','n/a','no replacement','no rep','not needed','no need','called on','sent owner'].some(x=>s.toLowerCase().includes(x));
-  const pending   =allClients.filter(c=>!done(c.stopPAC)||!done(c.cxPolicy)||!done(c.surrender));
-  const stopPACs  =allClients.filter(c=>!done(c.stopPAC));
-  const surrenders=allClients.filter(c=>!done(c.surrender));
-  const dupeCount =Object.values(clientGroups).filter(g=>g.length>1).length;
-
+  const pending    = allClients.filter(c=>c.hasPending);
+  const stopCount  = allClients.filter(c=>c.stopPending).length;
+  const surrCount  = allClients.filter(c=>c.surrPending).length;
+  const dupeCount  = Object.values(clientGroups).filter(g=>g.length>1).length;
   document.getElementById('statsRow').innerHTML=`
     <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
-    <div class="stat-box"><div class="stat-number">${stopPACs.length}</div><div class="stat-label">Stop PACs</div></div>
-    <div class="stat-box"><div class="stat-number">${surrenders.length}</div><div class="stat-label">Surrenders</div></div>
+    <div class="stat-box"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
+    <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>
     <div class="stat-box"><div class="stat-number">${dupeCount}</div><div class="stat-label">Multi-Visit</div></div>`;
-
   if(!pending.length){
     document.getElementById('followupGrid').innerHTML='<div class="no-results" style="grid-column:1/-1">🎉 All caught up!</div>';
     return;
   }
   document.getElementById('followupGrid').innerHTML=pending.slice(0,24).map(c=>{
     const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+    const due = [c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
     return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+      ${due?`<div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 ${due}</div>`:''}
       <div class="followup-tags">${buildPills(c)}</div>
     </div>`;
   }).join('');
@@ -777,21 +806,9 @@ function renderDashboard(){
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
-function fmtPhone(v){
-  const s=cl(v);if(!s)return'';
-  const d=s.replace(/\D/g,'');
-  if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
-  if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
-  return s;
-}
-function fmtDate(v){
-  if(!v)return'';const s=String(v).trim();
-  if(!s||s.toLowerCase()==='nan')return'';
-  if(/^\d{5,6}$/.test(s)){const d=new Date(Math.round((parseFloat(s)-25569)*86400*1000));if(!isNaN(d))return`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;}
-  const d=new Date(s);
-  if(!isNaN(d.getTime())){const yr=d.getFullYear();if(yr>1900&&yr<2100)return`${d.getMonth()+1}/${d.getDate()}/${yr}`;}
-  return s;
-}
+function fmtPhone(v){const s=cl(v);if(!s)return'';const d=s.replace(/\D/g,'');if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;return s;}
+function fmtDate(v){if(!v)return'';const s=String(v).trim();if(!s||s.toLowerCase()==='nan')return'';if(/^\d{5,6}$/.test(s)){const d=new Date(Math.round((parseFloat(s)-25569)*86400*1000));if(!isNaN(d))return`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;}const d=new Date(s);if(!isNaN(d.getTime())){const yr=d.getFullYear();if(yr>1900&&yr<2100)return`${d.getMonth()+1}/${d.getDate()}/${yr}`;}return s;}
+function colToLetter(col){let l='',n=col;while(n>=0){l=String.fromCharCode((n%26)+65)+l;n=Math.floor(n/26)-1;}return l;}
 function esc(k){return k.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 function todayStr(){const d=new Date();return`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;}
 function showLoading(show){document.getElementById('loadingState').style.display=show?'block':'none';}
