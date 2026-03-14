@@ -450,9 +450,20 @@ function parseRows(rows) {
       cxSent:          cl(r[C.CX_SENT]),
       surrDue:         fmtDate(r[C.SURR_DUE]),
       surrSent:        cl(r[C.SURR_SENT]),
-      beneficiary:     cl(r[54]),
-      paymentInfo:     cl(r[55]),
-      notes:           cl(r[56]),
+      beneficiary:     cl(r[55]),
+      benRelationship: cl(r[56]),
+      benDOB:          cl(r[57]),
+      benAddress:      cl(r[58]),
+      benPhone:        cl(r[59]),
+      carrierFax:      cl(r[60]),
+      carrierEmail:    cl(r[61]),
+      paymentInfo:     cl(r[62]),
+      notes:           cl(r[63]),
+      doctorName:      cl(r[64]),
+      email:           cl(r[65]),
+      stateBorn:       cl(r[66]),
+      medicareInfo:    cl(r[68]),
+      connectingInd:   cl(r[69]),
     };
     c.fullName       = [c.firstName, c.lastName].filter(Boolean).join(' ');
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
@@ -651,8 +662,19 @@ function renderDetail() {
   h += ii('Bank',c.bank);
   h += ii('Pay Week',c.checkDate);
   h += ii('Tobacco',c.tobacco);
-  if (c.beneficiary) h += ii('Beneficiary',c.beneficiary,true);
+  if (c.beneficiary||c.benRelationship||c.benDOB) {
+    const benVal = [c.beneficiary, c.benRelationship, c.benDOB].filter(Boolean).join(' · ');
+    h += ii('Beneficiary', benVal, true);
+    if (c.benAddress||c.benPhone) {
+      const benContact = [c.benAddress, c.benPhone].filter(Boolean).join(' · ');
+      h += ii('Beneficiary Contact', benContact, true);
+    }
+  }
   if (c.paymentInfo) h += ii('Payment Info',c.paymentInfo,true);
+  if (c.email) h += ii('Email',c.email,true);
+  if (c.doctorName) h += ii("Doctor's Name",c.doctorName,true);
+  if (c.medicareInfo) h += ii('Medicare Info',c.medicareInfo,true);
+  if (c.connectingInd) h += ii('Connecting Individual',c.connectingInd,true);
   h += '</div>';
 
   const hasExist = c.existingCompany||c.existingFace||c.existingPremium||c.existingPolicy;
@@ -676,6 +698,12 @@ function renderDetail() {
   }
 
   h += `<div class="actions-section"><div class="actions-title">Actions & Paperwork</div>`;
+  if (c.carrierFax||c.carrierEmail) {
+    h += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">`;
+    if (c.carrierFax) h += `<span>📠 ${c.carrierFax}</span>`;
+    if (c.carrierEmail) h += `<span>📧 ${c.carrierEmail}</span>`;
+    h += `</div>`;
+  }
 
   // STOP PAC BLOCK
   h += actionBlock('stop', '🛑 Stop PAC', c.stopDue, c.stopSent, c.stopPending,
