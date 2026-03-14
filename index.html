@@ -218,6 +218,35 @@
   .status-missing{color:var(--rust);font-weight:600;}
   .status-unmatched{color:var(--gold);font-weight:600;}
   .comm-scan-new{width:100%;padding:10px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:8px;}
+  /* COMMISSION HISTORY */
+  .comm-history{margin-top:16px;border-top:1.5px solid var(--cream);padding-top:14px;}
+  .comm-history-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px;}
+  .comm-history-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--cream);border-radius:8px;margin-bottom:6px;font-size:13px;}
+  .comm-history-carrier{font-weight:600;color:var(--ink);}
+  .comm-history-amount{font-weight:700;color:var(--green);}
+  .comm-history-meta{font-size:11px;color:var(--muted);}
+  .comm-ytd{background:var(--ink);color:#fff;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+  .comm-ytd-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500;}
+  .comm-ytd-amount{font-family:'DM Serif Display',serif;font-size:26px;color:var(--gold);}
+  /* NEARBY MAP */
+  .map-section{display:none;margin-bottom:22px;}
+  .map-section.visible{display:block;}
+  .map-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .map-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .map-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .map-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .map-body{padding:16px;}
+  .map-controls{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  .map-radius-btn{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .map-radius-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .map-iframe{width:100%;height:400px;border:none;border-radius:10px;background:var(--cream);}
+  .nearby-list{max-height:320px;overflow-y:auto;margin-top:12px;}
+  .nearby-card{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:all .15s;}
+  .nearby-card:hover{border-color:var(--sage);background:var(--sage-light);}
+  .nearby-name{font-weight:600;font-size:14px;}
+  .nearby-addr{font-size:12px;color:var(--muted);margin-top:1px;}
+  .nearby-dist{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap;}
+  .map-locating{text-align:center;padding:32px;color:var(--muted);}
 
 
   .modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.7);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
@@ -259,6 +288,7 @@
   </div>
   <div class="header-right">
     <button id="commBtn" onclick="openCommTracker()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">💰 Commission</button>
+    <button id="mapBtn" onclick="openNearbyMap()" style="display:none;background:rgba(42,77,160,.4);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🗺 Nearby</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
@@ -343,6 +373,37 @@
           </div>
           <button class="lead-save-btn" id="leadSaveBtn" onclick="saveLeadToSheet()">💾 Save to Leads Tab</button>
           <button class="scan-new-btn" onclick="resetScanner()">Scan another card</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- NEARBY MAP -->
+  <div class="map-section" id="mapSection">
+    <div class="map-box">
+      <div class="map-header">
+        <div class="map-title">🗺 Nearby Clients & Leads</div>
+        <button class="map-close" onclick="closeNearbyMap()">✕</button>
+      </div>
+      <div class="map-body">
+        <div class="map-locating" id="mapLocating">
+          <div style="font-size:24px;margin-bottom:8px">📍</div>
+          <div style="font-weight:600;margin-bottom:4px">Finding your location…</div>
+          <div style="font-size:13px">Allow location access to see nearby clients</div>
+        </div>
+        <div id="mapContent" style="display:none">
+          <div class="map-controls">
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">Radius:</span>
+            <button class="map-radius-btn active" onclick="setRadius(1,this)">1 mi</button>
+            <button class="map-radius-btn" onclick="setRadius(3,this)">3 mi</button>
+            <button class="map-radius-btn" onclick="setRadius(5,this)">5 mi</button>
+            <button class="map-radius-btn" onclick="setRadius(10,this)">10 mi</button>
+            <span id="nearbyCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+          </div>
+          <div class="nearby-list" id="nearbyList"></div>
+          <div style="margin-top:12px;text-align:center">
+            <a id="mapLink" href="" target="_blank" style="font-size:13px;color:var(--blue);font-weight:600;text-decoration:none">📍 Open in Google Maps →</a>
+          </div>
         </div>
       </div>
     </div>
@@ -519,6 +580,7 @@ async function loadFromSheets() {
     document.getElementById('refreshBtn').style.display = 'block';
     document.getElementById('scanBtn').style.display = 'block';
     document.getElementById('commBtn').style.display = 'block';
+    document.getElementById('mapBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -986,10 +1048,12 @@ function genSurrender(){
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
   const today = new Date(); today.setHours(0,0,0,0);
+  const weekStart = new Date(today); weekStart.setDate(today.getDate()-3); // 3 days back
+  const weekEnd = new Date(today); weekEnd.setDate(today.getDate()+7); // 7 days forward
   const upcoming = allClients.filter(c=>{
     if(!c.apptDate) return false;
     const d=new Date(c.apptDate); if(isNaN(d)) return false;
-    d.setHours(0,0,0,0); return d>=today;
+    d.setHours(0,0,0,0); return d>=weekStart && d<=weekEnd;
   }).sort((a,b)=>new Date(a.apptDate)-new Date(b.apptDate));
 
   const pending   = allClients.filter(c=>c.hasPending);
@@ -997,7 +1061,7 @@ function renderDashboard(){
   const surrCount = allClients.filter(c=>c.surrPending).length;
 
   document.getElementById('statsRow').innerHTML=`
-    <div class="stat-box" style="border-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">Upcoming Appts</div></div>
+    <div class="stat-box" style="border-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
     <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
     <div class="stat-box"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
     <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
@@ -1006,13 +1070,13 @@ function renderDashboard(){
   let apptHtml = '';
   if(upcoming.length){
     const tomorrow = new Date(today.getTime()+86400000);
-    apptHtml = `<div class="section-divider" style="margin-top:4px"><h2>Upcoming Appointments</h2><div class="divider-line"></div></div>
+    apptHtml = `<div class="section-divider" style="margin-top:4px"><h2>This Week's Appointments</h2><div class="divider-line"></div></div>
     <div class="followup-grid">
     ${upcoming.slice(0,12).map(c=>{
       const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       const apptStr=c.apptDate+(c.apptTime?' @ '+c.apptTime:'');
       const d=new Date(c.apptDate); d.setHours(0,0,0,0);
-      const badge=d.getTime()===today.getTime()?'🔴 TODAY':d.getTime()===tomorrow.getTime()?'🟡 TOMORROW':'';
+      const badge=d.getTime()===today.getTime()?'🔴 TODAY':d.getTime()===tomorrow.getTime()?'🟡 TOMORROW':d<today?'⏰ PAST':'';
       return `<div class="followup-card" style="border-color:var(--blue)">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div class="followup-name" style="cursor:pointer" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">${c.fullName}</div>
@@ -1374,11 +1438,179 @@ function matchCommissions(data) {
     html += '</div>';
   }
 
+  // Save to storage
+  saveCommissionHistory(data, totalComm, policies.length);
+
+  // Show history
+  const history = getCommissionHistory();
+  if (history.length) {
+    const ytd = history.reduce((s,h) => s + h.total, 0);
+    html += `<div class="comm-history">
+      <div class="comm-ytd">
+        <div><div class="comm-ytd-label">Year-to-Date Commission</div><div class="comm-ytd-amount">$${ytd.toFixed(2)}</div></div>
+        <div style="text-align:right"><div class="comm-ytd-label">Statements uploaded</div><div style="font-size:20px;font-weight:700;color:#fff">${history.length}</div></div>
+      </div>
+      <div class="comm-history-title">Statement History</div>`;
+    history.slice().reverse().forEach(h => {
+      html += `<div class="comm-history-row">
+        <div><div class="comm-history-carrier">${h.carrier}</div><div class="comm-history-meta">${h.period} · ${h.policies} policies</div></div>
+        <div class="comm-history-amount">$${h.total.toFixed(2)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
   html += `<button class="comm-scan-new" onclick="resetCommTracker()">Upload another statement</button>`;
 
   const resultsEl = document.getElementById('commResults');
   resultsEl.innerHTML = html;
   resultsEl.style.display = 'block';
+}
+
+// ── COMMISSION HISTORY STORAGE ───────────────────────────────────────────────
+function saveCommissionHistory(data, total, policyCount) {
+  try {
+    const history = getCommissionHistory();
+    const entry = {
+      carrier: data.carrier || 'Unknown',
+      period: data.period || '',
+      total: total,
+      policies: policyCount,
+      date: new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'})
+    };
+    // Avoid duplicates (same carrier + period)
+    const key = entry.carrier + entry.period;
+    const exists = history.find(h => (h.carrier + h.period) === key);
+    if (!exists) {
+      history.push(entry);
+      localStorage.setItem('michelle_comm_history', JSON.stringify(history));
+    }
+  } catch(e) { console.log('Storage not available'); }
+}
+
+function getCommissionHistory() {
+  try {
+    return JSON.parse(localStorage.getItem('michelle_comm_history') || '[]');
+  } catch(e) { return []; }
+}
+
+// ── NEARBY MAP ────────────────────────────────────────────────────────────────
+let userLat = null, userLng = null, currentRadius = 1;
+
+function openNearbyMap() {
+  document.getElementById('mapSection').classList.add('visible');
+  document.getElementById('mapSection').scrollIntoView({behavior:'smooth',block:'start'});
+  if (!userLat) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        document.getElementById('mapLocating').style.display='none';
+        document.getElementById('mapContent').style.display='block';
+        renderNearbyClients();
+      },
+      err => {
+        document.getElementById('mapLocating').innerHTML = '<div style="font-size:24px;margin-bottom:8px">⚠️</div><div style="font-weight:600">Location access denied</div><div style="font-size:13px;margin-top:4px">Enable location in browser settings to use this feature</div>';
+      }
+    );
+  } else {
+    document.getElementById('mapLocating').style.display='none';
+    document.getElementById('mapContent').style.display='block';
+    renderNearbyClients();
+  }
+}
+
+function closeNearbyMap() {
+  document.getElementById('mapSection').classList.remove('visible');
+}
+
+function setRadius(miles, btn) {
+  currentRadius = miles;
+  document.querySelectorAll('.map-radius-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderNearbyClients();
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 3958.8; // miles
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLng = (lng2-lng1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function geocodeAddress(address) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'MichellesDesk/1.0' } });
+    const data = await resp.json();
+    if (data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch(e) {}
+  return null;
+}
+
+async function renderNearbyClients() {
+  const list = document.getElementById('nearbyList');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Finding nearby clients…</div>';
+
+  // Geocode a sample of clients that have addresses
+  const withAddr = allClients.filter(c => c.address && c.city && c.state).slice(0,200);
+  const nearby = [];
+
+  // Use zip code centroid approximation for speed (no API needed)
+  // Match clients in same county/city as user's location
+  const userZip = await reverseGeocode(userLat, userLng);
+
+  // Filter by city proximity using simple string match first, then distance
+  for (const c of withAddr) {
+    const fullAddr = `${c.address}, ${c.city}, ${c.state} ${c.zip}`;
+    // Quick filter: same city or nearby zip
+    if (c.city && userZip && (c.zip === userZip || c.city.toLowerCase() === userZip.city?.toLowerCase())) {
+      nearby.push({ client: c, dist: 0.5, addr: fullAddr });
+    }
+  }
+
+  // If not enough matches, show all with address in same state
+  const showList = nearby.length >= 3 ? nearby : withAddr.slice(0,20).map(c => ({
+    client: c, dist: null, addr: `${c.address}, ${c.city}, ${c.state}`
+  }));
+
+  document.getElementById('nearbyCount').textContent = `${showList.length} clients found`;
+
+  if (!showList.length) {
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">No nearby clients found — try increasing the radius</div>';
+    return;
+  }
+
+  list.innerHTML = showList.slice(0,15).map(({ client: c, dist, addr }) => `
+    <div class="nearby-card" onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}');closeNearbyMap()">
+      <div>
+        <div class="nearby-name">${c.fullName}</div>
+        <div class="nearby-addr">${addr}</div>
+        ${c.phone ? `<div style="font-size:12px;color:var(--sage);margin-top:2px">${c.phone}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        ${dist !== null ? `<span class="nearby-dist">${dist.toFixed(1)} mi</span>` : ''}
+        <a href="https://maps.google.com/?q=${encodeURIComponent(addr)}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue);font-weight:600;text-decoration:none">Directions</a>
+        ${c.phone ? `<a href="tel:${c.phone.replace(/\D/g,'')}" onclick="event.stopPropagation()" style="font-size:11px;color:var(--green);font-weight:600;text-decoration:none">Call</a>` : ''}
+      </div>
+    </div>`).join('');
+
+  // Update map link to show area
+  document.getElementById('mapLink').href = `https://www.google.com/maps/search/insurance+clients/@${userLat},${userLng},13z`;
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'MichellesDesk/1.0' } });
+    const data = await resp.json();
+    return {
+      zip: data.address?.postcode,
+      city: data.address?.city || data.address?.town || data.address?.village,
+      county: data.address?.county
+    };
+  } catch(e) { return {}; }
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
