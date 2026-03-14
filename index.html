@@ -188,6 +188,36 @@
   .lead-save-btn:hover{background:#4a6558;}
   .lead-save-btn:disabled{opacity:.5;cursor:default;}
   .scan-new-btn{width:100%;padding:10px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:8px;}
+  /* COMMISSION TRACKER */
+  .comm-section{display:none;margin-bottom:22px;}
+  .comm-section.visible{display:block;}
+  .comm-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .comm-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .comm-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .comm-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .comm-body{padding:20px;}
+  .comm-drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;}
+  .comm-drop:hover{border-color:var(--gold);background:var(--gold-light);}
+  .comm-drop-icon{font-size:28px;margin-bottom:8px;}
+  .comm-reading{display:none;text-align:center;padding:24px;color:var(--muted);}
+  .comm-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;}
+  .comm-results{display:none;}
+  .comm-summary{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .comm-stat{background:var(--cream);border-radius:10px;padding:10px 14px;flex:1;min-width:80px;text-align:center;}
+  .comm-stat-num{font-family:'DM Serif Display',serif;font-size:22px;color:var(--ink);}
+  .comm-stat-label{font-size:11px;color:var(--muted);font-weight:500;}
+  .comm-stat.warn{background:var(--rust-light);}
+  .comm-stat.warn .comm-stat-num{color:var(--rust);}
+  .comm-stat.good{background:var(--green-light);}
+  .comm-stat.good .comm-stat-num{color:var(--green);}
+  .comm-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;}
+  .comm-table th{background:var(--cream);padding:8px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+  .comm-table td{padding:9px 10px;border-bottom:1px solid var(--cream);}
+  .comm-table tr:hover td{background:var(--cream);}
+  .status-matched{color:var(--green);font-weight:600;}
+  .status-missing{color:var(--rust);font-weight:600;}
+  .status-unmatched{color:var(--gold);font-weight:600;}
+  .comm-scan-new{width:100%;padding:10px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:8px;}
 
 
   .modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.7);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
@@ -228,6 +258,7 @@
     <div class="last-sync" id="lastSync"></div>
   </div>
   <div class="header-right">
+    <button id="commBtn" onclick="openCommTracker()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">💰 Commission</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
@@ -313,6 +344,28 @@
           <button class="lead-save-btn" id="leadSaveBtn" onclick="saveLeadToSheet()">💾 Save to Leads Tab</button>
           <button class="scan-new-btn" onclick="resetScanner()">Scan another card</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- COMMISSION TRACKER -->
+  <div class="comm-section" id="commSection">
+    <div class="comm-box">
+      <div class="comm-header">
+        <div class="comm-title">💰 Commission Statement Tracker</div>
+        <button class="comm-close" onclick="closeCommTracker()">✕</button>
+      </div>
+      <div class="comm-body">
+        <div class="comm-drop" id="commDrop" onclick="document.getElementById('commInput').click()">
+          <div class="comm-drop-icon">📄</div>
+          <div style="font-size:14px;color:var(--muted)"><b style="color:var(--ink)">Upload commission statement</b><br>Trinity, Illinois Mutual, American General, Polish Falcons, and more</div>
+        </div>
+        <input type="file" id="commInput" accept="application/pdf" style="display:none" onchange="handleCommUpload(this)">
+        <div class="comm-reading" id="commReading">
+          <div class="comm-spinner"></div>
+          <div>Reading statement…</div>
+        </div>
+        <div class="comm-results" id="commResults"></div>
       </div>
     </div>
   </div>
@@ -465,6 +518,7 @@ async function loadFromSheets() {
     document.getElementById('badge').style.display = 'block';
     document.getElementById('refreshBtn').style.display = 'block';
     document.getElementById('scanBtn').style.display = 'block';
+    document.getElementById('commBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -1163,6 +1217,168 @@ async function saveLeadToSheet() {
     btn.textContent = '💾 Save to Leads Tab';
     toast('Could not save — check connection');
   }
+}
+
+// ── COMMISSION TRACKER ───────────────────────────────────────────────────────
+function openCommTracker() {
+  document.getElementById('commSection').classList.add('visible');
+  document.getElementById('commSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeCommTracker() {
+  document.getElementById('commSection').classList.remove('visible');
+  resetCommTracker();
+}
+function resetCommTracker() {
+  document.getElementById('commDrop').style.display='block';
+  document.getElementById('commReading').style.display='none';
+  document.getElementById('commResults').style.display='none';
+  document.getElementById('commResults').innerHTML='';
+  document.getElementById('commInput').value='';
+}
+
+async function handleCommUpload(input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+  document.getElementById('commDrop').style.display='none';
+  document.getElementById('commReading').style.display='block';
+
+  try {
+    const base64 = await fileToBase64(file);
+
+    const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: `This is an insurance commission statement. Extract all policy/commission line items.
+Return ONLY a JSON object with these fields:
+- carrier: insurance company name
+- period: statement period dates
+- agentName: agent name if shown
+- totalCommission: total commission amount as number
+- policies: array of objects, each with:
+  - policyNumber: the policy/certificate number
+  - insuredName: insured person last name or full name
+  - commissionAmount: commission amount as number
+  - commissionType: "First Year" or "Renewal" or "Override"
+Return only valid JSON, no other text.` }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error('Worker error');
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const clean = text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+    const extracted = JSON.parse(clean);
+
+    // Match against client sheet
+    matchCommissions(extracted);
+
+  } catch(err) {
+    document.getElementById('commReading').style.display='none';
+    document.getElementById('commDrop').style.display='block';
+    toast('Could not read statement — try again');
+    console.error(err);
+  }
+}
+
+function matchCommissions(data) {
+  document.getElementById('commReading').style.display='none';
+
+  const policies = data.policies || [];
+  const matched = [], unmatched = [], missing = [];
+
+  // Build lookup of all policy numbers in sheet
+  const sheetPolicies = {};
+  allClients.forEach(c => {
+    if (c.existingPolicy) {
+      const key = c.existingPolicy.toString().trim().toUpperCase();
+      sheetPolicies[key] = c;
+    }
+  });
+
+  // Check each statement policy against sheet
+  policies.forEach(p => {
+    const key = p.policyNumber.toString().trim().toUpperCase();
+    if (sheetPolicies[key]) {
+      matched.push({ ...p, client: sheetPolicies[key] });
+    } else {
+      unmatched.push(p);
+    }
+  });
+
+  // Check sheet clients with matching carrier for missing policies
+  const carrier = (data.carrier || '').toLowerCase();
+  if (carrier) {
+    allClients.forEach(c => {
+      const clientCarrier = (c.existingCompany || c.displayCompany || '').toLowerCase();
+      if (clientCarrier && carrier.includes(clientCarrier.split(' ')[0]) || clientCarrier.includes(carrier.split(' ')[0])) {
+        const key = (c.existingPolicy || '').toString().trim().toUpperCase();
+        if (key && !policies.find(p => p.policyNumber.toString().trim().toUpperCase() === key)) {
+          missing.push(c);
+        }
+      }
+    });
+  }
+
+  const totalComm = policies.reduce((s,p) => s + (parseFloat(p.commissionAmount)||0), 0);
+
+  let html = `<div class="comm-summary">
+    <div class="comm-stat"><div class="comm-stat-num">${policies.length}</div><div class="comm-stat-label">Policies</div></div>
+    <div class="comm-stat good"><div class="comm-stat-num">$${totalComm.toFixed(2)}</div><div class="comm-stat-label">Total Commission</div></div>
+    <div class="comm-stat${unmatched.length?' warn':''}"><div class="comm-stat-num">${unmatched.length}</div><div class="comm-stat-label">Unmatched</div></div>
+    <div class="comm-stat${missing.length?' warn':''}"><div class="comm-stat-num">${missing.length}</div><div class="comm-stat-label">Missing</div></div>
+  </div>`;
+
+  html += `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">${data.carrier||'Carrier'} · ${data.period||''} ${data.agentName?'· '+data.agentName:''}</div>`;
+
+  // Results table
+  html += `<table class="comm-table">
+    <tr><th>Policy #</th><th>Insured</th><th>Commission</th><th>Type</th><th>Status</th></tr>`;
+
+  matched.forEach(p => {
+    html += `<tr>
+      <td>${p.policyNumber}</td>
+      <td>${p.insuredName} <span style="font-size:11px;color:var(--muted)">(${p.client.fullName})</span></td>
+      <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
+      <td><span class="status-matched">✓ Matched</span></td>
+    </tr>`;
+  });
+
+  unmatched.forEach(p => {
+    html += `<tr>
+      <td>${p.policyNumber}</td>
+      <td>${p.insuredName}</td>
+      <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
+      <td><span class="status-unmatched">⚠ Not in sheet</span></td>
+    </tr>`;
+  });
+
+  html += '</table>';
+
+  if (missing.length) {
+    html += `<div style="background:var(--rust-light);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-weight:600;color:var(--rust);margin-bottom:8px">🔴 ${missing.length} client${missing.length>1?'s':''} with ${data.carrier||'this carrier'} not on statement</div>`;
+    missing.forEach(c => {
+      html += `<div style="font-size:13px;padding:4px 0;border-bottom:1px solid rgba(196,80,26,.1)">${c.fullName} · Policy #${c.existingPolicy} · ${c.city}</div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<button class="comm-scan-new" onclick="resetCommTracker()">Upload another statement</button>`;
+
+  const resultsEl = document.getElementById('commResults');
+  resultsEl.innerHTML = html;
+  resultsEl.style.display = 'block';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
