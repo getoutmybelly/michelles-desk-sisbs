@@ -221,10 +221,15 @@
 
   <div class="dashboard-section" id="dashboardSection">
     <div class="section-divider">
-      <h2>Follow-Up Pipeline</h2>
+      <h2>Dashboard</h2>
       <div class="divider-line"></div>
     </div>
     <div class="stats-row" id="statsRow"></div>
+    <div id="apptSection"></div>
+    <div class="section-divider" style="margin-top:8px">
+      <h2>Follow-Up Pipeline</h2>
+      <div class="divider-line"></div>
+    </div>
     <div class="followup-grid" id="followupGrid"></div>
   </div>
 </div>
@@ -282,12 +287,12 @@ const COLS = {
 // The new columns START at AU=46 — so the old columns (46,47,48) are now REPLACED by the new schema
 // New reading schema:
 const C = {
-  STOP_DUE:  46, // AU
-  STOP_SENT: 47, // AV
-  CX_DUE:    48, // AW
-  CX_SENT:   49, // AX
-  SURR_DUE:  50, // AY
-  SURR_SENT: 51, // AZ
+  STOP_DUE:  48, // AW
+  STOP_SENT: 49, // AX
+  CX_DUE:    50, // AY
+  CX_SENT:   51, // AZ
+  SURR_DUE:  52, // BA
+  SURR_SENT: 53, // BB
   OTHER:     50, // AY (was col 50 before — now repurposed; keep notes at 53)
   BENEFICIARY: 51,
   PAYMENT:   52,
@@ -388,8 +393,10 @@ function parseRows(rows) {
       newFace:         cl(r[39]),
       newPremium:      cl(r[40]),
       apptDate:        fmtDate(r[41]),
-      effectiveDate:   fmtDate(r[42]),
-      payDate:         cl(r[43]),
+      apptTime:        cl(r[42]),
+      apptNotes:       cl(r[43]),
+      effectiveDate:   fmtDate(r[44]),
+      payDate:         cl(r[45]),
       // New due/sent columns
       stopDue:         fmtDate(r[C.STOP_DUE]),
       stopSent:        cl(r[C.STOP_SENT]),
@@ -397,9 +404,9 @@ function parseRows(rows) {
       cxSent:          cl(r[C.CX_SENT]),
       surrDue:         fmtDate(r[C.SURR_DUE]),
       surrSent:        cl(r[C.SURR_SENT]),
-      beneficiary:     cl(r[51]),
-      paymentInfo:     cl(r[52]),
-      notes:           cl(r[53]),
+      beneficiary:     cl(r[54]),
+      paymentInfo:     cl(r[55]),
+      notes:           cl(r[56]),
     };
     c.fullName       = [c.firstName, c.lastName].filter(Boolean).join(' ');
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
@@ -610,13 +617,14 @@ function renderDetail() {
       ${c.existingCompany?`<div class="cov-line"><b>${c.existingCompany}</b></div>`:''}
       ${c.existingPolicy?`<div class="cov-line">Policy # ${c.existingPolicy}</div>`:''}
       ${c.existingFace?`<div class="cov-line">Face: <b>${c.existingFace}</b></div>`:''}
-      ${c.existingPremium?`<div class="cov-line">Premium: <b>$${c.existingPremium}/mo</b></div>`:''}
+      ${c.existingPremium?`<div class="cov-line">Premium: <b>${c.existingPremium}/mo</b></div>`:''}
       ${c.cashValue?`<div class="cov-line">Cash Value: ${c.cashValue}</div>`:''}</div>`;
     if (hasNew) h += `<div class="cov-block new"><div class="cov-title">New / Qualifying</div>
       ${c.newCompany?`<div class="cov-line"><b>${c.newCompany}</b></div>`:''}
       ${c.newFace?`<div class="cov-line">Face: <b>${c.newFace}</b></div>`:''}
-      ${c.newPremium?`<div class="cov-line">Premium: <b>$${c.newPremium}/mo</b></div>`:''}
-      ${c.apptDate?`<div class="cov-line">Appt: ${c.apptDate}</div>`:''}
+      ${c.newPremium?`<div class="cov-line">Premium: <b>${c.newPremium}/mo</b></div>`:''}
+      ${c.apptDate?`<div class="cov-line">Appt: <b>${c.apptDate}${c.apptTime?' @ '+c.apptTime:''}</b></div>`:''}
+      ${c.apptNotes?`<div class="cov-line" style="color:var(--muted);font-size:12px">${c.apptNotes}</div>`:''}
       ${c.effectiveDate?`<div class="cov-line">Effective: ${c.effectiveDate}</div>`:''}</div>`;
     h += '</div>';
   }
@@ -779,22 +787,59 @@ function genSurrender(){
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
-  const pending    = allClients.filter(c=>c.hasPending);
-  const stopCount  = allClients.filter(c=>c.stopPending).length;
-  const surrCount  = allClients.filter(c=>c.surrPending).length;
-  const dupeCount  = Object.values(clientGroups).filter(g=>g.length>1).length;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const upcoming = allClients.filter(c=>{
+    if(!c.apptDate) return false;
+    const d=new Date(c.apptDate); if(isNaN(d)) return false;
+    d.setHours(0,0,0,0); return d>=today;
+  }).sort((a,b)=>new Date(a.apptDate)-new Date(b.apptDate));
+
+  const pending   = allClients.filter(c=>c.hasPending);
+  const stopCount = allClients.filter(c=>c.stopPending).length;
+  const surrCount = allClients.filter(c=>c.surrPending).length;
+
   document.getElementById('statsRow').innerHTML=`
+    <div class="stat-box" style="border-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">Upcoming Appts</div></div>
     <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
     <div class="stat-box"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
-    <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>
-    <div class="stat-box"><div class="stat-number">${dupeCount}</div><div class="stat-label">Multi-Visit</div></div>`;
+    <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
+
+  // Appointments
+  let apptHtml = '';
+  if(upcoming.length){
+    const tomorrow = new Date(today.getTime()+86400000);
+    apptHtml = `<div class="section-divider" style="margin-top:4px"><h2>Upcoming Appointments</h2><div class="divider-line"></div></div>
+    <div class="followup-grid">
+    ${upcoming.slice(0,12).map(c=>{
+      const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      const apptStr=c.apptDate+(c.apptTime?' @ '+c.apptTime:'');
+      const d=new Date(c.apptDate); d.setHours(0,0,0,0);
+      const badge=d.getTime()===today.getTime()?'🔴 TODAY':d.getTime()===tomorrow.getTime()?'🟡 TOMORROW':'';
+      return `<div class="followup-card" style="border-color:var(--blue)">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="followup-name" style="cursor:pointer" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">${c.fullName}</div>
+          ${badge?`<span style="font-size:10px;font-weight:700;color:var(--rust)">${badge}</span>`:''}
+        </div>
+        <div class="followup-meta">${[c.city,c.state].filter(Boolean).join(', ')}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--blue);margin-top:6px">📅 ${apptStr}</div>
+        ${c.apptNotes?`<div style="font-size:11px;color:var(--muted);margin-top:3px">${c.apptNotes}</div>`:''}
+        <div style="margin-top:8px">
+          <button onclick="calFromAppt('${esc(key)}')" style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;border:1.5px solid var(--blue);color:var(--blue);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">📅 Add to Calendar</button>
+        </div>
+      </div>`;
+    }).join('')}
+    </div>`;
+  }
+  document.getElementById('apptSection').innerHTML = apptHtml;
+
+  // Pipeline
   if(!pending.length){
     document.getElementById('followupGrid').innerHTML='<div class="no-results" style="grid-column:1/-1">🎉 All caught up!</div>';
     return;
   }
   document.getElementById('followupGrid').innerHTML=pending.slice(0,24).map(c=>{
     const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
-    const due = [c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
+    const due=[c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
     return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
@@ -802,6 +847,29 @@ function renderDashboard(){
       <div class="followup-tags">${buildPills(c)}</div>
     </div>`;
   }).join('');
+}
+
+async function calFromAppt(key){
+  const group=clientGroups[key]; if(!group) return;
+  const c=group[group.length-1];
+  if(!c.apptDate){toast('No appointment date set');return;}
+  if(!accessToken){toast('Sign in first');return;}
+  let isoDate;
+  try{const d=new Date(c.apptDate);isoDate=d.toISOString().split('T')[0];}catch{toast('Bad date format');return;}
+  const title=`Appointment — ${c.fullName}`;
+  const desc=`${c.apptTime?'Time: '+c.apptTime+'
+':''}${c.apptNotes?'Notes: '+c.apptNotes+'
+':''}Phone: ${c.phone}
+Address: ${c.fullAddress}`;
+  try{
+    const resp=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
+      method:'POST',
+      headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({summary:title,description:desc,start:{date:isoDate},end:{date:isoDate},reminders:{useDefault:false,overrides:[{method:'popup',minutes:60}]}})
+    });
+    if(!resp.ok) throw new Error();
+    toast(`✓ ${c.fullName} added to Calendar`);
+  }catch{toast('Could not add to calendar');}
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
