@@ -161,6 +161,33 @@
   .client-list::-webkit-scrollbar{width:3px;}
   .client-list::-webkit-scrollbar-track{background:var(--cream);}
   .client-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+  /* LEAD SCANNER */
+  .scanner-section{display:none;margin-bottom:22px;}
+  .scanner-section.visible{display:block;}
+  .scanner-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .scanner-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .scanner-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .scanner-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .scanner-body{padding:20px;}
+  .drop-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;}
+  .drop-zone:hover,.drop-zone.dragover{border-color:var(--sage);background:var(--sage-light);}
+  .drop-zone-icon{font-size:32px;margin-bottom:8px;}
+  .drop-zone-text{font-size:14px;color:var(--muted);}
+  .drop-zone-text b{color:var(--ink);}
+  .scanner-preview{display:none;margin-bottom:16px;}
+  .scanner-preview img{max-width:100%;border-radius:8px;border:1px solid var(--border);}
+  .scanner-reading{display:none;text-align:center;padding:24px;color:var(--muted);}
+  .scanner-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--sage);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;}
+  .lead-form{display:none;}
+  .lead-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+  .lead-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:4px;}
+  .lead-field input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);outline:none;transition:border-color .2s;}
+  .lead-field input:focus{border-color:var(--sage);}
+  .lead-field.full{grid-column:1/-1;}
+  .lead-save-btn{width:100%;padding:13px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;}
+  .lead-save-btn:hover{background:#4a6558;}
+  .lead-save-btn:disabled{opacity:.5;cursor:default;}
+  .scan-new-btn{width:100%;padding:10px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:8px;}
 
 
   .modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.7);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
@@ -201,6 +228,7 @@
     <div class="last-sync" id="lastSync"></div>
   </div>
   <div class="header-right">
+    <button class="hdr-btn" id="scanBtn" onclick="openScanner()" style="background:rgba(184,146,58,.3)">📋 New Lead</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
   </div>
@@ -248,7 +276,48 @@
     <div class="detail-body" id="detailBody"></div>
   </div>
 
-  <div class="dashboard-section" id="dashboardSection">
+  <!-- LEAD CARD SCANNER -->
+  <div class="scanner-section" id="scannerSection">
+    <div class="scanner-box">
+      <div class="scanner-header">
+        <div class="scanner-title">📋 New Lead Card</div>
+        <button class="scanner-close" onclick="closeScanner()">✕</button>
+      </div>
+      <div class="scanner-body">
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('cardInput').click()" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="handleDrop(event)">
+          <div class="drop-zone-icon">📸</div>
+          <div class="drop-zone-text"><b>Tap to upload lead card</b><br>Photo or PDF — AI will read the handwriting</div>
+        </div>
+        <input type="file" id="cardInput" accept="image/*,application/pdf" style="display:none" onchange="handleCardUpload(this)">
+        <div class="scanner-preview" id="scannerPreview"><img id="previewImg" src="" alt="Lead card"></div>
+        <div class="scanner-reading" id="scannerReading">
+          <div class="scanner-spinner"></div>
+          <div>Reading card…</div>
+        </div>
+        <div class="lead-form" id="leadForm">
+          <div style="font-size:12px;color:var(--sage);font-weight:600;margin-bottom:12px">✓ Card read — review and save</div>
+          <div class="lead-form-grid">
+            <div class="lead-field"><label>First Name</label><input id="lf_first" type="text"></div>
+            <div class="lead-field"><label>Last Name</label><input id="lf_last" type="text"></div>
+            <div class="lead-field"><label>Spouse Name</label><input id="lf_spouse" type="text"></div>
+            <div class="lead-field"><label>Spouse Age</label><input id="lf_spouseage" type="text"></div>
+            <div class="lead-field full"><label>Address</label><input id="lf_address" type="text"></div>
+            <div class="lead-field"><label>City</label><input id="lf_city" type="text"></div>
+            <div class="lead-field"><label>State</label><input id="lf_state" type="text"></div>
+            <div class="lead-field"><label>Zip</label><input id="lf_zip" type="text"></div>
+            <div class="lead-field"><label>County</label><input id="lf_county" type="text"></div>
+            <div class="lead-field"><label>Phone</label><input id="lf_phone" type="text"></div>
+            <div class="lead-field"><label>Age</label><input id="lf_age" type="text"></div>
+            <div class="lead-field"><label>DOB</label><input id="lf_dob" type="text"></div>
+          </div>
+          <button class="lead-save-btn" id="leadSaveBtn" onclick="saveLeadToSheet()">💾 Save to Leads Tab</button>
+          <button class="scan-new-btn" onclick="resetScanner()">Scan another card</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <div class="dashboard-section" id="dashboardSection">
     <div class="section-divider">
       <h2>Dashboard</h2>
       <div class="divider-line"></div>
@@ -395,6 +464,7 @@ async function loadFromSheets() {
     document.getElementById('badge').textContent = `${allClients.length} clients`;
     document.getElementById('badge').style.display = 'block';
     document.getElementById('refreshBtn').style.display = 'block';
+    document.getElementById('scanBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -943,6 +1013,157 @@ async function calFromAppt(key){
   }catch{toast('Could not add to calendar');}
 }
 
+
+// ── LEAD CARD SCANNER ────────────────────────────────────────────────────────
+function openScanner() {
+  document.getElementById('scannerSection').classList.add('visible');
+  document.getElementById('scannerSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeScanner() {
+  document.getElementById('scannerSection').classList.remove('visible');
+  resetScanner();
+}
+function resetScanner() {
+  document.getElementById('dropZone').style.display='block';
+  document.getElementById('scannerPreview').style.display='none';
+  document.getElementById('scannerReading').style.display='none';
+  document.getElementById('leadForm').style.display='none';
+  document.getElementById('cardInput').value='';
+  document.getElementById('previewImg').src='';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processCardFile(file);
+}
+function handleCardUpload(input) {
+  if (input.files[0]) processCardFile(input.files[0]);
+}
+async function processCardFile(file) {
+  document.getElementById('dropZone').style.display='none';
+  document.getElementById('scannerReading').style.display='block';
+
+  // Show preview if image
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('previewImg').src = e.target.result;
+      document.getElementById('scannerPreview').style.display='block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  try {
+    // Convert file to base64
+    const base64 = await fileToBase64(file);
+    const isPDF = file.type === 'application/pdf';
+    const mediaType = isPDF ? 'application/pdf' : file.type;
+
+    // Call Claude API to read the card
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: isPDF ? 'document' : 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 }
+            },
+            {
+              type: 'text',
+              text: 'This is an insurance lead card. Extract the handwritten information and return ONLY a JSON object with these exact keys: firstName, lastName, spouseName, spouseAge, address, city, state, zip, phone, age, dob. Use empty string for any field not found. For state, use 2-letter abbreviation. For phone, format as (XXX) XXX-XXXX. Return only the JSON, no other text.'
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error('API error');
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const clean = text.replace(/```json|```/g,'').trim();
+    const extracted = JSON.parse(clean);
+
+    // Fill form
+    document.getElementById('lf_first').value = extracted.firstName || '';
+    document.getElementById('lf_last').value = extracted.lastName || '';
+    document.getElementById('lf_spouse').value = extracted.spouseName || '';
+    document.getElementById('lf_spouseage').value = extracted.spouseAge || '';
+    document.getElementById('lf_address').value = extracted.address || '';
+    document.getElementById('lf_city').value = extracted.city || '';
+    document.getElementById('lf_state').value = extracted.state || 'IL';
+    document.getElementById('lf_zip').value = extracted.zip || '';
+    document.getElementById('lf_phone').value = extracted.phone || '';
+    document.getElementById('lf_age').value = extracted.age || '';
+    document.getElementById('lf_dob').value = extracted.dob || '';
+
+    document.getElementById('scannerReading').style.display='none';
+    document.getElementById('leadForm').style.display='block';
+
+  } catch(err) {
+    document.getElementById('scannerReading').style.display='none';
+    document.getElementById('dropZone').style.display='block';
+    toast('Could not read card — try a clearer photo');
+    console.error(err);
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveLeadToSheet() {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const btn = document.getElementById('leadSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+  // Leads tab columns: A=status, B=?, C=?, D=FirstName, E=Spouse, F=LastName, G=Address, H=City, I=County, J=State, K=Zip, L=LeadDate, M=Phone, N=DOB, O=Age
+  const row = [
+    '', '', '',
+    document.getElementById('lf_first').value,
+    document.getElementById('lf_spouse').value,
+    document.getElementById('lf_last').value,
+    document.getElementById('lf_address').value,
+    document.getElementById('lf_city').value,
+    document.getElementById('lf_county').value,
+    document.getElementById('lf_state').value,
+    document.getElementById('lf_zip').value,
+    today,
+    document.getElementById('lf_phone').value,
+    document.getElementById('lf_dob').value,
+    document.getElementById('lf_age').value,
+  ];
+
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A:O:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      }
+    );
+    if (!resp.ok) throw new Error();
+    toast(`✓ ${document.getElementById('lf_first').value} ${document.getElementById('lf_last').value} saved to Leads`);
+    btn.textContent = '✓ Saved!';
+    setTimeout(() => closeScanner(), 1500);
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = '💾 Save to Leads Tab';
+    toast('Could not save — check connection');
+  }
+}
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
