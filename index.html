@@ -211,7 +211,7 @@
     <div class="signin-icon">🔐</div>
     <div class="signin-title">Sign in to get started</div>
     <div class="signin-sub">Sign in with the Google account that owns the spreadsheet.<br>This lets the tool read your clients, mark items sent, and add calendar reminders.</div>
-    <button id="googleSignInBtn" onclick="signIn()" style="display:inline-flex;align-items:center;gap:10px;padding:12px 24px;border:1.5px solid #dadce0;border-radius:50px;background:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#3c4043;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12)"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px;height:20px"> Sign in with Google</button>
+    <button id="googleSignInBtn" onclick="if(window.signIn){window.signIn()}else{setTimeout(function(){window.signIn&&window.signIn()},500)}" style="display:inline-flex;align-items:center;gap:10px;padding:12px 24px;border:1.5px solid #dadce0;border-radius:50px;background:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#3c4043;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12)"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px;height:20px"> Sign in with Google</button>
     <div class="signin-note">Your data stays in your Google account. Nothing is stored elsewhere.</div>
   </div>
 
@@ -893,10 +893,7 @@ async function calFromAppt(key){
   let isoDate;
   try{const d=new Date(c.apptDate);isoDate=d.toISOString().split('T')[0];}catch{toast('Bad date format');return;}
   const title=`Appointment — ${c.fullName}`;
-  const desc=`${c.apptTime?'Time: '+c.apptTime+'
-':''}${c.apptNotes?'Notes: '+c.apptNotes+'
-':''}Phone: ${c.phone}
-Address: ${c.fullAddress}`;
+  const desc=`${c.apptTime?'Time: '+c.apptTime+'\n':''}${c.apptNotes?'Notes: '+c.apptNotes+'\n':''}Phone: ${c.phone}\nAddress: ${c.fullAddress}`;
   try{
     const resp=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
       method:'POST',
