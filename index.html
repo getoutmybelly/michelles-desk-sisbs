@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Michelle's Desk</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
   :root {
@@ -161,6 +161,35 @@
   .client-list::-webkit-scrollbar{width:3px;}
   .client-list::-webkit-scrollbar-track{background:var(--cream);}
   .client-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.7);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
+  .modal-overlay.hidden{display:none;}
+  .modal{background:#fff;border-radius:18px;width:100%;max-width:600px;overflow:hidden;box-shadow:0 8px 40px rgba(26,26,46,.25);margin:auto;}
+  .modal-header{background:var(--ink);padding:18px 22px;display:flex;align-items:center;justify-content:space-between;}
+  .modal-title{font-family:'DM Serif Display',serif;color:#fff;font-size:20px;}
+  .modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .modal-body{padding:22px;}
+  .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;background:var(--cream);}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--sage);background:var(--sage-light);}
+  .upload-icon{font-size:32px;margin-bottom:8px;}
+  .upload-title{font-weight:600;font-size:15px;margin-bottom:4px;}
+  .upload-sub{font-size:13px;color:var(--muted);}
+  .upload-input{display:none;}
+  .scan-preview{width:100%;border-radius:10px;margin-bottom:14px;border:1.5px solid var(--border);display:none;}
+  .scan-processing{text-align:center;padding:28px;display:none;}
+  .scan-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+  .scan-result{display:none;}
+  .scan-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:16px;}
+  .scan-field label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:3px;}
+  .scan-field input,.scan-field select{width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);background:#fff;outline:none;}
+  .scan-field input:focus{border-color:var(--sage);}
+  .scan-field.full{grid-column:1/-1;}
+  .scan-actions{display:flex;gap:10px;margin-top:6px;}
+  .btn-save-lead{flex:1;padding:13px;background:var(--sage);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn-save-lead:hover{background:#4a6659;}
+  .btn-save-lead:disabled{opacity:.5;pointer-events:none;}
+  .btn-rescan{padding:13px 18px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -182,7 +211,7 @@
     <div class="signin-icon">🔐</div>
     <div class="signin-title">Sign in to get started</div>
     <div class="signin-sub">Sign in with the Google account that owns the spreadsheet.<br>This lets the tool read your clients, mark items sent, and add calendar reminders.</div>
-    <div id="googleSignInBtn"></div>
+    <button id="googleSignInBtn" onclick="signIn()" style="display:inline-flex;align-items:center;gap:10px;padding:12px 24px;border:1.5px solid #dadce0;border-radius:50px;background:#fff;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#3c4043;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.12)"><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px;height:20px"> Sign in with Google</button>
     <div class="signin-note">Your data stays in your Google account. Nothing is stored elsewhere.</div>
   </div>
 
@@ -233,6 +262,9 @@
     <div class="followup-grid" id="followupGrid"></div>
   </div>
 </div>
+
+
+
 
 <div class="toast" id="toast"></div>
 
@@ -303,11 +335,19 @@ let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
-window.addEventListener('load', () => {
-  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredential, auto_select: true });
-  google.accounts.id.renderButton(document.getElementById('googleSignInBtn'),
-    { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', width: 240 });
+function onGoogleLibraryLoad() {
   initTokenClient();
+}
+window.addEventListener('load', () => {
+  // Try immediately, retry if library not ready yet
+  function tryInit() {
+    if (typeof google !== 'undefined' && google.accounts) {
+      initTokenClient();
+    } else {
+      setTimeout(tryInit, 200);
+    }
+  }
+  tryInit();
 });
 
 let tokenClient;
@@ -324,12 +364,7 @@ function initTokenClient() {
   });
 }
 function handleCredential() { tokenClient.requestAccessToken({ prompt: '' }); }
-document.addEventListener('click', e => {
-  if (e.target.closest('#googleSignInBtn')) {
-    e.preventDefault(); e.stopPropagation();
-    tokenClient.requestAccessToken({ prompt: 'consent' });
-  }
-}, true);
+// sign-in handled by onclick on button
 
 // ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadFromSheets() {
@@ -350,6 +385,7 @@ async function loadFromSheets() {
     document.getElementById('badge').textContent = `${allClients.length} clients`;
     document.getElementById('badge').style.display = 'block';
     document.getElementById('refreshBtn').style.display = 'block';
+
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
     renderDashboard();
@@ -871,6 +907,7 @@ Address: ${c.fullAddress}`;
     toast(`✓ ${c.fullName} added to Calendar`);
   }catch{toast('Could not add to calendar');}
 }
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
