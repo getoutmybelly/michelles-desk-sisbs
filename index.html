@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Michelle's Desk</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client"></script>
+<!-- Google auth handled via redirect -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
   :root {
@@ -335,47 +335,57 @@ let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
-function onGoogleLibraryLoad() {
-  initTokenClient();
-}
-window.addEventListener('load', () => {
-  // Try immediately, retry if library not ready yet
-  function tryInit() {
-    if (typeof google !== 'undefined' && google.accounts) {
-      initTokenClient();
-    } else {
-      setTimeout(tryInit, 200);
-    }
-  }
-  tryInit();
-});
-
-let tokenClient;
-function initTokenClient() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
+// ── REDIRECT-BASED OAUTH ─────────────────────────────────────────────────────
+function buildAuthUrl() {
+  const params = new URLSearchParams({
     client_id: CLIENT_ID,
+    redirect_uri: window.location.href.split('?')[0].split('#')[0],
+    response_type: 'token',
     scope: SCOPES,
-    callback: (resp) => {
-      if (resp.error) { showError('Sign-in failed: ' + resp.error); return; }
-      accessToken = resp.access_token;
+    include_granted_scopes: 'true',
+    state: 'signin',
+  });
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+}
+
+window.signIn = function() {
+  window.location.href = buildAuthUrl();
+};
+
+// Check for token in URL hash on page load (redirect return)
+function checkAuthReturn() {
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('access_token');
+    if (token) {
+      accessToken = token;
+      // Clean URL
+      history.replaceState(null, '', window.location.pathname);
       document.getElementById('signinPrompt').classList.add('hidden');
       loadFromSheets();
-    },
-  });
+      return true;
+    }
+  }
+  return false;
 }
-function handleCredential() { tokenClient.requestAccessToken({ prompt: '' }); }
-// sign-in handled by onclick on button
+
+window.addEventListener('load', () => {
+  if (!checkAuthReturn()) {
+    // Not returning from auth — show sign in prompt normally
+  }
+});
 
 // ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadFromSheets() {
-  if (!accessToken) { tokenClient.requestAccessToken({ prompt: '' }); return; }
+  if (!accessToken) { window.location.href = buildAuthUrl(); return; }
   showLoading(true); hideError();
   try {
     const resp = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (resp.status === 401) { accessToken = null; tokenClient.requestAccessToken({ prompt: '' }); return; }
+    if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); return; }
     if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
     const data = await resp.json();
     parseRows(data.values || []);
@@ -472,7 +482,7 @@ async function writeCell(row, colIdx, value) {
       body: JSON.stringify({ values: [[value]] }),
     }
   );
-  if (resp.status === 401) { accessToken = null; tokenClient.requestAccessToken({ prompt: '' }); throw new Error('auth'); }
+  if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); throw new Error('auth'); }
   if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
 }
 
