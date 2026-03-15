@@ -547,11 +547,13 @@ function checkAuthReturn() {
     const expiresIn = parseInt(params.get('expires_in') || '3600');
     if (token) {
       accessToken = token;
-      tokenExpiry = Date.now() + (expiresIn - 120) * 1000; // refresh 2 min early
+      tokenExpiry = Date.now() + (expiresIn - 120) * 1000;
+      // Store in sessionStorage so refresh doesn't lose it
+      sessionStorage.setItem('m_token', token);
+      sessionStorage.setItem('m_token_exp', tokenExpiry);
       // Clean URL
       history.replaceState(null, '', window.location.pathname);
       document.getElementById('signinPrompt').classList.add('hidden');
-      // Schedule silent refresh
       scheduleTokenRefresh(expiresIn - 120);
       loadFromSheets();
       return true;
@@ -567,22 +569,9 @@ function scheduleTokenRefresh(secondsUntilRefresh) {
 }
 
 function silentRefresh() {
-  // Use a hidden iframe for silent token refresh
-  const iframe = document.createElement('iframe');
-  iframe.style.display = 'none';
-  iframe.src = buildAuthUrl('none') + '&response_mode=fragment';
-  document.body.appendChild(iframe);
-  
-  // Listen for message from iframe — fallback: just redirect to auth if needed
-  setTimeout(() => {
-    document.body.removeChild(iframe);
-    // If token still valid, do nothing. If expired, redirect.
-    if (tokenExpiry && Date.now() > tokenExpiry) {
-      // Token truly expired — redirect to re-auth
-      sessionStorage.setItem('michelle_pre_auth_path', window.location.pathname);
-      window.location.href = buildAuthUrl('none');
-    }
-  }, 5000);
+  // Redirect with prompt=none — re-auths without showing login screen
+  // if she's still signed into Google
+  window.location.href = buildAuthUrl('none');
 }
 
 // Check token before any API call
@@ -598,7 +587,16 @@ function ensureValidToken() {
 
 window.addEventListener('load', () => {
   if (!checkAuthReturn()) {
-    // Not returning from auth — show sign in prompt normally
+    // Try restoring from sessionStorage
+    const savedToken = sessionStorage.getItem('m_token');
+    const savedExp = parseInt(sessionStorage.getItem('m_token_exp') || '0');
+    if (savedToken && savedExp && Date.now() < savedExp) {
+      accessToken = savedToken;
+      tokenExpiry = savedExp;
+      document.getElementById('signinPrompt').classList.add('hidden');
+      scheduleTokenRefresh(Math.floor((savedExp - Date.now()) / 1000));
+      loadFromSheets();
+    }
   }
 });
 
@@ -1158,7 +1156,13 @@ async function calFromAppt(key){
   const group=clientGroups[key]; if(!group) return;
   const c=group[group.length-1];
   if(!c.apptDate){toast('No appointment date set');return;}
-  if(!accessToken||!ensureValidToken()){toast('Session expired — refreshing…');setTimeout(()=>window.location.href=buildAuthUrl('none'),1000);return;}
+  if(!accessToken||!ensureValidToken()){
+    const t=document.getElementById('toast');
+    t.innerHTML='Session expired — <a onclick="window.location.href=buildAuthUrl('none')" style="color:var(--gold);cursor:pointer;text-decoration:underline">tap to re-authorize</a>';
+    t.classList.add('show');
+    setTimeout(()=>{t.classList.remove('show');t.innerHTML='';},5000);
+    return;
+  }
   let isoDate;
   try{const d=new Date(c.apptDate);isoDate=d.toISOString().split('T')[0];}catch{toast('Bad date format');return;}
   const title=`Appointment — ${c.fullName}`;
