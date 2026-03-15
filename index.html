@@ -519,7 +519,9 @@ let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
 // ── REDIRECT-BASED OAUTH ─────────────────────────────────────────────────────
-function buildAuthUrl() {
+let tokenExpiry = null;
+
+function buildAuthUrl(prompt='consent') {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: window.location.href.split('?')[0].split('#')[0],
@@ -527,12 +529,13 @@ function buildAuthUrl() {
     scope: SCOPES,
     include_granted_scopes: 'true',
     state: 'signin',
+    prompt: prompt,
   });
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 }
 
 window.signIn = function() {
-  window.location.href = buildAuthUrl();
+  window.location.href = buildAuthUrl('consent');
 };
 
 // Check for token in URL hash on page load (redirect return)
@@ -541,16 +544,56 @@ function checkAuthReturn() {
   if (hash && hash.includes('access_token')) {
     const params = new URLSearchParams(hash.substring(1));
     const token = params.get('access_token');
+    const expiresIn = parseInt(params.get('expires_in') || '3600');
     if (token) {
       accessToken = token;
+      tokenExpiry = Date.now() + (expiresIn - 120) * 1000; // refresh 2 min early
       // Clean URL
       history.replaceState(null, '', window.location.pathname);
       document.getElementById('signinPrompt').classList.add('hidden');
+      // Schedule silent refresh
+      scheduleTokenRefresh(expiresIn - 120);
       loadFromSheets();
       return true;
     }
   }
   return false;
+}
+
+function scheduleTokenRefresh(secondsUntilRefresh) {
+  setTimeout(() => {
+    silentRefresh();
+  }, secondsUntilRefresh * 1000);
+}
+
+function silentRefresh() {
+  // Use a hidden iframe for silent token refresh
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = buildAuthUrl('none') + '&response_mode=fragment';
+  document.body.appendChild(iframe);
+  
+  // Listen for message from iframe — fallback: just redirect to auth if needed
+  setTimeout(() => {
+    document.body.removeChild(iframe);
+    // If token still valid, do nothing. If expired, redirect.
+    if (tokenExpiry && Date.now() > tokenExpiry) {
+      // Token truly expired — redirect to re-auth
+      sessionStorage.setItem('michelle_pre_auth_path', window.location.pathname);
+      window.location.href = buildAuthUrl('none');
+    }
+  }, 5000);
+}
+
+// Check token before any API call
+function ensureValidToken() {
+  if (!accessToken) return false;
+  if (tokenExpiry && Date.now() > tokenExpiry) {
+    accessToken = null;
+    window.location.href = buildAuthUrl('none');
+    return false;
+  }
+  return true;
 }
 
 window.addEventListener('load', () => {
@@ -1115,7 +1158,7 @@ async function calFromAppt(key){
   const group=clientGroups[key]; if(!group) return;
   const c=group[group.length-1];
   if(!c.apptDate){toast('No appointment date set');return;}
-  if(!accessToken){toast('Sign in first');return;}
+  if(!accessToken||!ensureValidToken()){toast('Session expired — refreshing…');setTimeout(()=>window.location.href=buildAuthUrl('none'),1000);return;}
   let isoDate;
   try{const d=new Date(c.apptDate);isoDate=d.toISOString().split('T')[0];}catch{toast('Bad date format');return;}
   const title=`Appointment — ${c.fullName}`;
