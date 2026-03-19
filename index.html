@@ -247,6 +247,24 @@
   .nearby-addr{font-size:12px;color:var(--muted);margin-top:1px;}
   .nearby-dist{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap;}
   .map-locating{text-align:center;padding:32px;color:var(--muted);}
+  /* ANNIVERSARY OUTREACH */
+  .anniv-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;transition:all .15s;}
+  .anniv-card:hover{border-color:var(--gold);box-shadow:var(--shadow);}
+  .anniv-name{font-weight:600;font-size:14px;}
+  .anniv-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .anniv-date{font-size:12px;font-weight:600;color:var(--gold);margin-top:5px;}
+  .anniv-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .anniv-btn{padding:6px 12px;border-radius:20px;border:1.5px solid;font-size:12px;font-weight:600;cursor:pointer;background:#fff;font-family:'DM Sans',sans-serif;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;}
+  .anniv-btn-call{border-color:var(--green);color:var(--green);}
+  .anniv-btn-call:hover{background:var(--green-light);}
+  .anniv-btn-email{border-color:var(--blue);color:var(--blue);}
+  .anniv-btn-email:hover{background:var(--blue-light);}
+  .anniv-btn-view{border-color:var(--border);color:var(--muted);}
+  .anniv-btn-view:hover{background:var(--cream);}
+  .anniv-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-left:6px;}
+  .anniv-today{background:var(--gold-light);color:var(--gold);}
+  .anniv-soon{background:var(--rust-light);color:var(--rust);}
+  .anniv-upcoming{background:#e8f0fd;color:var(--blue);}
 
 
   .modal-overlay{position:fixed;inset:0;background:rgba(26,26,46,.7);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
@@ -438,6 +456,7 @@
     </div>
     <div class="stats-row" id="statsRow"></div>
     <div id="apptSection"></div>
+    <div id="anniversarySection"></div>
     <div class="section-divider" style="margin-top:8px">
       <h2>Follow-Up Pipeline</h2>
       <div class="divider-line"></div>
@@ -1135,6 +1154,9 @@ function renderDashboard(){
   }
   document.getElementById('apptSection').innerHTML = apptHtml;
 
+  // Anniversary outreach
+  renderAnniversaries();
+
   // Pipeline
   if(!pending.length){
     document.getElementById('followupGrid').innerHTML='<div class="no-results" style="grid-column:1/-1">🎉 All caught up!</div>';
@@ -1512,6 +1534,75 @@ function matchCommissions(data) {
   const resultsEl = document.getElementById('commResults');
   resultsEl.innerHTML = html;
   resultsEl.style.display = 'block';
+}
+
+// ── ANNIVERSARY OUTREACH ─────────────────────────────────────────────────────
+function renderAnniversaries() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const in30 = new Date(today); in30.setDate(today.getDate()+30);
+
+  const anniversaries = [];
+  allClients.forEach(c => {
+    if (!c.effectiveDate) return;
+    const eff = new Date(c.effectiveDate);
+    if (isNaN(eff)) return;
+
+    // Calculate this year's anniversary
+    const anniv = new Date(eff);
+    anniv.setFullYear(today.getFullYear());
+    anniv.setHours(0,0,0,0);
+
+    // If anniversary already passed this year, check next year
+    if (anniv < today) anniv.setFullYear(today.getFullYear()+1);
+
+    // Only show if within 30 days
+    if (anniv <= in30) {
+      const daysUntil = Math.round((anniv - today) / 86400000);
+      const yearsOld = today.getFullYear() - eff.getFullYear();
+      anniversaries.push({ client: c, anniv, daysUntil, yearsOld });
+    }
+  });
+
+  anniversaries.sort((a,b) => a.daysUntil - b.daysUntil);
+
+  if (!anniversaries.length) {
+    document.getElementById('anniversarySection').innerHTML = '';
+    return;
+  }
+
+  let html = `<div class="section-divider" style="margin-top:4px">
+    <h2>Policy Anniversaries <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 30 days)</span></h2>
+    <div class="divider-line"></div>
+  </div>
+  <div class="followup-grid">`;
+
+  anniversaries.slice(0,12).forEach(({ client: c, anniv, daysUntil, yearsOld }) => {
+    const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+    const dateStr = anniv.toLocaleDateString('en-US',{month:'long',day:'numeric'});
+    let badge = '';
+    if (daysUntil === 0) badge = '<span class="anniv-badge anniv-today">TODAY</span>';
+    else if (daysUntil <= 7) badge = `<span class="anniv-badge anniv-soon">${daysUntil}d</span>`;
+    else badge = `<span class="anniv-badge anniv-upcoming">${daysUntil}d</span>`;
+
+    const callHref = c.phone ? `tel:${c.phone.replace(/\D/g,'')}` : '#';
+    const emailHref = c.email ? `mailto:${c.email}?subject=Your ${yearsOld}-Year Policy Anniversary&body=Hi ${c.firstName},%0D%0A%0D%0AI wanted to reach out on your ${yearsOld}-year anniversary with ${c.displayCompany||'your policy'}. It's been a pleasure working with you!%0D%0A%0D%0AI'd love to connect and make sure your coverage still fits your needs. Would you have a few minutes this week?%0D%0A%0D%0AThank you,%0D%0AMichelle Scott%0D%0A618-510-9143` : '#';
+
+    html += `<div class="anniv-card">
+      <div>
+        <div class="anniv-name">${c.fullName}${badge}</div>
+        <div class="anniv-meta">${c.displayCompany||''} · ${c.city||''}</div>
+        <div class="anniv-date">📅 ${dateStr} · Year ${yearsOld}</div>
+      </div>
+      <div class="anniv-actions">
+        ${c.phone ? `<a class="anniv-btn anniv-btn-call" href="${callHref}">📞 Call</a>` : ''}
+        ${c.email ? `<a class="anniv-btn anniv-btn-email" href="${emailHref}">✉️ Email</a>` : ''}
+        <button class="anniv-btn anniv-btn-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  document.getElementById('anniversarySection').innerHTML = html;
 }
 
 // ── COMMISSION HISTORY STORAGE ───────────────────────────────────────────────
