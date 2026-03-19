@@ -1178,11 +1178,9 @@ async function calFromAppt(key){
   const group=clientGroups[key]; if(!group) return;
   const c=group[group.length-1];
   if(!c.apptDate){toast('No appointment date set');return;}
-  if(!accessToken||!ensureValidToken()){
-    const t=document.getElementById('toast');
-    t.innerHTML='Session expired — <a onclick="window.location.href=buildAuthUrl('none')" style="color:var(--gold);cursor:pointer;text-decoration:underline">tap to re-authorize</a>';
-    t.classList.add('show');
-    setTimeout(()=>{t.classList.remove('show');t.innerHTML='';},5000);
+    if(!accessToken||!ensureValidToken()){
+    toast('Session expired — please refresh the page');
+    setTimeout(()=>{ window.location.href = buildAuthUrl('none'); }, 2000);
     return;
   }
   let isoDate;
