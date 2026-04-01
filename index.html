@@ -1594,6 +1594,7 @@ function renderAnniversaries() {
       <div class="anniv-actions">
         ${c.phone ? `<a class="anniv-btn anniv-btn-call" href="${callHref}">📞 Call</a>` : ''}
         ${c.email ? `<a class="anniv-btn anniv-btn-email" href="${emailHref}">✉️ Email</a>` : ''}
+        <button class="anniv-btn" style="border-color:var(--gold);color:var(--gold)" onclick="genAnniversaryLetter('${esc(key)}',${yearsOld})">📄 Letter</button>
         <button class="anniv-btn anniv-btn-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
       </div>
     </div>`;
@@ -1601,6 +1602,120 @@ function renderAnniversaries() {
 
   html += '</div>';
   document.getElementById('anniversarySection').innerHTML = html;
+}
+
+// ── ANNIVERSARY LETTER GENERATOR ─────────────────────────────────────────────
+async function genAnniversaryLetter(key, yearsOld) {
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1];
+
+  toast('Generating letter…');
+
+  // Build letter as HTML then convert to printable PDF via jsPDF
+  const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
+  const W = 612, M = 72, contentW = W - M*2;
+  let y = M;
+
+  // Gold header bar
+  doc.setFillColor(26, 26, 46);
+  doc.rect(0, 0, W, 70, 'F');
+
+  // Agent name
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(184, 146, 58);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 56);
+
+  // Gold divider
+  doc.setDrawColor(184, 146, 58);
+  doc.setLineWidth(1.5);
+  doc.line(M, 82, W-M, 82);
+
+  y = 106;
+  doc.setTextColor(26, 26, 46);
+
+  // Date
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  const todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.text(todayStr, M, y); y += 24;
+
+  // Client address block
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.text(c.fullName, M, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (c.address) { doc.text(c.address, M, y); y += 16; }
+  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y += 32;
+
+  // Salutation
+  doc.setFontSize(11);
+  doc.text(`Dear ${c.firstName},`, M, y); y += 22;
+
+  // Body paragraphs
+  const yearStr = yearsOld === 1 ? 'one year' : `${yearsOld} years`;
+  const policyRef = c.existingPolicy ? ` (#${c.existingPolicy})` : '';
+  const carrier = c.displayCompany || 'your policy';
+
+  const paras = [
+    `I wanted to take a moment to personally reach out and thank you for the trust you've placed in me as your benefit coordinator. It's hard to believe it's already been ${yearStr} since we put your ${carrier} policy${policyRef} in place — time truly flies.`,
+    `Your policy anniversary is always a good time to make sure your coverage still fits your life. Things change — family situations, health needs, financial goals — and I want to make sure you're protected the way you deserve to be.`,
+    `I'd love to schedule a quick visit — no pressure, no obligation — just to check in, review your current coverage, and make sure everything is still working in your favor. I'm in your area regularly and can work around your schedule.`,
+  ];
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length * 15 + 14;
+  });
+
+  // Gold CTA box
+  y += 6;
+  doc.setFillColor(253, 246, 232);
+  doc.setDrawColor(184, 146, 58);
+  doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 58, 4, 4, 'FD');
+  doc.setTextColor(122, 117, 112);
+  doc.setFontSize(10);
+  doc.text('Ready to connect? Give me a call or text:', W/2, y+20, {align:'center'});
+  doc.setTextColor(184, 146, 58);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+42, {align:'center'});
+  y += 78;
+
+  // Closing
+  doc.setTextColor(26, 26, 46);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text('With gratitude,', M, y); y += 32;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Michelle Scott', M, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(122, 117, 112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y += 14;
+  doc.text('Illinois Senior Benefit Services', M, y); y += 14;
+  doc.setTextColor(184, 146, 58);
+  doc.setFont('helvetica', 'bold');
+  doc.text('618-510-9143', M, y);
+
+  // Footer
+  doc.setTextColor(180, 180, 180);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Anniversary_Letter_${c.lastName||c.firstName}_${new Date().getFullYear()}.pdf`);
+  toast('✓ Letter ready — open to print or mail');
 }
 
 // ── COMMISSION HISTORY STORAGE ───────────────────────────────────────────────
