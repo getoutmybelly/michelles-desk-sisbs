@@ -1220,35 +1220,52 @@ function renderDashboard(){
 }
 
 async function calFromAppt(key){
-  const group=clientGroups[key]; if(!group) return;
-  const c=group[group.length-1];
-  if(!c.apptDate){toast('No appointment date set');return;}
-    if(!accessToken||!ensureValidToken()){
-    toast('Session expired — please refresh the page');
-    setTimeout(()=>{ window.location.href = buildAuthUrl('none'); }, 2000);
-    return;
-  }
-  let isoDate;
-  try{const d=new Date(c.apptDate);isoDate=d.toISOString().split('T')[0];}catch{toast('Bad date format');return;}
-  const title=`Appointment — ${c.fullName}`;
-  const desc=`${c.apptTime?'Time: '+c.apptTime+'\n':''}${c.apptNotes?'Notes: '+c.apptNotes+'\n':''}Phone: ${c.phone}\nAddress: ${c.fullAddress}`;
-  try{
-    const resp=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
-      method:'POST',
-      headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
-      body:JSON.stringify({summary:title,description:desc,start:{date:isoDate},end:{date:isoDate},reminders:{useDefault:false,overrides:[{method:'popup',minutes:60}]}})
+  try {
+    const group=clientGroups[key]; if(!group){toast('Group not found');return;}
+    const c=group[group.length-1];
+    
+    toast('Debug: apptDate=' + c.apptDate + ' token=' + (accessToken?'yes':'NO'));
+    
+    if(!c.apptDate){toast('No appointment date set');return;}
+    if(!accessToken){toast('Not signed in — please refresh');return;}
+    
+    // Parse date
+    const d = new Date(c.apptDate);
+    if(isNaN(d)){toast('Bad date: ' + c.apptDate);return;}
+    const isoDate = d.toISOString().split('T')[0];
+    
+    toast('Sending to calendar: ' + isoDate);
+    
+    const title = 'Appointment — ' + c.fullName;
+    const desc = (c.apptTime?'Time: '+c.apptTime+'\n':'') + 'Phone: '+c.phone+'\nAddress: '+c.fullAddress;
+    
+    const body = {
+      summary: title,
+      description: desc,
+      start: {date: isoDate},
+      end: {date: isoDate}
+    };
+    
+    const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
     });
+    
+    const respText = await resp.text();
+    console.log('Calendar response:', resp.status, respText);
+    
     if(!resp.ok){
-      const err=await resp.json().catch(()=>({}));
-      const msg=err?.error?.message||`HTTP ${resp.status}`;
-      console.error('Calendar error:',resp.status,msg,err);
-      toast(`Calendar error: ${resp.status} — ${msg}`);
+      toast('Cal error ' + resp.status + ': ' + respText.substring(0,80));
       return;
     }
-    toast(`✓ ${c.fullName} added to Calendar`);
-  }catch(e){
-    console.error('Calendar fetch error:',e);
-    toast('Could not add to calendar: '+e.message);
+    toast('✓ ' + c.fullName + ' added to Calendar');
+  } catch(e) {
+    console.error('Calendar exception:', e);
+    toast('Exception: ' + e.message);
   }
 }
 
