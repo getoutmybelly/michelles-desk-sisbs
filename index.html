@@ -1238,9 +1238,18 @@ async function calFromAppt(key){
       headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
       body:JSON.stringify({summary:title,description:desc,start:{date:isoDate},end:{date:isoDate},reminders:{useDefault:false,overrides:[{method:'popup',minutes:60}]}})
     });
-    if(!resp.ok) throw new Error();
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({}));
+      const msg=err?.error?.message||`HTTP ${resp.status}`;
+      console.error('Calendar error:',resp.status,msg,err);
+      toast(`Calendar error: ${resp.status} — ${msg}`);
+      return;
+    }
     toast(`✓ ${c.fullName} added to Calendar`);
-  }catch{toast('Could not add to calendar');}
+  }catch(e){
+    console.error('Calendar fetch error:',e);
+    toast('Could not add to calendar: '+e.message);
+  }
 }
 
 
