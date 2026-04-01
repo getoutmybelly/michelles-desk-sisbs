@@ -264,6 +264,13 @@
   .dk-call{border-color:var(--green);color:var(--green);}
   .dk-dir{border-color:var(--blue);color:var(--blue);}
   .dk-view{border-color:var(--border);color:var(--muted);}
+  /* FOLLOW-UP VISIT */
+  .followup-visit-block{background:var(--blue-light);border:1.5px solid var(--blue);border-radius:12px;padding:13px 15px;margin-bottom:10px;}
+  .followup-visit-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:10px;}
+  .reason-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .reason-chip{padding:5px 11px;border-radius:20px;border:1.5px solid var(--blue);font-size:12px;font-weight:500;cursor:pointer;background:#fff;color:var(--blue);font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .reason-chip.selected{background:var(--blue);color:#fff;}
+  .reason-chip:hover:not(.selected){background:var(--blue-light);}
   /* ANNIVERSARY OUTREACH */
   .anniv-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;transition:all .15s;}
   .anniv-card:hover{border-color:var(--gold);box-shadow:var(--shadow);}
@@ -761,6 +768,8 @@ function parseRows(rows) {
       stateBorn:       cl(r[66]),
       medicareInfo:    cl(r[68]),
       connectingInd:   cl(r[69]),
+      followUpDate:    fmtDate(r[70]),
+      followUpReason:  cl(r[71]),
     };
     c.fullName       = [c.firstName, c.lastName].filter(Boolean).join(' ');
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
@@ -781,6 +790,9 @@ function parseRows(rows) {
     if (!isRealDate(c.cxDue))    c.cxDue    = '';
     if (!isRealDate(c.surrDue))  c.surrDue  = '';
     c.hasPending   = c.stopPending || c.cxPending || c.surrPending;
+    // Follow-up visit pending
+    const isRealDateFU = s => { if(!s) return false; const d=new Date(s); return !isNaN(d)&&d.getFullYear()>=2020; };
+    c.followUpPending = isRealDateFU(c.followUpDate) && !c.followUpDone;
     clients.push(c);
     const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     if (!groups[key]) groups[key] = [];
@@ -1247,11 +1259,13 @@ function renderPipelineTab(tab) {
   const followUp   = allClients.filter(c=>c.clientStatus==='Follow Up');
   const appt       = allClients.filter(c=>c.clientStatus==='APPT');
 
+  const fuVisits = allClients.filter(c=>c.followUpPending);
   const tabs = [
     {id:'pending', label:'📋 Paperwork', data:pending},
+    {id:'fuvisit', label:'🔄 Follow-Up Visits', data:fuVisits},
     {id:'doorknock', label:'🚪 Door Knock', data:doorKnock},
     {id:'dial', label:'📞 Dial', data:dial},
-    {id:'followup', label:'🔄 Follow Up', data:followUp},
+    {id:'followup', label:'📁 Follow Up', data:followUp},
     {id:'appt', label:'📅 APPT', data:appt},
   ];
 
@@ -1756,6 +1770,69 @@ function renderAnniversaries() {
 
   html += '</div>';
   document.getElementById('anniversarySection').innerHTML = html;
+}
+
+// ── FOLLOW-UP VISIT ──────────────────────────────────────────────────────────
+function selectReason(btn, reason) {
+  document.querySelectorAll('.reason-chip').forEach(c => c.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('fu_reason').value = reason;
+}
+
+async function saveFollowUp() {
+  const c = selectedGroup[activeVisitIdx];
+  if (!accessToken) { toast('Sign in first'); return; }
+  const date = document.getElementById('fu_date').value;
+  const reason = document.getElementById('fu_reason').value;
+  if (!date && !reason) { toast('Add a date or reason first'); return; }
+
+  try {
+    // Save date to BS (col 70)
+    if (date) await writeCell(c.sheetRow, 70, date);
+    // Save reason to BT (col 71)
+    if (reason) await writeCell(c.sheetRow, 71, reason);
+    c.followUpDate = fmtDate(date);
+    c.followUpReason = reason;
+    c.followUpPending = true;
+
+    // Add to calendar if date set
+    if (date && accessToken) {
+      const d = new Date(date);
+      const isoDate = d.toISOString().split('T')[0];
+      const title = `Follow-Up Visit — ${c.fullName}`;
+      const desc = `${reason ? 'Reason: '+reason+'\n' : ''}Phone: ${c.phone}\nAddress: ${c.fullAddress}`;
+      const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: title, description: desc, start: {date:isoDate}, end: {date:isoDate},
+          reminders: { useDefault: false, overrides: [{method:'popup',minutes:60}] } })
+      });
+      if (resp.ok) toast('✓ Follow-up saved & added to Calendar');
+      else toast('✓ Follow-up saved (calendar add failed)');
+    } else {
+      toast('✓ Follow-up saved to sheet');
+    }
+    renderDetail();
+  } catch(err) {
+    toast('Could not save — check connection');
+    console.error(err);
+  }
+}
+
+async function clearFollowUp() {
+  const c = selectedGroup[activeVisitIdx];
+  if (!accessToken) { toast('Sign in first'); return; }
+  try {
+    await writeCell(c.sheetRow, 70, '');
+    await writeCell(c.sheetRow, 71, '');
+    c.followUpDate = '';
+    c.followUpReason = '';
+    c.followUpPending = false;
+    toast('✓ Follow-up cleared');
+    renderDetail();
+  } catch(err) {
+    toast('Could not clear');
+  }
 }
 
 // ── BRIEFING CARD ────────────────────────────────────────────────────────────
