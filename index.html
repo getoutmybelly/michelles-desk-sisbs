@@ -261,6 +261,33 @@
   .anniv-btn-email:hover{background:var(--blue-light);}
   .anniv-btn-view{border-color:var(--border);color:var(--muted);}
   .anniv-btn-view:hover{background:var(--cream);}
+  /* REPEAT CLIENT ALERT */
+  .repeat-alert{background:linear-gradient(135deg,#1a1a2e,#2a1a4e);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+  .repeat-alert-icon{font-size:24px;flex-shrink:0;}
+  .repeat-alert-text{flex:1;}
+  .repeat-alert-title{font-weight:700;color:#fff;font-size:15px;}
+  .repeat-alert-sub{font-size:12px;color:rgba(255,255,255,.6);margin-top:2px;}
+  .repeat-alert-btn{background:var(--gold);color:#fff;border:none;padding:7px 14px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  /* BRIEFING CARD */
+  .briefing-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:20px;}
+  .briefing-overlay.visible{display:flex;}
+  .briefing-modal{background:#fff;border-radius:18px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .briefing-header{background:var(--ink);padding:18px 22px;border-radius:18px 18px 0 0;display:flex;align-items:flex-start;justify-content:space-between;}
+  .briefing-badge{background:var(--gold);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:6px;display:inline-block;}
+  .briefing-name{font-family:'DM Serif Display',serif;font-size:22px;color:#fff;}
+  .briefing-sub{font-size:12px;color:rgba(255,255,255,.5);margin-top:3px;}
+  .briefing-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:17px;cursor:pointer;flex-shrink:0;}
+  .briefing-body{padding:20px 22px;}
+  .briefing-section{margin-bottom:16px;}
+  .briefing-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;}
+  .briefing-highlight{background:linear-gradient(135deg,var(--gold-light),#fff8e8);border:1.5px solid var(--gold);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.6;color:var(--ink);margin-bottom:14px;}
+  .briefing-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;}
+  .briefing-item label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:1px;}
+  .briefing-item span{font-size:13px;color:var(--ink);}
+  .briefing-visit{background:var(--cream);border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;}
+  .briefing-visit-date{font-weight:700;color:var(--ink);}
+  .briefing-visit-detail{color:var(--muted);margin-top:2px;}
+  .briefing-print-btn{width:100%;padding:12px;background:var(--ink);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}
   .anniv-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-left:6px;}
   .anniv-today{background:var(--gold-light);color:var(--gold);}
   .anniv-soon{background:var(--rust-light);color:var(--rust);}
@@ -467,6 +494,10 @@
 
 
 
+
+<div class="briefing-overlay" id="briefingOverlay" onclick="if(event.target===this)closeBriefing()">
+  <div class="briefing-modal" id="briefingModal"></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -889,7 +920,21 @@ function renderDetail() {
 
   let h = '';
 
-  if (selectedGroup.length>1) {
+  // Repeat client alert
+  if (selectedGroup.length > 1) {
+    const lastVisit = selectedGroup[selectedGroup.length-2];
+    const lastDate = lastVisit.leadDate || lastVisit.apptDate || 'a previous visit';
+    h += `<div class="repeat-alert">
+      <div class="repeat-alert-icon">⚠️</div>
+      <div class="repeat-alert-text">
+        <div class="repeat-alert-title">Repeat Client — ${selectedGroup.length} visits on file</div>
+        <div class="repeat-alert-sub">Last seen: ${lastDate} · Say "Good seeing you again!"</div>
+      </div>
+      <button class="repeat-alert-btn" onclick="openBriefing('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')">Full Briefing</button>
+    </div>`;
+  }
+
+  if (selectedGroup.length > 1) {
     h += '<div class="visit-label">Client Visits</div><div class="visit-tabs">';
     selectedGroup.forEach((v,i)=>{
       const lbl = v.leadDate||v.apptDate||`Visit ${i+1}`;
@@ -1602,6 +1647,201 @@ function renderAnniversaries() {
 
   html += '</div>';
   document.getElementById('anniversarySection').innerHTML = html;
+}
+
+// ── BRIEFING CARD ────────────────────────────────────────────────────────────
+function openBriefing(key) {
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1]; // most recent visit
+  const visitCount = group.length;
+
+  // Build one-line briefing summary using AI-style logic
+  const agePart = c.age ? `${c.age}-year-old` : '';
+  const tobPart = c.tobacco === 'x' || c.tobacco?.toLowerCase() === 'yes' ? 'tobacco user' : '';
+  const ssPart = c.ssType ? `receives ${c.ssType}` : '';
+  const policyPart = c.existingPolicy ? `Has ${c.existingCompany||'existing'} policy #${c.existingPolicy}` : '';
+  const newPart = c.newCompany ? `You placed ${c.newCompany} coverage` : '';
+  const benPart = c.beneficiary ? `Beneficiary: ${c.beneficiary}` : '';
+
+  const summaryParts = [agePart, tobPart, ssPart].filter(Boolean).join(', ');
+  const coverageParts = [policyPart, newPart].filter(Boolean).join('. ');
+
+  let modal = `<div class="briefing-header">
+    <div>
+      <div class="briefing-badge">📋 Pre-Visit Briefing</div>
+      <div class="briefing-name">${c.fullName}</div>
+      <div class="briefing-sub">${c.fullAddress}</div>
+    </div>
+    <button class="briefing-close" onclick="closeBriefing()">✕</button>
+  </div>
+  <div class="briefing-body">`;
+
+  // Walk-in briefing highlight
+  modal += `<div class="briefing-highlight">
+    <strong>💡 Walk-in brief:</strong> You've visited ${visitCount > 1 ? `<strong>${c.firstName}</strong> <strong>${visitCount} times</strong> before` : `<strong>${c.firstName}</strong> before`}. Say <em>"Good seeing you again!"</em><br>
+    ${summaryParts ? `<strong>${c.firstName}</strong> is a ${summaryParts}.` : ''}
+    ${coverageParts ? `${coverageParts}.` : ''}
+    ${benPart ? `${benPart}.` : ''}
+  </div>`;
+
+  // Quick facts
+  modal += `<div class="briefing-section"><div class="briefing-section-title">Quick Facts</div>
+  <div class="briefing-grid">
+    <div class="briefing-item"><label>Phone</label><span>${c.phone||'—'}</span></div>
+    <div class="briefing-item"><label>Date of Birth</label><span>${c.dob||'—'}</span></div>
+    <div class="briefing-item"><label>Age</label><span>${c.age||'—'}</span></div>
+    <div class="briefing-item"><label>SS / Disability</label><span>${c.ssType||'—'}</span></div>
+    <div class="briefing-item"><label>Bank</label><span>${c.bank||'—'}</span></div>
+    <div class="briefing-item"><label>Pay Week</label><span>${c.checkDate||'—'}</span></div>
+    ${c.beneficiary?`<div class="briefing-item" style="grid-column:1/-1"><label>Beneficiary</label><span>${c.beneficiary}</span></div>`:''}
+  </div></div>`;
+
+  // Coverage
+  if (c.existingCompany || c.newCompany) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Coverage</div>`;
+    if (c.existingCompany) modal += `<div class="briefing-item" style="margin-bottom:6px"><label>Current Policy</label><span>${c.existingCompany} #${c.existingPolicy||'—'} · $${c.existingFace||'—'} face · $${c.existingPremium||'—'}/mo</span></div>`;
+    if (c.newCompany) modal += `<div class="briefing-item"><label>Placed With You</label><span>${c.newCompany} · $${c.newFace||'—'} face · $${c.newPremium||'—'}/mo</span></div>`;
+    modal += `</div>`;
+  }
+
+  // Visit history
+  if (visitCount > 1) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Visit History (${visitCount} visits)</div>`;
+    group.slice().reverse().forEach((v, i) => {
+      const vDate = v.leadDate || v.apptDate || `Visit ${visitCount - i}`;
+      const vNote = v.notes || '';
+      const vCompany = v.displayCompany || '';
+      modal += `<div class="briefing-visit">
+        <div class="briefing-visit-date">${i===0?'Most Recent: ':''}${vDate}${vCompany?' · '+vCompany:''}</div>
+        ${vNote?`<div class="briefing-visit-detail">${vNote}</div>`:''}
+      </div>`;
+    });
+    modal += `</div>`;
+  }
+
+  // Notes
+  if (c.notes) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Notes</div>
+    <div style="font-size:13px;color:var(--ink);line-height:1.6">${c.notes}</div></div>`;
+  }
+
+  modal += `<button class="briefing-print-btn" onclick="genBriefingPDF('${esc(key)}')">🖨️ Print Briefing Card</button>`;
+  modal += `</div>`;
+
+  document.getElementById('briefingModal').innerHTML = modal;
+  document.getElementById('briefingOverlay').classList.add('visible');
+}
+
+function closeBriefing() {
+  document.getElementById('briefingOverlay').classList.remove('visible');
+}
+
+function genBriefingPDF(key) {
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1];
+  const visitCount = group.length;
+
+  const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
+  const W=612, M=54, contentW=W-M*2;
+  let y = M;
+
+  // Header
+  doc.setFillColor(26,26,46); doc.rect(0,0,W,64,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('PRE-VISIT BRIEFING', M, 20);
+  doc.setFontSize(20); doc.text(c.fullName, M, 40);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(184,146,58);
+  doc.text(c.fullAddress, M, 55);
+
+  // Repeat visit badge
+  if (visitCount > 1) {
+    doc.setFillColor(184,146,58); doc.roundedRect(W-M-110, 18, 110, 28, 4, 4, 'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text(`${visitCount} VISITS ON FILE`, W-M-55, 36, {align:'center'});
+  }
+
+  y = 84;
+  doc.setTextColor(26,26,46);
+
+  // Walk-in brief box
+  doc.setFillColor(253,246,232); doc.setDrawColor(184,146,58); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 52, 4, 4, 'FD');
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(184,146,58);
+  doc.text('💡 SAY: "Good seeing you again, ' + c.firstName + '!"', M+10, y+16);
+  doc.setFont('helvetica','normal'); doc.setTextColor(26,26,46); doc.setFontSize(9.5);
+  const briefLine = [c.age?`Age ${c.age}`:'', c.ssType||'', c.bank?`Bank: ${c.bank}`:''].filter(Boolean).join(' · ');
+  const bl = doc.splitTextToSize(briefLine, contentW-20);
+  doc.text(bl, M+10, y+30);
+  y += 66;
+
+  // Two column layout
+  const col1 = M, col2 = M + contentW/2 + 10, colW = contentW/2 - 10;
+
+  function field(label, value, x, yPos, w) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(122,117,112);
+    doc.text(label.toUpperCase(), x, yPos);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(26,26,46);
+    const lines = doc.splitTextToSize(value||'—', w);
+    doc.text(lines, x, yPos+12);
+    return yPos + 12 + lines.length*12 + 6;
+  }
+
+  const fields1 = [['Phone',c.phone],['Date of Birth',c.dob],['SS/Disability',c.ssType],['Bank',c.bank]];
+  const fields2 = [['Age',c.age],['Pay Week',c.checkDate],['Tobacco',c.tobacco],['Beneficiary',c.beneficiary]];
+
+  let y1 = y, y2 = y;
+  fields1.forEach(([l,v]) => { y1 = field(l,v,col1,y1,colW); });
+  fields2.forEach(([l,v]) => { y2 = field(l,v,col2,y2,colW); });
+  y = Math.max(y1, y2) + 10;
+
+  // Coverage
+  doc.setDrawColor(220,216,208); doc.setLineWidth(1); doc.line(M, y, W-M, y); y += 14;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+  doc.text('COVERAGE', M, y); y += 14;
+  if (c.existingCompany) {
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(26,26,46);
+    doc.text(`Current: ${c.existingCompany} #${c.existingPolicy||'—'} · Face: $${c.existingFace||'—'} · Premium: $${c.existingPremium||'—'}/mo`, M, y); y += 15;
+  }
+  if (c.newCompany) {
+    doc.text(`Placed: ${c.newCompany} · Face: $${c.newFace||'—'} · Premium: $${c.newPremium||'—'}/mo`, M, y); y += 15;
+  }
+  y += 6;
+
+  // Visit history
+  if (visitCount > 1) {
+    doc.line(M, y, W-M, y); y += 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+    doc.text(`VISIT HISTORY (${visitCount} VISITS)`, M, y); y += 14;
+    group.slice().reverse().forEach((v, i) => {
+      const vDate = v.leadDate || v.apptDate || `Visit ${visitCount-i}`;
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
+      doc.text(`${i===0?'★ ':''}${vDate}${v.displayCompany?' · '+v.displayCompany:''}`, M, y); y += 12;
+      if (v.notes) {
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+        const nl = doc.splitTextToSize(v.notes, contentW-10);
+        doc.text(nl, M+8, y); y += nl.length*11+4;
+      }
+    });
+  }
+
+  // Notes
+  if (c.notes) {
+    doc.line(M, y, W-M, y); y += 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+    doc.text('NOTES', M, y); y += 12;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
+    const nl = doc.splitTextToSize(c.notes, contentW);
+    doc.text(nl, M, y);
+  }
+
+  // Footer
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text(`Briefing generated ${new Date().toLocaleString()} · Michelle Scott · 618-510-9143`, W/2, 748, {align:'center'});
+
+  doc.save(`Briefing_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Briefing card ready to print');
 }
 
 // ── ANNIVERSARY LETTER GENERATOR ─────────────────────────────────────────────
