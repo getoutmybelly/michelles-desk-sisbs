@@ -247,6 +247,23 @@
   .nearby-addr{font-size:12px;color:var(--muted);margin-top:1px;}
   .nearby-dist{font-size:12px;font-weight:600;color:var(--blue);white-space:nowrap;}
   .map-locating{text-align:center;padding:32px;color:var(--muted);}
+  /* DOOR KNOCK & PIPELINE STATUS */
+  .pipeline-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .pipeline-tab{padding:6px 14px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;display:flex;align-items:center;gap:5px;}
+  .pipeline-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .pipeline-tab:hover:not(.active){border-color:var(--sage);color:var(--sage);}
+  .pipeline-tab .tab-count{background:rgba(0,0,0,.15);border-radius:20px;padding:1px 7px;font-size:10px;}
+  .pipeline-tab.active .tab-count{background:rgba(255,255,255,.2);}
+  .door-knock-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px;}
+  .door-knock-card{background:#fff;border:1.5px solid var(--border);border-radius:11px;padding:13px;cursor:pointer;transition:all .15s;}
+  .door-knock-card:hover{border-color:var(--sage);transform:translateY(-1px);box-shadow:var(--shadow);}
+  .door-knock-name{font-weight:600;font-size:14px;}
+  .door-knock-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .door-knock-actions{display:flex;gap:6px;margin-top:8px;}
+  .dk-btn{padding:5px 11px;border-radius:20px;border:1.5px solid;font-size:11px;font-weight:600;cursor:pointer;background:#fff;font-family:'DM Sans',sans-serif;text-decoration:none;display:inline-flex;align-items:center;}
+  .dk-call{border-color:var(--green);color:var(--green);}
+  .dk-dir{border-color:var(--blue);color:var(--blue);}
+  .dk-view{border-color:var(--border);color:var(--muted);}
   /* ANNIVERSARY OUTREACH */
   .anniv-card{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;transition:all .15s;}
   .anniv-card:hover{border-color:var(--gold);box-shadow:var(--shadow);}
@@ -488,7 +505,8 @@
       <h2>Follow-Up Pipeline</h2>
       <div class="divider-line"></div>
     </div>
-    <div class="followup-grid" id="followupGrid"></div>
+    <div class="pipeline-tabs" id="pipelineTabs"></div>
+    <div id="pipelineContent"></div>
   </div>
 </div>
 
@@ -691,6 +709,7 @@ function parseRows(rows) {
     if (!firstName) continue;
     const c = {
       sheetRow:        i + 1,
+      clientStatus:    cl(r[0]),
       firstName,
       lastName:        cl(r[3]) || cl(r[2]),
       address:         cl(r[4]),
@@ -721,6 +740,7 @@ function parseRows(rows) {
       effectiveDate:   fmtDate(r[44]),
       payDate:         cl(r[45]),
       // New due/sent columns
+      stopDueRaw:      cl(r[C.STOP_DUE]),
       stopDue:         fmtDate(r[C.STOP_DUE]),
       stopSent:        cl(r[C.STOP_SENT]),
       cxDue:           fmtDate(r[C.CX_DUE]),
@@ -746,9 +766,20 @@ function parseRows(rows) {
     c.fullAddress    = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ');
     c.displayCompany = c.newCompany || c.existingCompany || '';
     // Pending = has a Due date AND no Sent date yet
-    c.stopPending  = !!c.stopDue  && !c.stopSent;
-    c.cxPending    = !!c.cxDue   && !c.cxSent;
-    c.surrPending  = !!c.surrDue && !c.surrSent;
+    // Only treat as pending if due date is a real date from 2020 onwards
+    const isRealDate = s => {
+      if (!s) return false;
+      const d = new Date(s);
+      if (isNaN(d)) return false;
+      return d.getFullYear() >= 2020;
+    };
+    c.stopPending  = isRealDate(c.stopDue)  && !c.stopSent;
+    c.cxPending    = isRealDate(c.cxDue)   && !c.cxSent;
+    c.surrPending  = isRealDate(c.surrDue) && !c.surrSent;
+    // Also clear due dates that aren't real dates
+    if (!isRealDate(c.stopDue))  c.stopDue  = '';
+    if (!isRealDate(c.cxDue))    c.cxDue    = '';
+    if (!isRealDate(c.surrDue))  c.surrDue  = '';
     c.hasPending   = c.stopPending || c.cxPending || c.surrPending;
     clients.push(c);
     const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
@@ -1202,21 +1233,73 @@ function renderDashboard(){
   // Anniversary outreach
   renderAnniversaries();
 
-  // Pipeline
-  if(!pending.length){
-    document.getElementById('followupGrid').innerHTML='<div class="no-results" style="grid-column:1/-1">🎉 All caught up!</div>';
+  // Pipeline tabs
+  renderPipelineTab('pending');
+}
+
+let activePipelineTab = 'pending';
+
+function renderPipelineTab(tab) {
+  activePipelineTab = tab;
+  const pending    = allClients.filter(c=>c.hasPending);
+  const doorKnock  = allClients.filter(c=>c.clientStatus==='Door Knock');
+  const dial       = allClients.filter(c=>c.clientStatus==='Dial');
+  const followUp   = allClients.filter(c=>c.clientStatus==='Follow Up');
+  const appt       = allClients.filter(c=>c.clientStatus==='APPT');
+
+  const tabs = [
+    {id:'pending', label:'📋 Paperwork', data:pending},
+    {id:'doorknock', label:'🚪 Door Knock', data:doorKnock},
+    {id:'dial', label:'📞 Dial', data:dial},
+    {id:'followup', label:'🔄 Follow Up', data:followUp},
+    {id:'appt', label:'📅 APPT', data:appt},
+  ];
+
+  document.getElementById('pipelineTabs').innerHTML = tabs.map(t =>
+    `<button class="pipeline-tab${activePipelineTab===t.id?' active':''}" onclick="renderPipelineTab('${t.id}')">
+      ${t.label}<span class="tab-count">${t.data.length}</span>
+    </button>`
+  ).join('');
+
+  const activeData = tabs.find(t=>t.id===tab)?.data || [];
+  const content = document.getElementById('pipelineContent');
+
+  if (!activeData.length) {
+    content.innerHTML = '<div class="no-results" style="text-align:center;padding:28px;color:var(--muted)">🎉 Nothing here!</div>';
     return;
   }
-  document.getElementById('followupGrid').innerHTML=pending.slice(0,24).map(c=>{
+
+  if (tab === 'doorknock') {
+    content.innerHTML = `<div class="door-knock-grid">${activeData.slice(0,24).map(c => {
+      const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      const addr = [c.address, c.city, c.state].filter(Boolean).join(', ');
+      const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(addr)}`;
+      return `<div class="door-knock-card">
+        <div class="door-knock-name">${c.fullName}</div>
+        <div class="door-knock-meta">${addr}</div>
+        ${c.phone?`<div style="font-size:12px;color:var(--sage);margin-top:3px">${c.phone}</div>`:''}
+        <div class="door-knock-actions">
+          ${c.phone?`<a class="dk-btn dk-call" href="tel:${c.phone.replace(/\D/g,'')}">📞 Call</a>`:''}
+          <a class="dk-btn dk-dir" href="${mapsUrl}" target="_blank">📍 Directions</a>
+          <button class="dk-btn dk-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+    return;
+  }
+
+  content.innerHTML = `<div class="followup-grid">${activeData.slice(0,24).map(c=>{
     const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     const due=[c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
+    const statusBadge = c.clientStatus && tab!=='pending' ? `<span style="font-size:10px;font-weight:700;color:var(--muted);background:var(--cream);padding:2px 7px;border-radius:20px;margin-bottom:4px;display:inline-block">${c.clientStatus}</span><br>` : '';
     return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
+      ${statusBadge}
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
       ${due?`<div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 ${due}</div>`:''}
       <div class="followup-tags">${buildPills(c)}</div>
     </div>`;
-  }).join('');
+  }).join('')}</div>`;
 }
 
 async function calFromAppt(key){
