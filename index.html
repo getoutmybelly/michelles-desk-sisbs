@@ -508,6 +508,7 @@
     <div class="stats-row" id="statsRow"></div>
     <div id="apptSection"></div>
     <div id="anniversarySection"></div>
+    <div id="birthdaySection"></div>
     <div class="section-divider" style="margin-top:8px">
       <h2>Follow-Up Pipeline</h2>
       <div class="divider-line"></div>
@@ -1244,6 +1245,7 @@ function renderDashboard(){
 
   // Anniversary outreach
   renderAnniversaries();
+  renderBirthdaySignals();
 
   // Pipeline tabs
   renderPipelineTab('pending');
@@ -1770,6 +1772,247 @@ function renderAnniversaries() {
 
   html += '</div>';
   document.getElementById('anniversarySection').innerHTML = html;
+}
+
+function renderBirthdaySignals() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const signals = [];
+
+  allClients.forEach(c => {
+    if (!c.dob) return;
+    const dob = new Date(c.dob);
+    if (isNaN(dob)) return;
+
+    // Calculate next birthday
+    const nextBday = new Date(dob);
+    nextBday.setFullYear(today.getFullYear());
+    nextBday.setHours(0,0,0,0);
+    if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
+
+    const daysUntilBday = Math.round((nextBday - today) / 86400000);
+    const ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
+
+    // Birthday signal — 60 days out
+    if (daysUntilBday <= 60 && daysUntilBday >= 0) {
+      signals.push({ type:'birthday', client:c, daysUntil:daysUntilBday, age:ageAtNextBday, date:nextBday });
+    }
+
+    // Medicare signal — turning 65, 75 days out
+    if (ageAtNextBday === 65 && daysUntilBday <= 75 && daysUntilBday >= 0) {
+      signals.push({ type:'medicare', client:c, daysUntil:daysUntilBday, age:65, date:nextBday });
+    }
+  });
+
+  signals.sort((a,b) => {
+    // Medicare first, then birthday, sorted by days
+    if (a.type !== b.type) return a.type === 'medicare' ? -1 : 1;
+    return a.daysUntil - b.daysUntil;
+  });
+
+  const el = document.getElementById('birthdaySection');
+  if (!signals.length) { el.innerHTML=''; return; }
+
+  let html = '';
+
+  // Medicare signals first
+  const medicareSignals = signals.filter(s=>s.type==='medicare');
+  const birthdaySignals = signals.filter(s=>s.type==='birthday');
+
+  if (medicareSignals.length) {
+    html += `<div class="section-divider" style="margin-top:4px">
+      <h2>🏥 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2>
+      <div class="divider-line"></div>
+    </div><div class="followup-grid">`;
+
+    medicareSignals.forEach(({ client:c, daysUntil, date }) => {
+      const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      const dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+      const badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : `<span class="anniv-badge anniv-upcoming">${daysUntil}d</span>`;
+      const emailBody = `Hi ${c.firstName},%0D%0A%0D%0AYour 65th birthday is coming up on ${dateStr} — and that means you're about to become eligible for Medicare!%0D%0A%0D%0AThis is one of the most important transitions in your life when it comes to your health and financial protection. You have a 7-month Special Enrollment Period around your birthday, and missing it can result in lifetime premium penalties.%0D%0A%0D%0AI'd love to sit down with you and walk through your options — at no cost and no obligation. I help people in your area navigate Medicare every day, and I want to make sure you're set up right.%0D%0A%0D%0ACan we find a time to connect in the next few weeks?%0D%0A%0D%0AThank you,%0D%0AMichelle Scott%0D%0A618-510-9143%0D%0AIllinois Senior Benefit Services`;
+      const emailHref = c.email ? `mailto:${c.email}?subject=Your Medicare Eligibility is Coming Up&body=${emailBody}` : '#';
+
+      html += `<div class="anniv-card" style="border-color:#2d7a4f">
+        <div><div class="anniv-name" style="color:#2d7a4f">🏥 ${c.fullName}${badge}</div>
+        <div class="anniv-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+        <div class="anniv-date" style="color:#2d7a4f">Turns 65 on ${dateStr}</div></div>
+        <div class="anniv-actions">
+          ${c.phone?`<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:${c.phone.replace(/\D/g,'')}">📞 Call</a>`:''}
+          ${c.email?`<a class="anniv-btn anniv-btn-email" href="${emailHref}">✉️ Email</a>`:''}
+          <button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter('${esc(key)}')">📄 Letter</button>
+          <button class="anniv-btn anniv-btn-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  if (birthdaySignals.length) {
+    html += `<div class="section-divider" style="margin-top:8px">
+      <h2>🎂 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2>
+      <div class="divider-line"></div>
+    </div><div class="followup-grid">`;
+
+    birthdaySignals.forEach(({ client:c, daysUntil, age, date }) => {
+      const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      const dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
+      const badge = daysUntil <= 7 ? `<span class="anniv-badge anniv-soon">${daysUntil}d</span>` : `<span class="anniv-badge anniv-upcoming">${daysUntil}d</span>`;
+      const emailBody = `Hi ${c.firstName},%0D%0A%0D%0AI wanted to reach out ahead of your ${age}th birthday on ${dateStr} — happy early birthday!%0D%0A%0D%0AAs you step into this next chapter, I'd love to connect and make sure your coverage still lines up with your income and your needs. A lot can change around a birthday, especially if you're expecting any changes to your retirement income or Social Security.%0D%0A%0D%0AWould you have a few minutes for a quick check-in? No pressure at all — just want to make sure you're fully protected.%0D%0A%0D%0AWith warm wishes,%0D%0AMichelle Scott%0D%0A618-510-9143%0D%0AIllinois Senior Benefit Services`;
+      const emailHref = c.email ? `mailto:${c.email}?subject=Happy Early Birthday, ${c.firstName}!&body=${emailBody}` : '#';
+
+      html += `<div class="anniv-card" style="border-color:var(--rust)">
+        <div><div class="anniv-name" style="color:var(--rust)">🎂 ${c.fullName}${badge}</div>
+        <div class="anniv-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+        <div class="anniv-date" style="color:var(--rust)">${dateStr} · Turning ${age}</div></div>
+        <div class="anniv-actions">
+          ${c.phone?`<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:${c.phone.replace(/\D/g,'')}">📞 Call</a>`:''}
+          ${c.email?`<a class="anniv-btn anniv-btn-email" href="${emailHref}">✉️ Email</a>`:''}
+          <button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter('${esc(key)}',${age})">📄 Letter</button>
+          <button class="anniv-btn anniv-btn-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+// ── BIRTHDAY LETTER ──────────────────────────────────────────────────────────
+function genBirthdayLetter(key, age) {
+  const group = clientGroups[key]; if (!group) return;
+  const c = group[group.length-1];
+  const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=72,contentW=W-M*2; let y=M;
+
+  doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(184,146,58);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 57);
+  doc.setDrawColor(184,146,58); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
+
+  y=106; doc.setTextColor(26,26,46);
+  const todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(todayStr, M, y); y+=24;
+
+  y+=10;
+  doc.setFont('helvetica','bold'); doc.text(c.fullName, M, y); y+=16;
+  doc.setFont('helvetica','normal');
+  if (c.address) { doc.text(c.address, M, y); y+=16; }
+  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y+=32;
+
+  doc.text(`Dear ${c.firstName},`, M, y); y+=22;
+
+  const paras = [
+    `I wanted to reach out a little ahead of your ${age}th birthday to wish you well — and to check in as your benefit coordinator.`,
+    `Birthdays are a natural time to take stock. Whether you're expecting any changes to your income, thinking about retirement, or simply wondering if your current coverage still makes sense, I'd love to spend a few minutes with you to make sure everything lines up.`,
+    `I work with many folks in your area and I know how much can shift around this time of life. My job is to make sure you're fully protected and not paying for more — or less — than you need.`,
+    `There's no cost to meet, no pressure, and no obligation. Just a friendly visit from someone who genuinely cares about your peace of mind.`,
+  ];
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length*15+14;
+  });
+
+  y+=6;
+  doc.setFillColor(253,246,232); doc.setDrawColor(184,146,58); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 58, 4, 4, 'FD');
+  doc.setTextColor(122,117,112); doc.setFontSize(10);
+  doc.text('Give me a call or text — I'd love to connect before your birthday:', W/2, y+20, {align:'center'});
+  doc.setTextColor(184,146,58); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+42, {align:'center'});
+  y+=78;
+
+  doc.setTextColor(26,26,46); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text('With warm wishes,', M, y); y+=32;
+  doc.setFont('helvetica','bold'); doc.text('Michelle Scott', M, y); y+=16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(122,117,112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y+=14;
+  doc.text('Illinois Senior Benefit Services', M, y); y+=14;
+  doc.setTextColor(184,146,58); doc.setFont('helvetica','bold');
+  doc.text('618-510-9143', M, y);
+
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Birthday_Letter_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Birthday letter ready');
+}
+
+// ── MEDICARE LETTER ───────────────────────────────────────────────────────────
+function genMedicareLetter(key) {
+  const group = clientGroups[key]; if (!group) return;
+  const c = group[group.length-1];
+  const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=72,contentW=W-M*2; let y=M;
+
+  // Green header for Medicare
+  doc.setFillColor(26,46,26); doc.rect(0,0,W,70,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(134,196,134);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 57);
+  doc.setDrawColor(45,122,79); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
+
+  y=106; doc.setTextColor(26,26,46);
+  const todayStr2 = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(todayStr2, M, y); y+=24;
+
+  y+=10;
+  doc.setFont('helvetica','bold'); doc.text(c.fullName, M, y); y+=16;
+  doc.setFont('helvetica','normal');
+  if (c.address) { doc.text(c.address, M, y); y+=16; }
+  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y+=32;
+
+  doc.text(`Dear ${c.firstName},`, M, y); y+=22;
+
+  const paras = [
+    `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. You are about to become eligible for Medicare.`,
+    `Here's what you need to know: Medicare has a 7-month Special Enrollment Period that begins 3 months before your 65th birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage. Acting early gives you the best options and the most time to make the right choice.`,
+    `Navigating Medicare can feel overwhelming — there are Parts A, B, C, and D, Supplement plans, Advantage plans, and more. My job is to simplify all of that for you, at no cost and with no obligation. I help people in your community understand their Medicare options every single day.`,
+    `I'd love to sit down with you before your birthday and walk through everything together. We'll look at what Medicare covers, what it doesn't, and what — if anything — makes sense to add to make sure you're fully protected.`,
+  ];
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length*15+14;
+  });
+
+  // Green CTA box
+  y+=4;
+  doc.setFillColor(232,245,238); doc.setDrawColor(45,122,79); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 68, 4, 4, 'FD');
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('⏰ Don't miss your Medicare enrollment window.', W/2, y+18, {align:'center'});
+  doc.setFont('helvetica','normal'); doc.setTextColor(122,117,112); doc.setFontSize(10);
+  doc.text('Call or text me today — let's get you prepared:', W/2, y+33, {align:'center'});
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+52, {align:'center'});
+  y+=82;
+
+  doc.setTextColor(26,26,46); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text('Here for you,', M, y); y+=32;
+  doc.setFont('helvetica','bold'); doc.text('Michelle Scott', M, y); y+=16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(122,117,112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y+=14;
+  doc.text('Illinois Senior Benefit Services', M, y); y+=14;
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold');
+  doc.text('618-510-9143', M, y);
+
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Medicare_Letter_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Medicare letter ready');
 }
 
 // ── FOLLOW-UP VISIT ──────────────────────────────────────────────────────────
