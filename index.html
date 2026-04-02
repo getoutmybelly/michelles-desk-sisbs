@@ -145,6 +145,8 @@
   .stats-row{display:flex;gap:9px;margin-bottom:18px;flex-wrap:wrap;}
   .stat-box{background:#fff;border:1.5px solid var(--border);border-radius:9px;padding:11px 14px;flex:1;min-width:80px;}
   .stat-number{font-family:'DM Serif Display',serif;font-size:24px;color:var(--ink);line-height:1;}
+  .stat-box[onclick]:hover{box-shadow:0 4px 16px rgba(26,26,46,.15);transform:translateY(-1px);transition:all .15s ease;}
+  .stat-box{transition:all .15s ease;}
   .stat-label{font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;}
   .stat-box.alert{border-color:var(--rust);}
   .stat-box.alert .stat-number{color:var(--rust);}
@@ -1220,10 +1222,10 @@ function renderDashboard(){
   const surrCount = allClients.filter(c=>c.surrPending).length;
 
   document.getElementById('statsRow').innerHTML=`
-    <div class="stat-box" style="border-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
-    <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
-    <div class="stat-box"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
-    <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
+    <div class="stat-box" style="border-color:var(--blue);cursor:pointer" onclick="document.getElementById('apptSection').scrollIntoView({behavior:'smooth'})"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
+    <div class="stat-box alert" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'})"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
+    <div class="stat-box" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'});setTimeout(()=>{const cards=[...document.querySelectorAll('.followup-card')].filter(el=>el.innerText.includes('Stop PAC'));if(cards[0])cards[0].scrollIntoView({behavior:'smooth'})},400)"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
+    <div class="stat-box" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'});setTimeout(()=>{const cards=[...document.querySelectorAll('.followup-card')].filter(el=>el.innerText.includes('Surrender'));if(cards[0])cards[0].scrollIntoView({behavior:'smooth'})},400)"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
   // Appointments
   let apptHtml = '';
@@ -2304,6 +2306,7 @@ async function genAnniversaryLetter(key, yearsOld) {
   // Gold header bar
   doc.setFillColor(26, 26, 46);
   doc.rect(0, 0, W, 70, 'F');
+  addPhotoToLetter(doc, W, M);
 
   // Agent name
   doc.setTextColor(255, 255, 255);
