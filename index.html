@@ -590,7 +590,15 @@ const C = {
   NOTES:     53,
 };
 
-const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
+  let MICHELLE_HEADSHOT = '';
+  (function() {
+    var _url = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
+    fetch(_url).then(function(r){ return r.blob(); }).then(function(b){
+      var rd = new FileReader();
+      rd.onloadend = function(){ MICHELLE_HEADSHOT = rd.result; };
+      rd.readAsDataURL(b);
+    }).catch(function(){ console.warn('Headshot preload failed'); });
+  })();
 
 let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
@@ -1777,19 +1785,19 @@ function renderAnniversaries() {
 }
 
 function renderBirthdaySignals() {
-  var today = new Date(); today.setHours(0,0,0,0);
-  var signals = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const signals = [];
 
-  allClients.forEach(function(c) {
+  allClients.forEach(c => {
     if (!c.dob) return;
-    var dob = new Date(c.dob);
+    const dob = new Date(c.dob);
     if (isNaN(dob)) return;
-    var nextBday = new Date(dob);
+    const nextBday = new Date(dob);
     nextBday.setFullYear(today.getFullYear());
     nextBday.setHours(0,0,0,0);
     if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
-    var daysUntilBday = Math.round((nextBday - today) / 86400000);
-    var ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
+    const daysUntilBday = Math.round((nextBday - today) / 86400000);
+    const ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
     if (daysUntilBday <= 60 && daysUntilBday >= 0) {
       signals.push({ type:'birthday', client:c, daysUntil:daysUntilBday, age:ageAtNextBday, date:nextBday });
     }
@@ -1798,76 +1806,76 @@ function renderBirthdaySignals() {
     }
   });
 
-  signals.sort(function(a,b) {
-    if (a.type !== b.type) return a.type === 'medicare' ? -1 : 1;
-    return a.daysUntil - b.daysUntil;
-  });
+  signals.sort((a,b) => a.type === b.type ? a.daysUntil - b.daysUntil : a.type === 'medicare' ? -1 : 1);
 
-  var el = document.getElementById('birthdaySection');
+  const el = document.getElementById('birthdaySection');
   if (!signals.length) { el.innerHTML=''; return; }
 
-  var medicareSignals = signals.filter(function(s){return s.type==='medicare';});
-  var birthdaySignals = signals.filter(function(s){return s.type==='birthday';});
-  var html = '';
+  const medicareSignals = signals.filter(s=>s.type==='medicare');
+  const birthdaySignals = signals.filter(s=>s.type==='birthday');
+  let html = '';
 
   if (medicareSignals.length) {
-    html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
+    html += '<div class="section-divider" style="margin-top:4px"><h2>🏥 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     medicareSignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
+      var key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:#2d7a4f" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-type="medicare">';
-      html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
-      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
+      var emailBody = 'Hi '+c.firstName+',%0D%0A%0D%0AYour 65th birthday is coming up on '+dateStr+' and that means you are about to become eligible for Medicare!%0D%0A%0D%0AThis is one of the most important transitions in your life. You have a 7-month Special Enrollment Period and missing it can result in lifetime premium penalties.%0D%0A%0D%0AI would love to sit down with you at no cost and no obligation.%0D%0A%0D%0AThank you,%0D%0AMichelle Scott%0D%0A618-510-9143';
+      var emailHref = c.email ? 'mailto:'+c.email+'?subject=Your Medicare Eligibility is Coming Up&body='+emailBody : '#';
+      html += '<div class="anniv-card" style="border-color:#2d7a4f">';
+      html += '<div><div class="anniv-name" style="color:#2d7a4f">🏥 '+c.fullName+badge+'</div>';
+      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' · '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
-      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">📞 Call</a>';
+      if (c.email) html += '<a class="anniv-btn anniv-btn-email" href="'+emailHref+'">✉️ Email</a>';
+      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter(\''+key.replace(/'/g,"\\'")+'\')">📄 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+key.replace(/'/g,"\\'")+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   if (birthdaySignals.length) {
-    html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
+    html += '<div class="section-divider" style="margin-top:8px"><h2>🎂 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, age = sig.age, date = sig.date;
+      var key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:var(--rust)" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-age="'+age+'" data-type="birthday">';
-      html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
-      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
-      html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
+      var emailBody = 'Hi '+c.firstName+',%0D%0A%0D%0AI wanted to reach out ahead of your '+age+'th birthday on '+dateStr+' -- happy early birthday!%0D%0A%0D%0AAs you step into this next chapter, I would love to connect and make sure your coverage still lines up with your needs.%0D%0A%0D%0AWith warm wishes,%0D%0AMichelle Scott%0D%0A618-510-9143';
+      var emailHref = c.email ? 'mailto:'+c.email+'?subject=Happy Early Birthday, '+c.firstName+'!&body='+emailBody : '#';
+      html += '<div class="anniv-card" style="border-color:var(--rust)">';
+      html += '<div><div class="anniv-name" style="color:var(--rust)">🎂 '+c.fullName+badge+'</div>';
+      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' · '+c.city:'')+'</div>';
+      html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' · Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
-      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">📞 Call</a>';
+      if (c.email) html += '<a class="anniv-btn anniv-btn-email" href="'+emailHref+'">✉️ Email</a>';
+      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter(\''+key.replace(/'/g,"\\'")+'\','+age+')">📄 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+key.replace(/'/g,"\\'")+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   el.innerHTML = html;
-
-  // Use event delegation — attach ONE listener to the section
-  el.addEventListener('click', function(e) {
-    var btn = e.target.closest('button[data-action]');
-    var card = e.target.closest('[data-clientkey]');
-    if (!btn || !card) return;
-    var key = decodeURIComponent(card.dataset.clientkey);
-    var action = btn.dataset.action;
-    if (action === 'birthday-letter') {
-      genBirthdayLetter(key, parseInt(card.dataset.age));
-    } else if (action === 'medicare-letter') {
-      genMedicareLetter(key);
-    } else if (action === 'view') {
-      openGroup(key);
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-  });
 }
 
+function addPhotoToLetter(doc, W, M) {
+  var imgSize = 48;
+  var imgX = W - M - imgSize;
+  var imgY = 4;
+  if (MICHELLE_HEADSHOT && MICHELLE_HEADSHOT.length > 100) {
+    try {
+      doc.addImage(MICHELLE_HEADSHOT, 'JPEG', imgX, imgY, imgSize, imgSize, '', 'FAST');
+    } catch(e) {
+      console.warn('addPhotoToLetter failed:', e.message);
+    }
+  }
+}
 
 function genBirthdayLetter(key, age) {
   // Try direct key, then case-insensitive search
