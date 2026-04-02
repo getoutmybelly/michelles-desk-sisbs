@@ -1895,7 +1895,14 @@ function addPhotoToLetter(doc, W, M) {
 
 // ── BIRTHDAY LETTER ──────────────────────────────────────────────────────────
 function genBirthdayLetter(key, age) {
-  const group = clientGroups[key]; if (!group) return;
+  // Try direct key, then case-insensitive search
+  let group = clientGroups[key];
+  if (!group) {
+    const lkey = key.toLowerCase().trim();
+    const found = Object.keys(clientGroups).find(k => k.toLowerCase().trim() === lkey);
+    if (found) group = clientGroups[found];
+  }
+  if (!group) { toast('Client not found: ' + key); return; }
   const c = group[group.length-1];
   const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72,contentW=W-M*2; let y=M;
@@ -1963,7 +1970,13 @@ function genBirthdayLetter(key, age) {
 
 // ── MEDICARE LETTER ───────────────────────────────────────────────────────────
 function genMedicareLetter(key) {
-  const group = clientGroups[key]; if (!group) return;
+  let group = clientGroups[key];
+  if (!group) {
+    const lkey = key.toLowerCase().trim();
+    const found = Object.keys(clientGroups).find(k => k.toLowerCase().trim() === lkey);
+    if (found) group = clientGroups[found];
+  }
+  if (!group) { toast('Client not found: ' + key); return; }
   const c = group[group.length-1];
   const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72,contentW=W-M*2; let y=M;
