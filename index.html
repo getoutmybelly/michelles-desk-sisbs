@@ -1065,6 +1065,11 @@ function renderDetail() {
   }
 
   h += `<div class="actions-section"><div class="actions-title">Actions & Paperwork</div>`;
+  // Call button
+  if (c.phone) {
+    const ckey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+    h += `<button onclick="openCallScript('${esc(ckey)}')" style="width:100%;padding:13px;background:var(--green);color:#fff;border:none;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px">📞 Call ${c.phone}</button>`;
+  }
   if (c.carrierFax||c.carrierEmail) {
     h += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap">`;
     if (c.carrierFax) h += `<span>📠 ${c.carrierFax}</span>`;
@@ -1851,7 +1856,7 @@ function renderBirthdaySignals() {
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
       html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
       html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
@@ -1870,7 +1875,7 @@ function renderBirthdaySignals() {
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
       html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
       html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
