@@ -145,8 +145,6 @@
   .stats-row{display:flex;gap:9px;margin-bottom:18px;flex-wrap:wrap;}
   .stat-box{background:#fff;border:1.5px solid var(--border);border-radius:9px;padding:11px 14px;flex:1;min-width:80px;}
   .stat-number{font-family:'DM Serif Display',serif;font-size:24px;color:var(--ink);line-height:1;}
-  .stat-box[onclick]:hover{box-shadow:0 4px 16px rgba(26,26,46,.15);transform:translateY(-1px);transition:all .15s ease;}
-  .stat-box{transition:all .15s ease;}
   .stat-label{font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;}
   .stat-box.alert{border-color:var(--rust);}
   .stat-box.alert .stat-number{color:var(--rust);}
@@ -347,6 +345,32 @@
   .btn-save-lead:hover{background:#4a6659;}
   .btn-save-lead:disabled{opacity:.5;pointer-events:none;}
   .btn-rescan{padding:13px 18px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
+  /* CALL SCRIPT OVERLAY */
+  .script-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;align-items:flex-end;justify-content:center;padding:0;}
+  .script-overlay.visible{display:flex;}
+  .script-modal{background:#fff;border-radius:20px 20px 0 0;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,.3);padding-bottom:env(safe-area-inset-bottom);}
+  .script-header{background:var(--ink);padding:16px 20px;border-radius:20px 20px 0 0;display:flex;align-items:flex-start;justify-content:space-between;position:sticky;top:0;z-index:1;}
+  .script-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 10px;border-radius:20px;margin-bottom:5px;display:inline-block;}
+  .script-badge.lead{background:var(--rust);color:#fff;}
+  .script-badge.client{background:var(--sage);color:#fff;}
+  .script-badge.birthday{background:var(--rust-light);color:var(--rust);}
+  .script-badge.medicare{background:var(--green-light);color:var(--green);}
+  .script-badge.followup{background:var(--blue-light);color:var(--blue);}
+  .script-badge.doorknock{background:var(--gold-light);color:var(--gold);}
+  .script-name{font-family:'DM Serif Display',serif;font-size:20px;color:#fff;}
+  .script-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:17px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .script-type-tabs{display:flex;gap:6px;padding:14px 18px 0;flex-wrap:wrap;}
+  .script-type-tab{padding:5px 13px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .script-type-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .script-body{padding:16px 20px 12px;}
+  .script-tip{background:var(--gold-light);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;padding:10px 13px;font-size:12px;color:var(--ink);margin-bottom:14px;line-height:1.6;}
+  .script-tip b{color:var(--gold);}
+  .script-text{background:var(--cream);border-radius:12px;padding:16px;font-size:14px;line-height:1.8;color:var(--ink);margin-bottom:14px;white-space:pre-wrap;}
+  .script-text .hi{color:var(--sage);font-weight:700;}
+  .script-text .blank{background:var(--gold-light);border-radius:4px;padding:1px 6px;color:var(--gold);font-weight:600;}
+  .script-dial-btn{width:100%;padding:16px;background:var(--green);color:#fff;border:none;border-radius:12px;font-family:'DM Serif Display',serif;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-bottom:8px;}
+  .script-dial-btn:hover{background:#256b43;}
+  .script-skip-btn{width:100%;padding:11px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -523,6 +547,10 @@
 
 
 
+<div class="script-overlay" id="scriptOverlay" onclick="if(event.target===this)closeScript()">
+  <div class="script-modal" id="scriptModal"></div>
+</div>
+
 <div class="briefing-overlay" id="briefingOverlay" onclick="if(event.target===this)closeBriefing()">
   <div class="briefing-modal" id="briefingModal"></div>
 </div>
@@ -592,15 +620,7 @@ const C = {
   NOTES:     53,
 };
 
-  let MICHELLE_HEADSHOT = '';
-  (function() {
-    var _url = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
-    fetch(_url).then(function(r){ return r.blob(); }).then(function(b){
-      var rd = new FileReader();
-      rd.onloadend = function(){ MICHELLE_HEADSHOT = rd.result; };
-      rd.readAsDataURL(b);
-    }).catch(function(){ console.warn('Headshot preload failed'); });
-  })();
+const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
 
 let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
@@ -1222,10 +1242,10 @@ function renderDashboard(){
   const surrCount = allClients.filter(c=>c.surrPending).length;
 
   document.getElementById('statsRow').innerHTML=`
-    <div class="stat-box" style="border-color:var(--blue);cursor:pointer" onclick="document.getElementById('apptSection').scrollIntoView({behavior:'smooth'})"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
-    <div class="stat-box alert" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'})"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
-    <div class="stat-box" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'});setTimeout(()=>{const cards=[...document.querySelectorAll('.followup-card')].filter(el=>el.innerText.includes('Stop PAC'));if(cards[0])cards[0].scrollIntoView({behavior:'smooth'})},400)"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
-    <div class="stat-box" style="cursor:pointer" onclick="renderPipelineTab('pending');document.getElementById('pipelineTabs').scrollIntoView({behavior:'smooth'});setTimeout(()=>{const cards=[...document.querySelectorAll('.followup-card')].filter(el=>el.innerText.includes('Surrender'));if(cards[0])cards[0].scrollIntoView({behavior:'smooth'})},400)"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
+    <div class="stat-box" style="border-color:var(--blue)"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
+    <div class="stat-box alert"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
+    <div class="stat-box"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
+    <div class="stat-box"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
   // Appointments
   let apptHtml = '';
@@ -1307,7 +1327,7 @@ function renderPipelineTab(tab) {
         <div class="door-knock-meta">${addr}</div>
         ${c.phone?`<div style="font-size:12px;color:var(--sage);margin-top:3px">${c.phone}</div>`:''}
         <div class="door-knock-actions">
-          ${c.phone?`<a class="dk-btn dk-call" href="tel:${c.phone.replace(/\D/g,'')}">📞 Call</a>`:''}
+          ${c.phone?`<button class="dk-btn dk-call" onclick="openCallScript('${key}')">📞 Call</button>`:''}
           <a class="dk-btn dk-dir" href="${mapsUrl}" target="_blank">📍 Directions</a>
           <button class="dk-btn dk-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
         </div>
@@ -1764,7 +1784,7 @@ function renderAnniversaries() {
     else if (daysUntil <= 7) badge = `<span class="anniv-badge anniv-soon">${daysUntil}d</span>`;
     else badge = `<span class="anniv-badge anniv-upcoming">${daysUntil}d</span>`;
 
-    const callHref = c.phone ? `tel:${c.phone.replace(/\D/g,'')}` : '#';
+    const callHref = c.phone ? '#' : '#';
     const emailHref = c.email ? `mailto:${c.email}?subject=Your ${yearsOld}-Year Policy Anniversary&body=Hi ${c.firstName},%0D%0A%0D%0AI wanted to reach out on your ${yearsOld}-year anniversary with ${c.displayCompany||'your policy'}. It's been a pleasure working with you!%0D%0A%0D%0AI'd love to connect and make sure your coverage still fits your needs. Would you have a few minutes this week?%0D%0A%0D%0AThank you,%0D%0AMichelle Scott%0D%0A618-510-9143` : '#';
 
     html += `<div class="anniv-card">
@@ -1774,7 +1794,7 @@ function renderAnniversaries() {
         <div class="anniv-date">📅 ${dateStr} · Year ${yearsOld}</div>
       </div>
       <div class="anniv-actions">
-        ${c.phone ? `<a class="anniv-btn anniv-btn-call" href="${callHref}">📞 Call</a>` : ''}
+        ${c.phone ? `<button class="anniv-btn anniv-btn-call" onclick="openCallScript('${esc(key)}')">📞 Call</button>` : ''}
         ${c.email ? `<a class="anniv-btn anniv-btn-email" href="${emailHref}">✉️ Email</a>` : ''}
         <button class="anniv-btn" style="border-color:var(--gold);color:var(--gold)" onclick="genAnniversaryLetter('${esc(key)}',${yearsOld})">📄 Letter</button>
         <button class="anniv-btn anniv-btn-view" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})">View</button>
@@ -1787,19 +1807,19 @@ function renderAnniversaries() {
 }
 
 function renderBirthdaySignals() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const signals = [];
+  var today = new Date(); today.setHours(0,0,0,0);
+  var signals = [];
 
-  allClients.forEach(c => {
+  allClients.forEach(function(c) {
     if (!c.dob) return;
-    const dob = new Date(c.dob);
+    var dob = new Date(c.dob);
     if (isNaN(dob)) return;
-    const nextBday = new Date(dob);
+    var nextBday = new Date(dob);
     nextBday.setFullYear(today.getFullYear());
     nextBday.setHours(0,0,0,0);
     if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
-    const daysUntilBday = Math.round((nextBday - today) / 86400000);
-    const ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
+    var daysUntilBday = Math.round((nextBday - today) / 86400000);
+    var ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
     if (daysUntilBday <= 60 && daysUntilBday >= 0) {
       signals.push({ type:'birthday', client:c, daysUntil:daysUntilBday, age:ageAtNextBday, date:nextBday });
     }
@@ -1808,76 +1828,76 @@ function renderBirthdaySignals() {
     }
   });
 
-  signals.sort((a,b) => a.type === b.type ? a.daysUntil - b.daysUntil : a.type === 'medicare' ? -1 : 1);
+  signals.sort(function(a,b) {
+    if (a.type !== b.type) return a.type === 'medicare' ? -1 : 1;
+    return a.daysUntil - b.daysUntil;
+  });
 
-  const el = document.getElementById('birthdaySection');
+  var el = document.getElementById('birthdaySection');
   if (!signals.length) { el.innerHTML=''; return; }
 
-  const medicareSignals = signals.filter(s=>s.type==='medicare');
-  const birthdaySignals = signals.filter(s=>s.type==='birthday');
-  let html = '';
+  var medicareSignals = signals.filter(function(s){return s.type==='medicare';});
+  var birthdaySignals = signals.filter(function(s){return s.type==='birthday';});
+  var html = '';
 
   if (medicareSignals.length) {
-    html += '<div class="section-divider" style="margin-top:4px"><h2>🏥 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
+    html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     medicareSignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
-      var key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      var emailBody = 'Hi '+c.firstName+',%0D%0A%0D%0AYour 65th birthday is coming up on '+dateStr+' and that means you are about to become eligible for Medicare!%0D%0A%0D%0AThis is one of the most important transitions in your life. You have a 7-month Special Enrollment Period and missing it can result in lifetime premium penalties.%0D%0A%0D%0AI would love to sit down with you at no cost and no obligation.%0D%0A%0D%0AThank you,%0D%0AMichelle Scott%0D%0A618-510-9143';
-      var emailHref = c.email ? 'mailto:'+c.email+'?subject=Your Medicare Eligibility is Coming Up&body='+emailBody : '#';
-      html += '<div class="anniv-card" style="border-color:#2d7a4f">';
-      html += '<div><div class="anniv-name" style="color:#2d7a4f">🏥 '+c.fullName+badge+'</div>';
-      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' · '+c.city:'')+'</div>';
+      html += '<div class="anniv-card" style="border-color:#2d7a4f" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-type="medicare">';
+      html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
+      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">📞 Call</a>';
-      if (c.email) html += '<a class="anniv-btn anniv-btn-email" href="'+emailHref+'">✉️ Email</a>';
-      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter(\''+key.replace(/'/g,"\\'")+'\')">📄 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+key.replace(/'/g,"\\'")+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
+      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
+      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   if (birthdaySignals.length) {
-    html += '<div class="section-divider" style="margin-top:8px"><h2>🎂 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
+    html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, age = sig.age, date = sig.date;
-      var key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      var emailBody = 'Hi '+c.firstName+',%0D%0A%0D%0AI wanted to reach out ahead of your '+age+'th birthday on '+dateStr+' -- happy early birthday!%0D%0A%0D%0AAs you step into this next chapter, I would love to connect and make sure your coverage still lines up with your needs.%0D%0A%0D%0AWith warm wishes,%0D%0AMichelle Scott%0D%0A618-510-9143';
-      var emailHref = c.email ? 'mailto:'+c.email+'?subject=Happy Early Birthday, '+c.firstName+'!&body='+emailBody : '#';
-      html += '<div class="anniv-card" style="border-color:var(--rust)">';
-      html += '<div><div class="anniv-name" style="color:var(--rust)">🎂 '+c.fullName+badge+'</div>';
-      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' · '+c.city:'')+'</div>';
-      html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' · Turning '+age+'</div></div>';
+      html += '<div class="anniv-card" style="border-color:var(--rust)" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-age="'+age+'" data-type="birthday">';
+      html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
+      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
+      html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">📞 Call</a>';
-      if (c.email) html += '<a class="anniv-btn anniv-btn-email" href="'+emailHref+'">✉️ Email</a>';
-      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter(\''+key.replace(/'/g,"\\'")+'\','+age+')">📄 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+key.replace(/'/g,"\\'")+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
+      if (c.phone) html += '<a class="anniv-btn" style="border-color:var(--green);color:var(--green)" href="tel:'+c.phone.replace(/\D/g,'')+'">\uD83D\uDCDE Call</a>';
+      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   el.innerHTML = html;
+
+  // Use event delegation — attach ONE listener to the section
+  el.addEventListener('click', function(e) {
+    var btn = e.target.closest('button[data-action]');
+    var card = e.target.closest('[data-clientkey]');
+    if (!btn || !card) return;
+    var key = decodeURIComponent(card.dataset.clientkey);
+    var action = btn.dataset.action;
+    if (action === 'birthday-letter') {
+      genBirthdayLetter(key, parseInt(card.dataset.age));
+    } else if (action === 'medicare-letter') {
+      genMedicareLetter(key);
+    } else if (action === 'view') {
+      openGroup(key);
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+  });
 }
 
-function addPhotoToLetter(doc, W, M) {
-  var imgSize = 48;
-  var imgX = W - M - imgSize;
-  var imgY = 4;
-  if (MICHELLE_HEADSHOT && MICHELLE_HEADSHOT.length > 100) {
-    try {
-      doc.addImage(MICHELLE_HEADSHOT, 'JPEG', imgX, imgY, imgSize, imgSize, '', 'FAST');
-    } catch(e) {
-      console.warn('addPhotoToLetter failed:', e.message);
-    }
-  }
-}
 
 function genBirthdayLetter(key, age) {
   // Try direct key, then case-insensitive search
@@ -2306,7 +2326,6 @@ async function genAnniversaryLetter(key, yearsOld) {
   // Gold header bar
   doc.setFillColor(26, 26, 46);
   doc.rect(0, 0, W, 70, 'F');
-  addPhotoToLetter(doc, W, M);
 
   // Agent name
   doc.setTextColor(255, 255, 255);
@@ -2549,6 +2568,161 @@ async function reverseGeocode(lat, lng) {
       county: data.address?.county
     };
   } catch(e) { return {}; }
+}
+
+// ── CALL SCRIPTS ─────────────────────────────────────────────────────────────
+const SCRIPTS = {
+  lead: {
+    label: '📋 New Lead',
+    badge: 'lead',
+    tip: 'Goal: Set an appointment. Keep it short — under 60 seconds.',
+    text: (c) => `"Hi, may I speak with ${c.firstName}? 
+
+${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator here in Southern Illinois. I work with folks in your area on life insurance and burial coverage.
+
+I noticed you had requested some information, and I just wanted to reach out personally. I'm actually going to be in your area [this week / next week] and I'd love to stop by and sit down with you — no cost, no pressure, just to go over a few options.
+
+Would [day] or [day] work better for you?"`
+  },
+  client: {
+    label: '🤝 Existing Client',
+    badge: 'client',
+    tip: 'Warm check-in. Reference their policy — shows you know them.',
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — your benefit coordinator. How are you doing?
+
+[pause and listen]
+
+I'm just reaching out to check in on you. It's been a little while since we last connected, and I like to stay in touch with all my folks.
+
+I wanted to make sure everything is still going well with your ${c.displayCompany||'policy'} coverage${c.existingPolicy?' (policy #'+c.existingPolicy+')':', and that your coverage still fits your needs'}.
+
+Is there anything you've had questions about, or anything that's changed for you lately?
+
+[listen, then offer a visit if appropriate]"`
+  },
+  birthday: {
+    label: '🎂 Birthday',
+    badge: 'birthday',
+    tip: 'Lead with the birthday. The coverage conversation comes second.',
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — I just wanted to call and wish you a happy birthday!
+
+[warm pause]
+
+I always like to reach out to my clients around their birthday. It's one of my favorite parts of this work — getting to stay connected with the people I've helped over the years.
+
+I also just wanted to make sure that your coverage is still working the way it should for you at this stage. Sometimes things shift around a birthday — income, family situations — and I like to make sure my folks are always fully protected.
+
+Would it be alright if I stopped by sometime soon, just for a quick visit?"`
+  },
+  medicare: {
+    label: '🏥 Medicare',
+    badge: 'medicare',
+    tip: 'URGENT tone — enrollment windows are real deadlines. Be their guide, not a salesperson.',
+    text: (c) => `"Hi, may I speak with ${c.firstName}?
+
+${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator in your area. I'm reaching out because your 65th birthday is coming up, and I want to make sure you don't miss your Medicare enrollment window.
+
+This is really important — you have a 7-month window around your birthday to enroll, and if you miss it, you can face permanent premium penalties for the rest of your life.
+
+I help people in this area navigate Medicare every day, and I'd love to sit down with you — at no cost and no obligation — just to walk you through your options and make sure you're set up right.
+
+Would you have time for a quick visit this week?"`
+  },
+  doorknock: {
+    label: '🚪 Door Knock',
+    badge: 'doorknock',
+    tip: "If calling before showing up -- let them know you're coming. Short and friendly.",
+    text: (c) => `"Hi ${c.firstName}, this is Michelle Scott — I'm a benefit coordinator here in the area. I'm actually going to be in your neighborhood [today / this week] and I was hoping to stop by and introduce myself.
+
+I work with a lot of folks in [their city/area] on life insurance and burial coverage, and I just wanted to see if you'd have a few minutes to chat.
+
+Would sometime [today / this week] work for you?"`
+  },
+  followup: {
+    label: '🔄 Follow-Up',
+    badge: 'followup',
+    tip: 'Reference the last visit so they know you remember them.',
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott. We visited a little while back${c.followUpReason ? ' — ' + c.followUpReason.toLowerCase() : ''}, and I just wanted to follow up with you.
+
+[pause]
+
+I've been thinking about you and wanted to make sure I followed through like I said I would. ${c.followUpReason && c.followUpReason.toLowerCase().includes('declin') ? 'I also wanted to share a couple of other options I think might work better for you.' : 'I wanted to make sure everything is still going in the right direction.'}
+
+Would you have a few minutes for me to come back by?"`
+  }
+};
+
+function detectScriptType(c) {
+  // Auto-detect best script based on client data
+  const dob = c.dob ? new Date(c.dob) : null;
+  if (dob && !isNaN(dob)) {
+    const today = new Date();
+    const nextBday = new Date(dob);
+    nextBday.setFullYear(today.getFullYear());
+    if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
+    const days = Math.round((nextBday - today) / 86400000);
+    const age = nextBday.getFullYear() - dob.getFullYear();
+    if (age === 65 && days <= 75) return 'medicare';
+    if (days <= 60) return 'birthday';
+  }
+  if (c.followUpPending) return 'followup';
+  if (c.clientStatus === 'Door Knock') return 'doorknock';
+  if (c.existingPolicy || c.newCompany) return 'client';
+  return 'lead';
+}
+
+let currentScriptClient = null;
+let currentScriptType = null;
+
+function openCallScript(key) {
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1];
+  currentScriptClient = c;
+  currentScriptType = detectScriptType(c);
+  renderScriptModal();
+  document.getElementById('scriptOverlay').classList.add('visible');
+}
+
+function renderScriptModal() {
+  const c = currentScriptClient;
+  const scriptKeys = Object.keys(SCRIPTS);
+  const script = SCRIPTS[currentScriptType];
+
+  const tabs = scriptKeys.map(k => 
+    `<button class="script-type-tab${currentScriptType===k?' active':''}" onclick="switchScript('${k}')">${SCRIPTS[k].label}</button>`
+  ).join('');
+
+  const phoneNum = c.phone ? c.phone.replace(/\D/g,'') : '';
+  const dialBtn = phoneNum
+    ? `<a class="script-dial-btn" href="tel:${phoneNum}" onclick="closeScript()">📞 Dial ${c.phone}</a>`
+    : `<button class="script-dial-btn" style="background:var(--muted);cursor:default">No phone number on file</button>`;
+
+  document.getElementById('scriptModal').innerHTML = `
+    <div class="script-header">
+      <div>
+        <span class="script-badge ${script.badge}">${script.label}</span>
+        <div class="script-name">${c.fullName}</div>
+      </div>
+      <button class="script-close" onclick="closeScript()">✕</button>
+    </div>
+    <div class="script-type-tabs">${tabs}</div>
+    <div class="script-body">
+      <div class="script-tip"><b>Tip:</b> ${script.tip}</div>
+      <div class="script-text">${script.text(c)}</div>
+      ${dialBtn}
+      <button class="script-skip-btn" onclick="closeScript()">Skip script — just dial</button>
+    </div>`;
+}
+
+function switchScript(type) {
+  currentScriptType = type;
+  renderScriptModal();
+}
+
+function closeScript() {
+  document.getElementById('scriptOverlay').classList.remove('visible');
+  currentScriptClient = null;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
