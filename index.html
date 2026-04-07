@@ -1849,16 +1849,18 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     medicareSignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
+      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim(); // declared per iteration
+      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:#2d7a4f" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-type="medicare">';
+      html += '<div class="anniv-card" style="border-color:#2d7a4f">';
       html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\''+safeKey+'\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter(\''+safeKey+'\')">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+safeKey+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
@@ -1868,39 +1870,24 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, age = sig.age, date = sig.date;
+      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim(); // declared per iteration
+      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:var(--rust)" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-age="'+age+'" data-type="birthday">';
+      html += '<div class="anniv-card" style="border-color:var(--rust)">';
       html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\''+safeKey+'\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter(\''+safeKey+'\','+age+')">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+safeKey+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   el.innerHTML = html;
-
-  // Use event delegation — attach ONE listener to the section
-  el.addEventListener('click', function(e) {
-    var btn = e.target.closest('button[data-action]');
-    var card = e.target.closest('[data-clientkey]');
-    if (!btn || !card) return;
-    var key = decodeURIComponent(card.dataset.clientkey);
-    var action = btn.dataset.action;
-    if (action === 'birthday-letter') {
-      genBirthdayLetter(key, parseInt(card.dataset.age));
-    } else if (action === 'medicare-letter') {
-      genMedicareLetter(key);
-    } else if (action === 'view') {
-      openGroup(key);
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-  });
 }
 
 
@@ -2581,65 +2568,67 @@ const SCRIPTS = {
     label: '📋 New Lead',
     badge: 'lead',
     tip: 'Goal: Set an appointment. Keep it short — under 60 seconds.',
-    text: (c) => `"Hi, may I speak with ${c.firstName}? 
+    text: (c) => `"Hi _________, my name is Michelle Scott. You had requested information about the new state regulated programs for Illinois Residents specific to ${c.county||'your'} County. That's why I was calling — I'm the benefit coordinator for the county.
 
-${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator here in Southern Illinois. I work with folks in your area on life insurance and burial coverage.
+The reason I'm calling is I'm going to be in your area on Monday and I need to set aside just a couple of moments to drop off the information that you're entitled to receive.
 
-I noticed you had requested some information, and I just wanted to reach out personally. I'm actually going to be in your area [this week / next week] and I'd love to stop by and sit down with you — no cost, no pressure, just to go over a few options.
-
-Would [day] or [day] work better for you?"`
+I have time in the morning, afternoon, or early evening — which one works best for you on Monday?"`
   },
-  client: {
-    label: '🤝 Existing Client',
+  anniversary: {
+    label: '📅 Anniversary',
     badge: 'client',
-    tip: 'Warm check-in. Reference their policy — shows you know them.',
-    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — your benefit coordinator. How are you doing?
+    tip: "Their policy is renewing soon. Carriers adjust rates every year — this is a real, time-sensitive reason to call.",
+    text: (c) => `"Hi ${c.firstName||'_________'}, my name is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County.
 
-[pause and listen]
+The reason I'm calling is that your ${c.displayCompany||c.existingCompany||'current'} coverage is coming up on its anniversary, and I want to make sure your plan is still the best fit for you. Carriers adjust their rates and benefits every year, and sometimes there are better options that nobody's told you about yet.
 
-I'm just reaching out to check in on you. It's been a little while since we last connected, and I like to stay in touch with all my folks.
-
-I wanted to make sure everything is still going well with your ${c.displayCompany||'policy'} coverage${c.existingPolicy?' (policy #'+c.existingPolicy+')':', and that your coverage still fits your needs'}.
-
-Is there anything you've had questions about, or anything that's changed for you lately?
-
-[listen, then offer a visit if appropriate]"`
+I'm going to be in your area on Monday and I just need a few minutes to sit down with you and do a quick review. I have time in the morning, afternoon, or early evening — which works best for you?"`
   },
   birthday: {
     label: '🎂 Birthday',
     badge: 'birthday',
-    tip: 'Lead with the birthday. The coverage conversation comes second.',
-    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — I just wanted to call and wish you a happy birthday!
+    tip: 'Life insurance rates lock at your current age. Calling BEFORE the birthday is the whole point — make that clear.',
+    text: (c) => {
+      const age = c.age ? parseInt(c.age) : null;
+      const nextAge = age ? age + 1 : null;
+      return `"Hi ${c.firstName||'_________'}, my name is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County.
 
-[warm pause]
+The reason I'm calling is that life insurance rates are based on your age at the time you apply${nextAge ? ' — and once you turn ' + nextAge + ', your rate goes up' : ''}. Locking in your rate before your next birthday can make a significant difference in what you pay every month.
 
-I always like to reach out to my clients around their birthday. It's one of my favorite parts of this work — getting to stay connected with the people I've helped over the years.
-
-I also just wanted to make sure that your coverage is still working the way it should for you at this stage. Sometimes things shift around a birthday — income, family situations — and I like to make sure my folks are always fully protected.
-
-Would it be alright if I stopped by sometime soon, just for a quick visit?"`
+I'm going to be in your area on Monday and I just need a couple of minutes to sit down with you and go over what's available to residents in ${c.county||'your'} County. I have time in the morning, afternoon, or early evening — which one works best for you?"`;
+    }
   },
   medicare: {
     label: '🏥 Medicare',
     badge: 'medicare',
     tip: 'URGENT tone — enrollment windows are real deadlines. Be their guide, not a salesperson.',
-    text: (c) => `"Hi, may I speak with ${c.firstName}?
+    text: (c) => `"Hi _________, my name is Michelle Scott. I'm the benefit coordinator for ${c.county||'your'} County. The reason I'm calling is that you're coming up on Medicare eligibility, and there are some state regulated programs available to Illinois residents in ${c.county||'your'} County that a lot of people don't know they qualify for until it's too late.
 
-${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator in your area. I'm reaching out because your 65th birthday is coming up, and I want to make sure you don't miss your Medicare enrollment window.
+I'm going to be in your area on Monday and I just need a couple of minutes to drop off some information you're entitled to receive and answer any questions.
 
-This is really important — you have a 7-month window around your birthday to enroll, and if you miss it, you can face permanent premium penalties for the rest of your life.
+I have time in the morning, afternoon, or early evening — which one works best for you on Monday?"`
+  },
+  client: {
+    label: '🤝 General',
+    badge: 'client',
+    tip: 'Warm check-in. Reference their policy — shows you know them.',
+    text: (c) => `"Hi ${c.firstName||'_________'}! This is Michelle Scott — your benefit coordinator for ${c.county||'the'} County. How are you doing?
 
-I help people in this area navigate Medicare every day, and I'd love to sit down with you — at no cost and no obligation — just to walk you through your options and make sure you're set up right.
+[pause and listen]
 
-Would you have time for a quick visit this week?"`
+I'm just reaching out to check in on you. I like to stay connected with all my folks, and I wanted to make sure everything is still going well with your ${c.displayCompany||'coverage'}${c.existingPolicy ? ' (policy #'+c.existingPolicy+')' : ''}.
+
+Is there anything you've had questions about, or anything that's changed for you lately?
+
+[listen, then offer a visit if appropriate]"`
   },
   doorknock: {
     label: '🚪 Door Knock',
     badge: 'doorknock',
-    tip: "If calling before showing up -- let them know you're coming. Short and friendly.",
-    text: (c) => `"Hi ${c.firstName}, this is Michelle Scott — I'm a benefit coordinator here in the area. I'm actually going to be in your neighborhood [today / this week] and I was hoping to stop by and introduce myself.
+    tip: "Calling before showing up — let them know you're coming. Short and friendly.",
+    text: (c) => `"Hi ${c.firstName||'_________'}, this is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County. I'm going to be in your neighborhood [today / this week] and I wanted to reach out before stopping by.
 
-I work with a lot of folks in [their city/area] on life insurance and burial coverage, and I just wanted to see if you'd have a few minutes to chat.
+I work with folks in ${c.city||'your area'} on life insurance and burial coverage, and I'd love just a few minutes to introduce myself and go over a couple of programs available to you.
 
 Would sometime [today / this week] work for you?"`
   },
@@ -2647,31 +2636,51 @@ Would sometime [today / this week] work for you?"`
     label: '🔄 Follow-Up',
     badge: 'followup',
     tip: 'Reference the last visit so they know you remember them.',
-    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott. We visited a little while back${c.followUpReason ? ' — ' + c.followUpReason.toLowerCase() : ''}, and I just wanted to follow up with you.
+    text: (c) => `"Hi ${c.firstName||'_________'}! This is Michelle Scott${c.county ? ', benefit coordinator for '+c.county+' County' : ''}. We visited a little while back${c.followUpReason ? ' — '+c.followUpReason.toLowerCase() : ''}, and I just wanted to follow up with you.
 
 [pause]
 
-I've been thinking about you and wanted to make sure I followed through like I said I would. ${c.followUpReason && c.followUpReason.toLowerCase().includes('declin') ? 'I also wanted to share a couple of other options I think might work better for you.' : 'I wanted to make sure everything is still going in the right direction.'}
+I've been thinking about you and wanted to make sure I followed through. ${c.followUpReason && c.followUpReason.toLowerCase().includes('declin') ? "I also wanted to share a couple of other options I think might work better for you." : "I wanted to make sure everything is still going in the right direction."}
 
 Would you have a few minutes for me to come back by?"`
   }
 };
 
 function detectScriptType(c) {
-  // Auto-detect best script based on client data
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // 1. Medicare aging in — highest priority (turning 65 within 75 days)
   const dob = c.dob ? new Date(c.dob) : null;
   if (dob && !isNaN(dob)) {
-    const today = new Date();
     const nextBday = new Date(dob);
     nextBday.setFullYear(today.getFullYear());
+    nextBday.setHours(0,0,0,0);
     if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
-    const days = Math.round((nextBday - today) / 86400000);
-    const age = nextBday.getFullYear() - dob.getFullYear();
-    if (age === 65 && days <= 75) return 'medicare';
-    if (days <= 60) return 'birthday';
+    const daysUntilBday = Math.round((nextBday - today) / 86400000);
+    const ageAtNext = nextBday.getFullYear() - dob.getFullYear();
+    if (ageAtNext === 65 && daysUntilBday <= 75) return 'medicare';
+    // 2. Birthday — life insurance rate lock, within 60 days
+    if (daysUntilBday <= 60) return 'birthday';
   }
+
+  // 3. Policy anniversary within 90 days
+  if (c.effectiveDate) {
+    const eff = new Date(c.effectiveDate);
+    if (!isNaN(eff)) {
+      const anniv = new Date(eff);
+      anniv.setFullYear(today.getFullYear());
+      anniv.setHours(0,0,0,0);
+      if (anniv < today) anniv.setFullYear(today.getFullYear()+1);
+      const daysUntilAnniv = Math.round((anniv - today) / 86400000);
+      if (daysUntilAnniv <= 90) return 'anniversary';
+    }
+  }
+
+  // 4. Follow-up visit pending
   if (c.followUpPending) return 'followup';
+  // 5. Door knock status
   if (c.clientStatus === 'Door Knock') return 'doorknock';
+  // 6. Known client with policy
   if (c.existingPolicy || c.newCompany) return 'client';
   return 'lead';
 }
