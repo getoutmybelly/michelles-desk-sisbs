@@ -857,6 +857,7 @@ async function loadFromSheets() {
     renderDashboard();
     if (selectedGroup) renderDetail();
     toast(`✓ ${allClients.length} clients loaded`);
+    startWebLeadPolling();
   } catch(err) {
     showLoading(false); showError(err.message); console.error(err);
   }
@@ -3368,7 +3369,39 @@ function dismissWebLead(id) {
   saveWebLeads(leads); renderWebLeads();
 }
 
-// Called by the Cloudflare Worker webhook (postMessage from contact form)
+// Poll KV store for new web leads every 60 seconds
+const ISBS_LEADS_WORKER = 'https://isbs-leads.michelle-cb4.workers.dev';
+let webLeadPollInterval = null;
+
+async function pollWebLeads() {
+  try {
+    const resp = await fetch(ISBS_LEADS_WORKER + '/leads', { method: 'GET' });
+    if (!resp.ok) return;
+    const incoming = await resp.json();
+    if (!incoming.length) return;
+
+    const existing = getWebLeads();
+    const existingIds = new Set(existing.map(l => l.id));
+    const newOnes = incoming.filter(l => !existingIds.has(l.id));
+
+    if (newOnes.length) {
+      const merged = [...newOnes, ...existing].slice(0, 200);
+      saveWebLeads(merged);
+      renderWebLeads();
+      newOnes.forEach(l => toast(`🌐 New web lead: ${l.firstName} ${l.lastName}`));
+    }
+  } catch(e) {
+    // Silent fail — polling is best-effort
+  }
+}
+
+function startWebLeadPolling() {
+  if (webLeadPollInterval) return;
+  pollWebLeads(); // immediate first check
+  webLeadPollInterval = setInterval(pollWebLeads, 60000); // then every 60s
+}
+
+// Also still listen for postMessage (for same-origin testing)
 window.addEventListener('message', function(e) {
   const trusted = ['https://getoutmybelly.github.io','https://seniorbenefitsofillinois.com','https://www.seniorbenefitsofillinois.com'];
   if (!trusted.includes(e.origin)) return;
