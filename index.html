@@ -371,6 +371,65 @@
   .script-dial-btn{width:100%;padding:16px;background:var(--green);color:#fff;border:none;border-radius:12px;font-family:'DM Serif Display',serif;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-bottom:8px;}
   .script-dial-btn:hover{background:#256b43;}
   .script-skip-btn{width:100%;padding:11px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
+  /* IMPORT ARCHIVE */
+  .import-section{display:none;margin-bottom:22px;}
+  .import-section.visible{display:block;}
+  .import-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .import-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .import-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .import-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .import-body{padding:20px;}
+  .import-drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px;}
+  .import-drop:hover,.import-drop.drag{border-color:var(--sage);background:var(--sage-light);}
+  .import-drop-icon{font-size:28px;margin-bottom:8px;}
+  .import-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .import-stat{background:var(--cream);border-radius:8px;padding:8px 12px;flex:1;min-width:70px;text-align:center;}
+  .import-stat-n{font-family:'DM Serif Display',serif;font-size:20px;color:var(--ink);}
+  .import-stat-l{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .import-stat.is-lead .import-stat-n{color:var(--blue);}
+  .import-stat.is-client .import-stat-n{color:var(--green);}
+  .import-stat.is-skip .import-stat-n{color:var(--muted);}
+  .import-stat.is-err .import-stat-n{color:var(--rust);}
+  .import-progress{margin-bottom:14px;display:none;}
+  .import-progress.visible{display:block;}
+  .import-prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .import-prog-bar{height:5px;background:var(--cream);border-radius:4px;overflow:hidden;}
+  .import-prog-fill{height:100%;background:linear-gradient(90deg,var(--sage),var(--gold));border-radius:4px;transition:width .3s;width:0%;}
+  .import-log{background:var(--cream);border-radius:8px;padding:10px 12px;max-height:160px;overflow-y:auto;font-size:11px;font-family:monospace;line-height:1.7;margin-bottom:14px;display:none;}
+  .import-log.visible{display:block;}
+  .il-ok{color:var(--green);}
+  .il-lead{color:var(--blue);}
+  .il-client{color:var(--gold);}
+  .il-skip{color:var(--muted);}
+  .il-err{color:var(--rust);}
+  .import-queue{max-height:180px;overflow-y:auto;margin-bottom:14px;display:none;}
+  .import-queue.visible{display:block;}
+  .iq-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px;}
+  .iq-item:nth-child(odd){background:var(--cream);}
+  .iq-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);}
+  .iq-status{font-size:11px;font-weight:600;white-space:nowrap;}
+  .iq-pending{color:var(--muted);}
+  .iq-processing{color:var(--gold);}
+  .iq-lead{color:var(--blue);}
+  .iq-client{color:var(--green);}
+  .iq-skip{color:var(--muted);}
+  .iq-err{color:var(--rust);}
+  .import-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .import-action-btn{flex:1;padding:12px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .iab-leads{background:var(--blue);color:#fff;}
+  .iab-leads:hover{background:#1e3d8a;}
+  .iab-clients{background:var(--green);color:#fff;}
+  .iab-clients:hover{background:#256b43;}
+  .iab-reset{background:#fff;color:var(--muted);border:1.5px solid var(--border);}
+  .iab-reset:hover{background:var(--cream);}
+  .import-action-btn:disabled{opacity:.4;cursor:default;}
+  .import-results-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
+  .irt{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .irt.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .import-table-wrap{max-height:220px;overflow-y:auto;margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;}
+  .import-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .import-table th{background:var(--cream);padding:7px 10px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);position:sticky;top:0;}
+  .import-table td{padding:7px 10px;border-bottom:1px solid var(--cream);color:var(--ink);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -385,6 +444,7 @@
     <button id="commBtn" onclick="openCommTracker()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">💰 Commission</button>
     <button id="mapBtn" onclick="openNearbyMap()" style="display:none;background:rgba(42,77,160,.4);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🗺 Nearby</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
+    <button id="importBtn" onclick="openImporter()" style="display:none;background:rgba(92,122,107,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📂 Import Archive</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
   </div>
@@ -430,6 +490,54 @@
       <button class="close-btn" onclick="closeDetail()">✕</button>
     </div>
     <div class="detail-body" id="detailBody"></div>
+  </div>
+
+  <!-- IMPORT ARCHIVE -->
+  <div class="import-section" id="importSection">
+    <div class="import-box">
+      <div class="import-header">
+        <div class="import-title">📂 Import Archive</div>
+        <button class="import-close" onclick="closeImporter()">✕</button>
+      </div>
+      <div class="import-body">
+        <div class="import-drop" id="importDrop"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="importHandleDrop(event)"
+          onclick="document.getElementById('importFileInput').click()">
+          <div class="import-drop-icon">📄</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Drop PDF files here</div>
+          <div style="font-size:13px;color:var(--muted)">T-2 cards, B-26 cards, intake sheets — select as many as you want</div>
+        </div>
+        <input type="file" id="importFileInput" multiple accept="application/pdf" style="display:none" onchange="importHandleFiles(this.files)">
+        <div class="import-stats" id="importStats" style="display:none">
+          <div class="import-stat"><div class="import-stat-n" id="impTotal">0</div><div class="import-stat-l">Total</div></div>
+          <div class="import-stat is-lead"><div class="import-stat-n" id="impLeads">0</div><div class="import-stat-l">Leads</div></div>
+          <div class="import-stat is-client"><div class="import-stat-n" id="impClients">0</div><div class="import-stat-l">Clients</div></div>
+          <div class="import-stat is-skip"><div class="import-stat-n" id="impSkipped">0</div><div class="import-stat-l">Skipped</div></div>
+          <div class="import-stat is-err"><div class="import-stat-n" id="impErrors">0</div><div class="import-stat-l">Errors</div></div>
+        </div>
+        <div class="import-progress" id="importProgress">
+          <div class="import-prog-label"><span id="impProgLabel">Processing…</span><span id="impProgPct">0%</span></div>
+          <div class="import-prog-bar"><div class="import-prog-fill" id="impProgFill"></div></div>
+        </div>
+        <div class="import-queue" id="importQueue"></div>
+        <div class="import-log" id="importLog"></div>
+        <div id="importResultsArea" style="display:none">
+          <div class="import-results-tabs">
+            <button class="irt active" onclick="showImportTab('leads',this)">Leads (<span id="irtLeads">0</span>)</button>
+            <button class="irt" onclick="showImportTab('clients',this)">Clients (<span id="irtClients">0</span>)</button>
+            <button class="irt" onclick="showImportTab('skipped',this)">Skipped (<span id="irtSkipped">0</span>)</button>
+          </div>
+          <div class="import-table-wrap"><div id="importTableContent"></div></div>
+        </div>
+        <div class="import-actions" id="importActions" style="display:none">
+          <button class="import-action-btn iab-leads" id="pushLeadsBtn" onclick="pushToSheet('leads')" disabled>📋 Push Leads to Sheet</button>
+          <button class="import-action-btn iab-clients" id="pushClientsBtn" onclick="pushToSheet('clients')" disabled>✓ Push Clients to Sheet</button>
+          <button class="import-action-btn iab-reset" onclick="resetImporter()">↺ Start Over</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- LEAD CARD SCANNER -->
@@ -730,6 +838,7 @@ async function loadFromSheets() {
     document.getElementById('scanBtn').style.display = 'block';
     document.getElementById('commBtn').style.display = 'block';
     document.getElementById('mapBtn').style.display = 'block';
+    document.getElementById('importBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -1849,18 +1958,16 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     medicareSignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
-      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim(); // declared per iteration
-      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:#2d7a4f">';
+      html += '<div class="anniv-card" style="border-color:#2d7a4f" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-type="medicare">';
       html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\''+safeKey+'\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter(\''+safeKey+'\')">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+safeKey+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
@@ -1870,24 +1977,39 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, age = sig.age, date = sig.date;
-      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim(); // declared per iteration
-      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:var(--rust)">';
+      html += '<div class="anniv-card" style="border-color:var(--rust)" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-age="'+age+'" data-type="birthday">';
       html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\''+safeKey+'\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter(\''+safeKey+'\','+age+')">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\''+safeKey+'\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   el.innerHTML = html;
+
+  // Use event delegation — attach ONE listener to the section
+  el.addEventListener('click', function(e) {
+    var btn = e.target.closest('button[data-action]');
+    var card = e.target.closest('[data-clientkey]');
+    if (!btn || !card) return;
+    var key = decodeURIComponent(card.dataset.clientkey);
+    var action = btn.dataset.action;
+    if (action === 'birthday-letter') {
+      genBirthdayLetter(key, parseInt(card.dataset.age));
+    } else if (action === 'medicare-letter') {
+      genMedicareLetter(key);
+    } else if (action === 'view') {
+      openGroup(key);
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+  });
 }
 
 
@@ -2568,67 +2690,65 @@ const SCRIPTS = {
     label: '📋 New Lead',
     badge: 'lead',
     tip: 'Goal: Set an appointment. Keep it short — under 60 seconds.',
-    text: (c) => `"Hi _________, my name is Michelle Scott. You had requested information about the new state regulated programs for Illinois Residents specific to ${c.county||'your'} County. That's why I was calling — I'm the benefit coordinator for the county.
+    text: (c) => `"Hi, may I speak with ${c.firstName}? 
 
-The reason I'm calling is I'm going to be in your area on Monday and I need to set aside just a couple of moments to drop off the information that you're entitled to receive.
+${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator here in Southern Illinois. I work with folks in your area on life insurance and burial coverage.
 
-I have time in the morning, afternoon, or early evening — which one works best for you on Monday?"`
-  },
-  anniversary: {
-    label: '📅 Anniversary',
-    badge: 'client',
-    tip: "Their policy is renewing soon. Carriers adjust rates every year — this is a real, time-sensitive reason to call.",
-    text: (c) => `"Hi ${c.firstName||'_________'}, my name is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County.
+I noticed you had requested some information, and I just wanted to reach out personally. I'm actually going to be in your area [this week / next week] and I'd love to stop by and sit down with you — no cost, no pressure, just to go over a few options.
 
-The reason I'm calling is that your ${c.displayCompany||c.existingCompany||'current'} coverage is coming up on its anniversary, and I want to make sure your plan is still the best fit for you. Carriers adjust their rates and benefits every year, and sometimes there are better options that nobody's told you about yet.
-
-I'm going to be in your area on Monday and I just need a few minutes to sit down with you and do a quick review. I have time in the morning, afternoon, or early evening — which works best for you?"`
-  },
-  birthday: {
-    label: '🎂 Birthday',
-    badge: 'birthday',
-    tip: 'Life insurance rates lock at your current age. Calling BEFORE the birthday is the whole point — make that clear.',
-    text: (c) => {
-      const age = c.age ? parseInt(c.age) : null;
-      const nextAge = age ? age + 1 : null;
-      return `"Hi ${c.firstName||'_________'}, my name is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County.
-
-The reason I'm calling is that life insurance rates are based on your age at the time you apply${nextAge ? ' — and once you turn ' + nextAge + ', your rate goes up' : ''}. Locking in your rate before your next birthday can make a significant difference in what you pay every month.
-
-I'm going to be in your area on Monday and I just need a couple of minutes to sit down with you and go over what's available to residents in ${c.county||'your'} County. I have time in the morning, afternoon, or early evening — which one works best for you?"`;
-    }
-  },
-  medicare: {
-    label: '🏥 Medicare',
-    badge: 'medicare',
-    tip: 'URGENT tone — enrollment windows are real deadlines. Be their guide, not a salesperson.',
-    text: (c) => `"Hi _________, my name is Michelle Scott. I'm the benefit coordinator for ${c.county||'your'} County. The reason I'm calling is that you're coming up on Medicare eligibility, and there are some state regulated programs available to Illinois residents in ${c.county||'your'} County that a lot of people don't know they qualify for until it's too late.
-
-I'm going to be in your area on Monday and I just need a couple of minutes to drop off some information you're entitled to receive and answer any questions.
-
-I have time in the morning, afternoon, or early evening — which one works best for you on Monday?"`
+Would [day] or [day] work better for you?"`
   },
   client: {
-    label: '🤝 General',
+    label: '🤝 Existing Client',
     badge: 'client',
     tip: 'Warm check-in. Reference their policy — shows you know them.',
-    text: (c) => `"Hi ${c.firstName||'_________'}! This is Michelle Scott — your benefit coordinator for ${c.county||'the'} County. How are you doing?
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — your benefit coordinator. How are you doing?
 
 [pause and listen]
 
-I'm just reaching out to check in on you. I like to stay connected with all my folks, and I wanted to make sure everything is still going well with your ${c.displayCompany||'coverage'}${c.existingPolicy ? ' (policy #'+c.existingPolicy+')' : ''}.
+I'm just reaching out to check in on you. It's been a little while since we last connected, and I like to stay in touch with all my folks.
+
+I wanted to make sure everything is still going well with your ${c.displayCompany||'policy'} coverage${c.existingPolicy?' (policy #'+c.existingPolicy+')':', and that your coverage still fits your needs'}.
 
 Is there anything you've had questions about, or anything that's changed for you lately?
 
 [listen, then offer a visit if appropriate]"`
   },
+  birthday: {
+    label: '🎂 Birthday',
+    badge: 'birthday',
+    tip: 'Lead with the birthday. The coverage conversation comes second.',
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott — I just wanted to call and wish you a happy birthday!
+
+[warm pause]
+
+I always like to reach out to my clients around their birthday. It's one of my favorite parts of this work — getting to stay connected with the people I've helped over the years.
+
+I also just wanted to make sure that your coverage is still working the way it should for you at this stage. Sometimes things shift around a birthday — income, family situations — and I like to make sure my folks are always fully protected.
+
+Would it be alright if I stopped by sometime soon, just for a quick visit?"`
+  },
+  medicare: {
+    label: '🏥 Medicare',
+    badge: 'medicare',
+    tip: 'URGENT tone — enrollment windows are real deadlines. Be their guide, not a salesperson.',
+    text: (c) => `"Hi, may I speak with ${c.firstName}?
+
+${c.firstName}, my name is Michelle Scott — I'm a licensed benefit coordinator in your area. I'm reaching out because your 65th birthday is coming up, and I want to make sure you don't miss your Medicare enrollment window.
+
+This is really important — you have a 7-month window around your birthday to enroll, and if you miss it, you can face permanent premium penalties for the rest of your life.
+
+I help people in this area navigate Medicare every day, and I'd love to sit down with you — at no cost and no obligation — just to walk you through your options and make sure you're set up right.
+
+Would you have time for a quick visit this week?"`
+  },
   doorknock: {
     label: '🚪 Door Knock',
     badge: 'doorknock',
-    tip: "Calling before showing up — let them know you're coming. Short and friendly.",
-    text: (c) => `"Hi ${c.firstName||'_________'}, this is Michelle Scott — I'm the benefit coordinator for ${c.county||'your'} County. I'm going to be in your neighborhood [today / this week] and I wanted to reach out before stopping by.
+    tip: "If calling before showing up -- let them know you're coming. Short and friendly.",
+    text: (c) => `"Hi ${c.firstName}, this is Michelle Scott — I'm a benefit coordinator here in the area. I'm actually going to be in your neighborhood [today / this week] and I was hoping to stop by and introduce myself.
 
-I work with folks in ${c.city||'your area'} on life insurance and burial coverage, and I'd love just a few minutes to introduce myself and go over a couple of programs available to you.
+I work with a lot of folks in [their city/area] on life insurance and burial coverage, and I just wanted to see if you'd have a few minutes to chat.
 
 Would sometime [today / this week] work for you?"`
   },
@@ -2636,51 +2756,31 @@ Would sometime [today / this week] work for you?"`
     label: '🔄 Follow-Up',
     badge: 'followup',
     tip: 'Reference the last visit so they know you remember them.',
-    text: (c) => `"Hi ${c.firstName||'_________'}! This is Michelle Scott${c.county ? ', benefit coordinator for '+c.county+' County' : ''}. We visited a little while back${c.followUpReason ? ' — '+c.followUpReason.toLowerCase() : ''}, and I just wanted to follow up with you.
+    text: (c) => `"Hi ${c.firstName}! This is Michelle Scott. We visited a little while back${c.followUpReason ? ' — ' + c.followUpReason.toLowerCase() : ''}, and I just wanted to follow up with you.
 
 [pause]
 
-I've been thinking about you and wanted to make sure I followed through. ${c.followUpReason && c.followUpReason.toLowerCase().includes('declin') ? "I also wanted to share a couple of other options I think might work better for you." : "I wanted to make sure everything is still going in the right direction."}
+I've been thinking about you and wanted to make sure I followed through like I said I would. ${c.followUpReason && c.followUpReason.toLowerCase().includes('declin') ? 'I also wanted to share a couple of other options I think might work better for you.' : 'I wanted to make sure everything is still going in the right direction.'}
 
 Would you have a few minutes for me to come back by?"`
   }
 };
 
 function detectScriptType(c) {
-  const today = new Date(); today.setHours(0,0,0,0);
-
-  // 1. Medicare aging in — highest priority (turning 65 within 75 days)
+  // Auto-detect best script based on client data
   const dob = c.dob ? new Date(c.dob) : null;
   if (dob && !isNaN(dob)) {
+    const today = new Date();
     const nextBday = new Date(dob);
     nextBday.setFullYear(today.getFullYear());
-    nextBday.setHours(0,0,0,0);
     if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
-    const daysUntilBday = Math.round((nextBday - today) / 86400000);
-    const ageAtNext = nextBday.getFullYear() - dob.getFullYear();
-    if (ageAtNext === 65 && daysUntilBday <= 75) return 'medicare';
-    // 2. Birthday — life insurance rate lock, within 60 days
-    if (daysUntilBday <= 60) return 'birthday';
+    const days = Math.round((nextBday - today) / 86400000);
+    const age = nextBday.getFullYear() - dob.getFullYear();
+    if (age === 65 && days <= 75) return 'medicare';
+    if (days <= 60) return 'birthday';
   }
-
-  // 3. Policy anniversary within 90 days
-  if (c.effectiveDate) {
-    const eff = new Date(c.effectiveDate);
-    if (!isNaN(eff)) {
-      const anniv = new Date(eff);
-      anniv.setFullYear(today.getFullYear());
-      anniv.setHours(0,0,0,0);
-      if (anniv < today) anniv.setFullYear(today.getFullYear()+1);
-      const daysUntilAnniv = Math.round((anniv - today) / 86400000);
-      if (daysUntilAnniv <= 90) return 'anniversary';
-    }
-  }
-
-  // 4. Follow-up visit pending
   if (c.followUpPending) return 'followup';
-  // 5. Door knock status
   if (c.clientStatus === 'Door Knock') return 'doorknock';
-  // 6. Known client with policy
   if (c.existingPolicy || c.newCompany) return 'client';
   return 'lead';
 }
@@ -2737,6 +2837,379 @@ function switchScript(type) {
 function closeScript() {
   document.getElementById('scriptOverlay').classList.remove('visible');
   currentScriptClient = null;
+}
+
+// ── IMPORT ARCHIVE ────────────────────────────────────────────────────────────
+const WORKER_URL = 'https://michelles-desk-api.michelle-cb4.workers.dev';
+
+// Column map for Clients tab (row 2 = headers, data starts row 3)
+// Columns A-BK (1-63), 0-indexed for array building
+// A=status(blank), B=firstName, C=lastName, D=lastName(dup-blank), E=address,
+// F=city, G=county, H=state, I=zip, J=leadDate, K=phone, L=dob, M=age,
+// N=tobacco, O=ssType, P=bank, Q=checkDate, R=existingCompany, S=existingFace,
+// T=existingPremium, U=existingPolicy, V=wholeterm, W=gradedlevel, X=tnt,
+// Y=cashValue, Z=rpuAmt, AA=policyLoan, AB=effectiveDateOld, AC=cancer,
+// AD=heartAttack, AE=stroke, AF=copd, AG=diabetes, AH=mental, AI=ssn,
+// AJ=height, AK=weight, AL=newCompany, AM=newFace, AN=newPremium,
+// AO=apptDate, AP=apptTime, AQ=apptNotes, AR=effectiveDate, AS=payDate,
+// AT=payAmt, AU=tyCard, AV=stopPacDue, AW=stopPacSent, AX=cxDue,
+// AY=cxSent, AZ=surrDue, BA=surrSent, BB=other, BC=benName, BD=benRel,
+// BE=benDOB, BF=benAddress, BG=benPhone, BH=carrierFax, BI=carrierEmail,
+// BJ=paymentInfo, BK=notes — wait, sheet goes to BK so that's 63 cols
+
+function buildClientRow(d) {
+  // 63 columns, A through BK
+  return [
+    '',               // A  status
+    d.firstName||'',  // B  First Name
+    d.lastName||'',   // C  Last Name
+    '',               // D  Last Name (duplicate col in sheet — leave blank)
+    d.address||'',    // E  Address
+    d.city||'',       // F  City
+    d.county||'',     // G  County
+    d.state||'IL',    // H  State
+    d.zip||'',        // I  Zip
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}), // J Lead Date
+    d.phone||'',      // K  Phone Number
+    d.dob||'',        // L  DOB
+    d.age||'',        // M  AGE
+    d.tobacco||'',    // N  TOB
+    d.ssType||'',     // O  SS
+    d.bank||'',       // P  Bank
+    d.checkDate||'',  // Q  CHECK DATE
+    d.existingCompany||'', // R Current COMPANY NAME
+    d.existingFace||'',    // S Face Amount
+    d.existingPremium||'', // T Premium
+    d.existingPolicy||'',  // U Policy Number
+    '',               // V  Whole/Term
+    '',               // W  Graded/Level
+    '',               // X  T/NT
+    d.cashValue||'',  // Y  Cash Value
+    '',               // Z  RPU Amt
+    '',               // AA Policy Loan
+    '',               // AB Eff. Date (old coverage)
+    d.cancer||'',     // AC Cancer
+    d.heartAttack||'',// AD Heart Attack
+    d.stroke||'',     // AE Stroke
+    d.copd||'',       // AF COPD
+    d.diabetes||'',   // AG Diabetes
+    d.mental||'',     // AH Mental
+    '',               // AI SSN (never import SSN)
+    d.height||'',     // AJ Height
+    d.weight||'',     // AK Weight
+    d.newCompany||'', // AL Qualifier (new company)
+    d.newFace||'',    // AM Face Amount (new)
+    d.newPremium||'', // AN Premium (new)
+    d.apptDate||'',   // AO Appt Date
+    '',               // AP Appt Time
+    '',               // AQ Appt Notes
+    d.effectiveDate||'', // AR Effective Date
+    '',               // AS Pay Date
+    '',               // AT Pay Amt
+    '',               // AU TY Card
+    '',               // AV Stop PAC Due
+    '',               // AW Stop PAC Sent
+    '',               // AX CX Due
+    '',               // AY CX Sent
+    '',               // AZ Surrender Due
+    '',               // BA Surrender Sent
+    '',               // BB Other
+    d.beneficiary||'',// BC Beneficiary Name
+    '',               // BD Beneficiary Relationship
+    '',               // BE Beneficiary DOB
+    '',               // BF Beneficiary Address
+    '',               // BG Beneficiary Phone
+    '',               // BH Carrier Fax
+    '',               // BI Carrier Email
+    '',               // BJ Payment Info
+    d.notes||([d.healthHistory,d.medications].filter(Boolean).join(' | '))||'', // BK Notes
+  ];
+}
+
+function buildLeadRow(d) {
+  // Leads tab: Status, First, Last, Spouse, Spouse Age, Address, City, State, Zip, County, Lead Date, Phone, DOB, Age
+  return [
+    '',
+    d.firstName||'',
+    d.spouseName||'',
+    d.lastName||'',
+    d.address||'',
+    d.city||'',
+    d.county||'',
+    d.state||'IL',
+    d.zip||'',
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}),
+    d.phone||'',
+    d.dob||'',
+    d.age||'',
+  ];
+}
+
+let impLeadsArr = [], impClientsArr = [], impSkippedArr = [], impAllResults = [];
+let impProcessing = false;
+
+function openImporter() {
+  document.getElementById('importSection').classList.add('visible');
+  document.getElementById('importSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeImporter() {
+  document.getElementById('importSection').classList.remove('visible');
+  resetImporter();
+}
+function resetImporter() {
+  impLeadsArr=[]; impClientsArr=[]; impSkippedArr=[]; impAllResults=[];
+  impProcessing = false;
+  document.getElementById('importStats').style.display='none';
+  document.getElementById('importProgress').classList.remove('visible');
+  document.getElementById('importQueue').classList.remove('visible');
+  document.getElementById('importLog').classList.remove('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+  document.getElementById('importQueue').innerHTML='';
+  document.getElementById('importLog').innerHTML='';
+  document.getElementById('importFileInput').value='';
+}
+
+function importHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('importDrop').classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+function importHandleFiles(fl) {
+  const files = Array.from(fl).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+
+async function importProcessFiles(files) {
+  if (impProcessing) return;
+  impProcessing = true;
+
+  document.getElementById('importStats').style.display='flex';
+  document.getElementById('importProgress').classList.add('visible');
+  document.getElementById('importQueue').classList.add('visible');
+  document.getElementById('importLog').classList.add('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+
+  // Build queue
+  document.getElementById('importQueue').innerHTML = files.map((f,i)=>
+    `<div class="iq-item"><span class="iq-name">📄 ${f.name}</span><span class="iq-status iq-pending" id="iq_${i}">Pending</span></div>`
+  ).join('');
+
+  impUpdateStats();
+  impLog(`Batch started: ${files.length} files`, 'ok');
+
+  for (let i=0; i<files.length; i++) {
+    impUpdateProgress(i, files.length, files[i].name);
+    setIQStatus(i,'processing','⏳ Reading…');
+    try {
+      const result = await impProcessOnePDF(files[i]);
+      impAllResults.push(result);
+      if (result.type==='lead') {
+        impLeadsArr.push(result);
+        setIQStatus(i,'lead',`📋 Lead — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`LEAD: ${result.data.firstName} ${result.data.lastName} · ${result.data.city}`, 'lead');
+      } else if (result.type==='client') {
+        impClientsArr.push(result);
+        setIQStatus(i,'client',`✓ Client — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`CLIENT: ${result.data.firstName} ${result.data.lastName} · ${result.data.city} · ${result.data.newCompany||result.data.existingCompany||''}`, 'client');
+      } else {
+        impSkippedArr.push(result);
+        setIQStatus(i,'skip',`— ${result.reason||'Skipped'}`);
+        impLog(`SKIP: ${files[i].name} — ${result.reason||''}`, 'skip');
+      }
+    } catch(err) {
+      impSkippedArr.push({type:'error',file:files[i].name,reason:err.message});
+      setIQStatus(i,'err','✕ Error');
+      impLog(`ERROR: ${files[i].name} — ${err.message}`, 'err');
+    }
+    impUpdateStats();
+    if (i < files.length-1) await new Promise(r=>setTimeout(r,400));
+  }
+
+  impUpdateProgress(files.length, files.length, 'Complete');
+  impLog(`Done — ${impLeadsArr.length} leads, ${impClientsArr.length} clients, ${impSkippedArr.length} skipped`, 'ok');
+  impProcessing = false;
+
+  document.getElementById('importResultsArea').style.display='block';
+  document.getElementById('importActions').style.display='flex';
+  document.getElementById('irtLeads').textContent = impLeadsArr.length;
+  document.getElementById('irtClients').textContent = impClientsArr.length;
+  document.getElementById('irtSkipped').textContent = impSkippedArr.length;
+  document.getElementById('pushLeadsBtn').disabled = impLeadsArr.length === 0;
+  document.getElementById('pushClientsBtn').disabled = impClientsArr.length === 0;
+  showImportTab('leads', document.querySelector('.irt'));
+}
+
+async function impProcessOnePDF(file) {
+  const base64 = await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+
+  const prompt = `You are reading an insurance document for Illinois Senior Benefit Services.
+Analyze ALL pages of this PDF and extract all available information. Return ONLY valid JSON, no other text.
+
+DOCUMENT TYPE RULES:
+- "T2_lead" = T-2 or B-26 mailer card with prospect handwriting filled in → type: "lead"
+- "intake_client" = Handwritten agent intake/notepad worksheet with health history, bank, SSN, medications, quotes → type: "client"  
+- "combo" = Has BOTH a lead card AND intake sheet → type: "client" (use intake sheet data, most complete)
+- "stop_pac" = Stop PAC / CX Policy / Surrender / Cancel / Cash-In forms → type: "skip"
+- "beneficiary" = GTL or other beneficiary change forms → type: "skip"
+- "drivers_license" = ID or driver license scan → type: "skip" (but extract DOB/name to enrich if paired)
+- "blank" = Template with no prospect data → type: "skip"
+- "unrelated" = Tax forms, STAX-1, other docs → type: "skip"
+
+IMPORTANT:
+- "Assigned To: Scott, Wayne" and "Assigned To: Scott, Michelle" are the SAME agency — import normally
+- County comes from header (e.g. "Johnson, IL" = Johnson County; "Saline, IL" = Saline County; "Williamson, IL" = Williamson County)
+- For health history: note Cancer, Heart Attack, Stroke, COPD, Diabetes, Mental separately
+- Never extract full SSN — leave ssn4 blank
+- For combo files: the intake sheet data takes priority over the T-2 card data
+- If file has a driver license page, use it to confirm DOB and name spelling
+
+Return ONLY this JSON (no markdown, no explanation):
+{
+  "docType": "T2_lead|intake_client|combo|stop_pac|beneficiary|drivers_license|blank|unrelated",
+  "type": "lead|client|skip",
+  "reason": "",
+  "data": {
+    "firstName": "", "lastName": "", "spouseName": "", "spouseAge": "",
+    "address": "", "city": "", "state": "IL", "zip": "", "county": "",
+    "phone": "", "age": "", "dob": "", "email": "",
+    "tobacco": "", "ssType": "", "bank": "", "checkDate": "",
+    "height": "", "weight": "",
+    "existingCompany": "", "existingPolicy": "", "existingFace": "", "existingPremium": "",
+    "cashValue": "",
+    "newCompany": "", "newFace": "", "newPremium": "", "effectiveDate": "",
+    "apptDate": "",
+    "beneficiary": "",
+    "cancer": "", "heartAttack": "", "stroke": "", "copd": "", "diabetes": "", "mental": "",
+    "healthHistory": "", "medications": "", "notes": ""
+  }
+}`;
+
+  const resp = await fetch(WORKER_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1500,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:prompt}
+      ]}]
+    })
+  });
+  if (!resp.ok) throw new Error(`API ${resp.status}`);
+  const apiData = await resp.json();
+  const raw = apiData.content[0].text.trim().replace(/```json|```/g,'').trim();
+  const parsed = JSON.parse(raw);
+
+  // Normalize skip types
+  if (['stop_pac','blank','unrelated','drivers_license','beneficiary'].includes(parsed.docType)) {
+    parsed.type='skip'; parsed.reason=parsed.reason||parsed.docType;
+  }
+  if (parsed.docType==='combo'||parsed.docType==='intake_client') parsed.type='client';
+  if (parsed.docType==='T2_lead') parsed.type='lead';
+  parsed.fileName = file.name;
+  return parsed;
+}
+
+// Push to Google Sheet
+async function pushToSheet(type) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const arr = type==='leads' ? impLeadsArr : impClientsArr;
+  if (!arr.length) { toast('Nothing to push'); return; }
+
+  const btn = document.getElementById(type==='leads'?'pushLeadsBtn':'pushClientsBtn');
+  btn.disabled=true; btn.textContent='Pushing…';
+
+  const tab = type==='leads' ? 'Leads' : SHEET_TAB;
+  const rows = arr.map(r => type==='leads' ? buildLeadRow(r.data) : buildClientRow(r.data));
+
+  // Append in chunks of 50 to avoid request size limits
+  const chunkSize = 50;
+  let pushed = 0;
+  try {
+    for (let i=0; i<rows.length; i+=chunkSize) {
+      const chunk = rows.slice(i, i+chunkSize);
+      const range = `${tab}!A:BK`;
+      const resp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method:'POST',
+          headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
+          body:JSON.stringify({values:chunk})
+        }
+      );
+      if (resp.status===401){accessToken=null;window.location.href=buildAuthUrl();return;}
+      if (!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${resp.status}`);}
+      pushed += chunk.length;
+      btn.textContent = `Pushing… ${pushed}/${rows.length}`;
+      if (i+chunkSize < rows.length) await new Promise(r=>setTimeout(r,300));
+    }
+    btn.textContent = `✓ ${pushed} ${type} pushed!`;
+    btn.style.background = 'var(--green)';
+    toast(`✓ ${pushed} ${type} added to Google Sheet`);
+    // Reload data to reflect new entries
+    setTimeout(()=>loadFromSheets(), 1500);
+  } catch(err) {
+    btn.disabled=false;
+    btn.textContent = type==='leads'?'📋 Push Leads to Sheet':'✓ Push Clients to Sheet';
+    toast(`Could not push — ${err.message}`);
+    console.error(err);
+  }
+}
+
+function showImportTab(tab, btn) {
+  document.querySelectorAll('.irt').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const data = tab==='leads'?impLeadsArr:tab==='clients'?impClientsArr:impSkippedArr;
+  const el = document.getElementById('importTableContent');
+  if (!data.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Nothing here</div>';return;}
+  if (tab==='skipped'){
+    el.innerHTML=`<table class="import-table"><tr><th>File</th><th>Reason</th></tr>${data.map(r=>`<tr><td>${(r.fileName||r.file||'').replace('.pdf','')}</td><td>${r.reason||''}</td></tr>`).join('')}</table>`;
+    return;
+  }
+  const cols = tab==='leads'?['Name','City','County','Phone','Age']:['Name','City','County','Phone','DOB','Company'];
+  el.innerHTML=`<table class="import-table"><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${data.map(r=>{
+    const d=r.data||{};
+    const name=[d.firstName,d.lastName].filter(Boolean).join(' ')||'—';
+    if(tab==='leads') return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.age||'—'}</td></tr>`;
+    return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.dob||'—'}</td><td>${d.newCompany||d.existingCompany||'—'}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+function impUpdateStats(){
+  document.getElementById('impTotal').textContent=impAllResults.length;
+  document.getElementById('impLeads').textContent=impLeadsArr.length;
+  document.getElementById('impClients').textContent=impClientsArr.length;
+  document.getElementById('impSkipped').textContent=impSkippedArr.length;
+  document.getElementById('impErrors').textContent=impAllResults.filter(r=>r.type==='error').length;
+}
+function impUpdateProgress(done,total,label){
+  const pct=Math.round((done/total)*100);
+  document.getElementById('impProgFill').style.width=pct+'%';
+  document.getElementById('impProgPct').textContent=pct+'%';
+  document.getElementById('impProgLabel').textContent=done>=total?`✓ Complete — ${total} files`:(`Processing ${done+1} of ${total}: ${label}`);
+}
+function setIQStatus(idx,cls,text){
+  const el=document.getElementById(`iq_${idx}`);
+  if(!el)return;
+  el.className=`iq-status iq-${cls}`;
+  el.textContent=text;
+}
+function impLog(msg,cls=''){
+  const log=document.getElementById('importLog');
+  const line=document.createElement('div');
+  line.style.color=cls==='ok'?'var(--green)':cls==='lead'?'var(--blue)':cls==='client'?'var(--gold)':cls==='err'?'var(--rust)':'var(--muted)';
+  line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
