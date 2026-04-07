@@ -285,6 +285,14 @@
   .anniv-btn-email:hover{background:var(--blue-light);}
   .anniv-btn-view{border-color:var(--border);color:var(--muted);}
   .anniv-btn-view:hover{background:var(--cream);}
+  /* WEB LEADS */
+  .web-leads-section{margin-bottom:18px;}
+  .web-lead-card{background:#fff;border:1.5px solid var(--blue);border-radius:11px;padding:13px;cursor:pointer;transition:all .15s;position:relative;}
+  .web-lead-card:hover{border-color:var(--blue);background:var(--blue-light);transform:translateY(-1px);}
+  .web-lead-new{position:absolute;top:10px;right:10px;background:var(--blue);color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.06em;text-transform:uppercase;}
+  .web-lead-name{font-weight:600;font-size:14px;color:var(--ink);}
+  .web-lead-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .web-lead-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
   /* REPEAT CLIENT ALERT */
   .repeat-alert{background:linear-gradient(135deg,#1a1a2e,#2a1a4e);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
   .repeat-alert-icon{font-size:24px;flex-shrink:0;}
@@ -643,6 +651,7 @@
       <div class="divider-line"></div>
     </div>
     <div class="stats-row" id="statsRow"></div>
+    <div id="webLeadsSection"></div>
     <div id="apptSection"></div>
     <div id="anniversarySection"></div>
     <div id="birthdaySection"></div>
@@ -1370,6 +1379,8 @@ function renderDashboard(){
     <div class="stat-box" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'})" title="View Surrenders">
       <div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
+  renderWebLeads();
+
   // Appointments
   let apptHtml = '';
   if(upcoming.length){
@@ -1967,16 +1978,18 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     medicareSignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
+      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:#2d7a4f" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-type="medicare">';
+      html += '<div class="anniv-card" style="border-color:#2d7a4f">';
       html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" data-action="medicare-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + safeKey + '\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:#2d7a4f;color:#2d7a4f" onclick="genMedicareLetter(\'' + safeKey + '\')">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\'' + safeKey + '\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
@@ -1986,39 +1999,25 @@ function renderBirthdaySignals() {
     html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, age = sig.age, date = sig.date;
+      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
-      html += '<div class="anniv-card" style="border-color:var(--rust)" data-clientkey="'+encodeURIComponent(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())+'" data-age="'+age+'" data-type="birthday">';
+      html += '<div class="anniv-card" style="border-color:var(--rust)">';
       html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
-      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + key + '\')">\uD83D\uDCDE Call</button>';
-      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" data-action="birthday-letter">\uD83D\uDCC4 Letter</button>';
-      html += '<button class="anniv-btn anniv-btn-view" data-action="view">View</button>';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + safeKey + '\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:var(--rust);color:var(--rust)" onclick="genBirthdayLetter(\'' + safeKey + '\',' + age + ')">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\'' + safeKey + '\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
       html += '</div></div>';
     });
     html += '</div>';
   }
 
   el.innerHTML = html;
-
-  // Use event delegation — attach ONE listener to the section
-  el.addEventListener('click', function(e) {
-    var btn = e.target.closest('button[data-action]');
-    var card = e.target.closest('[data-clientkey]');
-    if (!btn || !card) return;
-    var key = decodeURIComponent(card.dataset.clientkey);
-    var action = btn.dataset.action;
-    if (action === 'birthday-letter') {
-      genBirthdayLetter(key, parseInt(card.dataset.age));
-    } else if (action === 'medicare-letter') {
-      genMedicareLetter(key);
-    } else if (action === 'view') {
-      openGroup(key);
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-  });
+  // No event delegation needed — all onclick handlers are inline per card
 }
 
 
@@ -3323,6 +3322,104 @@ function impLog(msg,cls=''){
   line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
   log.appendChild(line);
   log.scrollTop=log.scrollHeight;
+}
+
+// ── WEB LEADS (from seniorbenefitsofillinois.com contact form) ────────────────
+const WEB_LEADS_KEY = 'isbs_web_leads';
+
+function getWebLeads() {
+  try { return JSON.parse(localStorage.getItem(WEB_LEADS_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function saveWebLeads(leads) {
+  try { localStorage.setItem(WEB_LEADS_KEY, JSON.stringify(leads)); } catch(e) {}
+}
+
+function markWebLeadContacted(id) {
+  const leads = getWebLeads();
+  const lead = leads.find(l => l.id === id);
+  if (lead) { lead.contacted = true; saveWebLeads(leads); renderWebLeads(); }
+}
+
+async function addWebLeadToSheet(id) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const leads = getWebLeads();
+  const lead = leads.find(l => l.id === id);
+  if (!lead) return;
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+  const row = ['', lead.firstName||'', lead.spouseName||'', lead.lastName||'',
+    lead.address||'', lead.city||'', lead.county||'', 'IL', lead.zip||'',
+    today, lead.phone||'', lead.dob||'', lead.age||''];
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A:O:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      { method:'POST', headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
+        body: JSON.stringify({values:[row]}) }
+    );
+    if (!resp.ok) throw new Error('Sheet error');
+    lead.addedToSheet = true; lead.contacted = true;
+    saveWebLeads(leads); renderWebLeads();
+    toast(`✓ ${lead.firstName} ${lead.lastName} added to Leads tab`);
+  } catch(err) { toast('Could not add to sheet'); }
+}
+
+function dismissWebLead(id) {
+  const leads = getWebLeads().filter(l => l.id !== id);
+  saveWebLeads(leads); renderWebLeads();
+}
+
+// Called by the Cloudflare Worker webhook (postMessage from contact form)
+window.addEventListener('message', function(e) {
+  const trusted = ['https://getoutmybelly.github.io','https://seniorbenefitsofillinois.com','https://www.seniorbenefitsofillinois.com'];
+  if (!trusted.includes(e.origin)) return;
+  if (e.data && e.data.type === 'isbs_web_lead') {
+    const leads = getWebLeads();
+    const newLead = { ...e.data.lead, id: Date.now().toString(), receivedAt: new Date().toISOString(), contacted: false, addedToSheet: false };
+    leads.unshift(newLead);
+    saveWebLeads(leads);
+    renderWebLeads();
+    toast(`🌐 New web lead: ${newLead.firstName} ${newLead.lastName}`);
+  }
+});
+
+function renderWebLeads() {
+  const el = document.getElementById('webLeadsSection');
+  if (!el) return;
+  const allLeads = getWebLeads();
+  const newLeads = allLeads.filter(l => !l.contacted && !l.addedToSheet);
+  if (!allLeads.length) { el.innerHTML = ''; return; }
+
+  let html = `<div class="section-divider" style="margin-top:4px">
+    <h2>🌐 Web Leads <span style="font-size:13px;font-weight:400;color:var(--muted)">${newLeads.length} new</span></h2>
+    <div class="divider-line"></div>
+  </div><div class="followup-grid">`;
+
+  allLeads.slice(0,10).forEach(lead => {
+    const isNew = !lead.contacted && !lead.addedToSheet;
+    const timeAgo = lead.receivedAt ? timeSince(new Date(lead.receivedAt)) : '';
+    html += `<div class="web-lead-card${lead.addedToSheet?' web-lead-done':''}" style="${lead.addedToSheet?'opacity:.6;border-color:var(--green)':''}">
+      ${isNew ? '<span class="web-lead-new">NEW</span>' : ''}
+      <div class="web-lead-name">${lead.firstName||''} ${lead.lastName||''}</div>
+      <div class="web-lead-meta">${[lead.city,lead.phone].filter(Boolean).join(' · ')}${timeAgo?' · '+timeAgo:''}</div>
+      ${lead.message?`<div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5">${lead.message.slice(0,80)}${lead.message.length>80?'…':''}</div>`:''}
+      <div class="web-lead-actions">
+        ${lead.phone?`<a href="tel:${lead.phone.replace(/\D/g,'')}" style="padding:5px 12px;border-radius:20px;border:1.5px solid var(--green);color:var(--green);font-size:12px;font-weight:600;text-decoration:none;background:#fff">📞 Call</a>`:''}
+        ${!lead.addedToSheet?`<button onclick="addWebLeadToSheet('${lead.id}')" style="padding:5px 12px;border-radius:20px;border:1.5px solid var(--blue);color:var(--blue);font-size:12px;font-weight:600;background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">+ Add to Sheet</button>`:'<span style="font-size:11px;color:var(--green);font-weight:600">✓ In Sheet</span>'}
+        <button onclick="dismissWebLead('${lead.id}')" style="padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);color:var(--muted);font-size:12px;font-weight:600;background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">Dismiss</button>
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function timeSince(date) {
+  const s = Math.floor((new Date() - date) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
