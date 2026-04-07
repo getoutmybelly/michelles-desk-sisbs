@@ -371,6 +371,65 @@
   .script-dial-btn{width:100%;padding:16px;background:var(--green);color:#fff;border:none;border-radius:12px;font-family:'DM Serif Display',serif;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-bottom:8px;}
   .script-dial-btn:hover{background:#256b43;}
   .script-skip-btn{width:100%;padding:11px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
+  /* IMPORT ARCHIVE */
+  .import-section{display:none;margin-bottom:22px;}
+  .import-section.visible{display:block;}
+  .import-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .import-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .import-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .import-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .import-body{padding:20px;}
+  .import-drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px;}
+  .import-drop:hover,.import-drop.drag{border-color:var(--sage);background:var(--sage-light);}
+  .import-drop-icon{font-size:28px;margin-bottom:8px;}
+  .import-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .import-stat{background:var(--cream);border-radius:8px;padding:8px 12px;flex:1;min-width:70px;text-align:center;}
+  .import-stat-n{font-family:'DM Serif Display',serif;font-size:20px;color:var(--ink);}
+  .import-stat-l{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .import-stat.is-lead .import-stat-n{color:var(--blue);}
+  .import-stat.is-client .import-stat-n{color:var(--green);}
+  .import-stat.is-skip .import-stat-n{color:var(--muted);}
+  .import-stat.is-err .import-stat-n{color:var(--rust);}
+  .import-progress{margin-bottom:14px;display:none;}
+  .import-progress.visible{display:block;}
+  .import-prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .import-prog-bar{height:5px;background:var(--cream);border-radius:4px;overflow:hidden;}
+  .import-prog-fill{height:100%;background:linear-gradient(90deg,var(--sage),var(--gold));border-radius:4px;transition:width .3s;width:0%;}
+  .import-log{background:var(--cream);border-radius:8px;padding:10px 12px;max-height:160px;overflow-y:auto;font-size:11px;font-family:monospace;line-height:1.7;margin-bottom:14px;display:none;}
+  .import-log.visible{display:block;}
+  .il-ok{color:var(--green);}
+  .il-lead{color:var(--blue);}
+  .il-client{color:var(--gold);}
+  .il-skip{color:var(--muted);}
+  .il-err{color:var(--rust);}
+  .import-queue{max-height:180px;overflow-y:auto;margin-bottom:14px;display:none;}
+  .import-queue.visible{display:block;}
+  .iq-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px;}
+  .iq-item:nth-child(odd){background:var(--cream);}
+  .iq-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);}
+  .iq-status{font-size:11px;font-weight:600;white-space:nowrap;}
+  .iq-pending{color:var(--muted);}
+  .iq-processing{color:var(--gold);}
+  .iq-lead{color:var(--blue);}
+  .iq-client{color:var(--green);}
+  .iq-skip{color:var(--muted);}
+  .iq-err{color:var(--rust);}
+  .import-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .import-action-btn{flex:1;padding:12px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .iab-leads{background:var(--blue);color:#fff;}
+  .iab-leads:hover{background:#1e3d8a;}
+  .iab-clients{background:var(--green);color:#fff;}
+  .iab-clients:hover{background:#256b43;}
+  .iab-reset{background:#fff;color:var(--muted);border:1.5px solid var(--border);}
+  .iab-reset:hover{background:var(--cream);}
+  .import-action-btn:disabled{opacity:.4;cursor:default;}
+  .import-results-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
+  .irt{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .irt.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .import-table-wrap{max-height:220px;overflow-y:auto;margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;}
+  .import-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .import-table th{background:var(--cream);padding:7px 10px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);position:sticky;top:0;}
+  .import-table td{padding:7px 10px;border-bottom:1px solid var(--cream);color:var(--ink);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -385,6 +444,7 @@
     <button id="commBtn" onclick="openCommTracker()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">💰 Commission</button>
     <button id="mapBtn" onclick="openNearbyMap()" style="display:none;background:rgba(42,77,160,.4);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🗺 Nearby</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
+    <button id="importBtn" onclick="openImporter()" style="display:none;background:rgba(92,122,107,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📂 Import Archive</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
   </div>
@@ -430,6 +490,57 @@
       <button class="close-btn" onclick="closeDetail()">✕</button>
     </div>
     <div class="detail-body" id="detailBody"></div>
+  </div>
+
+  <!-- IMPORT ARCHIVE -->
+  <div class="import-section" id="importSection">
+    <div class="import-box">
+      <div class="import-header">
+        <div class="import-title">📂 Import Archive</div>
+        <button class="import-close" onclick="closeImporter()">✕</button>
+      </div>
+      <div class="import-body">
+        <div class="import-drop" id="importDrop"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="importHandleDrop(event)"
+          onclick="document.getElementById('importFileInput').click()">
+          <div class="import-drop-icon">📄</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Drop PDF files here</div>
+          <div style="font-size:13px;color:var(--muted)">T-2 cards, B-26 cards, intake sheets — select as many as you want</div>
+        </div>
+        <input type="file" id="importFileInput" multiple accept="application/pdf" style="display:none" onchange="importHandleFiles(this.files)">
+        <div class="import-stats" id="importStats" style="display:none">
+          <div class="import-stat"><div class="import-stat-n" id="impTotal">0</div><div class="import-stat-l">Total</div></div>
+          <div class="import-stat is-lead"><div class="import-stat-n" id="impLeads">0</div><div class="import-stat-l">Leads</div></div>
+          <div class="import-stat is-client"><div class="import-stat-n" id="impClients">0</div><div class="import-stat-l">Clients</div></div>
+          <div class="import-stat is-skip"><div class="import-stat-n" id="impSkipped">0</div><div class="import-stat-l">Skipped</div></div>
+          <div class="import-stat is-err"><div class="import-stat-n" id="impErrors">0</div><div class="import-stat-l">Errors</div></div>
+        </div>
+        <div class="import-progress" id="importProgress">
+          <div class="import-prog-label"><span id="impProgLabel">Processing…</span><span id="impProgPct">0%</span></div>
+          <div class="import-prog-bar"><div class="import-prog-fill" id="impProgFill"></div></div>
+        </div>
+        <div class="import-queue" id="importQueue"></div>
+        <div class="import-log" id="importLog"></div>
+        <div id="importResultsArea" style="display:none">
+          <div class="import-results-tabs">
+            <button class="irt active" onclick="showImportTab('leads',this)">Leads (<span id="irtLeads">0</span>)</button>
+            <button class="irt" onclick="showImportTab('clients',this)">Clients (<span id="irtClients">0</span>)</button>
+            <button class="irt" onclick="showImportTab('actions',this)">⚠ Actions (<span id="irtActions">0</span>)</button>
+            <button class="irt" onclick="showImportTab('skipped',this)">Skipped (<span id="irtSkipped">0</span>)</button>
+            <button class="irt" id="irtRejected" onclick="showImportTab('rejected',this)" style="display:none;color:var(--rust);border-color:var(--rust)">✕ Needs Splitting (0)</button>
+          </div>
+          <div class="import-table-wrap"><div id="importTableContent"></div></div>
+        </div>
+        <div class="import-actions" id="importActions" style="display:none">
+          <button class="import-action-btn iab-leads" id="pushLeadsBtn" onclick="pushToSheet('leads')" disabled>📋 Push Leads to Sheet</button>
+          <button class="import-action-btn iab-clients" id="pushClientsBtn" onclick="pushToSheet('clients')" disabled>✓ Push Clients to Sheet</button>
+          <button class="import-action-btn" id="dlRejectedBtn" onclick="downloadRejectedList()" style="display:none;background:var(--rust-light);color:var(--rust);border:1.5px solid var(--rust)">⬇ Download Split List</button>
+          <button class="import-action-btn iab-reset" onclick="resetImporter()">↺ Start Over</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- LEAD CARD SCANNER -->
@@ -730,6 +841,7 @@ async function loadFromSheets() {
     document.getElementById('scanBtn').style.display = 'block';
     document.getElementById('commBtn').style.display = 'block';
     document.getElementById('mapBtn').style.display = 'block';
+    document.getElementById('importBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -1246,14 +1358,14 @@ function renderDashboard(){
   const stopCount = allClients.filter(c=>c.stopPending).length;
   const surrCount = allClients.filter(c=>c.surrPending).length;
 
-  const statClick = 'cursor:pointer;transition:transform .15s,box-shadow .15s;';
-  const statHover = `onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(26,26,46,.13)'" onmouseout="this.style.transform='';this.style.boxShadow=''"`;
+  const statClick='cursor:pointer;transition:transform .15s,box-shadow .15s;';
+  const statHover=`onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 16px rgba(26,26,46,.13)'" onmouseout="this.style.transform='';this.style.boxShadow=''"`;
   document.getElementById('statsRow').innerHTML=`
-    <div class="stat-box" style="border-color:var(--blue);${statClick}" ${statHover} onclick="document.getElementById('dashboardSection').scrollIntoView({behavior:'smooth'});setTimeout(()=>document.getElementById('apptSection').scrollIntoView({behavior:'smooth',block:'start'}),300)" title="View this week's appointments">
+    <div class="stat-box" style="border-color:var(--blue);${statClick}" ${statHover} onclick="document.getElementById('apptSection').scrollIntoView({behavior:'smooth',block:'start'})" title="View appointments">
       <div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
     <div class="stat-box alert" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'})" title="View pending paperwork">
       <div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
-    <div class="stat-box" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.querySelectorAll('.pipeline-tab')[0]?.click(),100)" title="View Stop PACs">
+    <div class="stat-box" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'})" title="View Stop PACs">
       <div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
     <div class="stat-box" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'})" title="View Surrenders">
       <div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
@@ -2734,6 +2846,483 @@ function switchScript(type) {
 function closeScript() {
   document.getElementById('scriptOverlay').classList.remove('visible');
   currentScriptClient = null;
+}
+
+// ── IMPORT ARCHIVE ────────────────────────────────────────────────────────────
+const WORKER_URL = 'https://michelles-desk-api.michelle-cb4.workers.dev';
+
+// Column map for Clients tab (row 2 = headers, data starts row 3)
+// Columns A-BK (1-63), 0-indexed for array building
+// A=status(blank), B=firstName, C=lastName, D=lastName(dup-blank), E=address,
+// F=city, G=county, H=state, I=zip, J=leadDate, K=phone, L=dob, M=age,
+// N=tobacco, O=ssType, P=bank, Q=checkDate, R=existingCompany, S=existingFace,
+// T=existingPremium, U=existingPolicy, V=wholeterm, W=gradedlevel, X=tnt,
+// Y=cashValue, Z=rpuAmt, AA=policyLoan, AB=effectiveDateOld, AC=cancer,
+// AD=heartAttack, AE=stroke, AF=copd, AG=diabetes, AH=mental, AI=ssn,
+// AJ=height, AK=weight, AL=newCompany, AM=newFace, AN=newPremium,
+// AO=apptDate, AP=apptTime, AQ=apptNotes, AR=effectiveDate, AS=payDate,
+// AT=payAmt, AU=tyCard, AV=stopPacDue, AW=stopPacSent, AX=cxDue,
+// AY=cxSent, AZ=surrDue, BA=surrSent, BB=other, BC=benName, BD=benRel,
+// BE=benDOB, BF=benAddress, BG=benPhone, BH=carrierFax, BI=carrierEmail,
+// BJ=paymentInfo, BK=notes — wait, sheet goes to BK so that's 63 cols
+
+function buildClientRow(d) {
+  // 63 columns, A through BK
+  return [
+    '',               // A  status
+    d.firstName||'',  // B  First Name
+    d.lastName||'',   // C  Last Name
+    '',               // D  Last Name (duplicate col in sheet — leave blank)
+    d.address||'',    // E  Address
+    d.city||'',       // F  City
+    d.county||'',     // G  County
+    d.state||'IL',    // H  State
+    d.zip||'',        // I  Zip
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}), // J Lead Date
+    d.phone||'',      // K  Phone Number
+    d.dob||'',        // L  DOB
+    d.age||'',        // M  AGE
+    d.tobacco||'',    // N  TOB
+    d.ssType||'',     // O  SS
+    d.bank||'',       // P  Bank
+    d.checkDate||'',  // Q  CHECK DATE
+    d.existingCompany||'', // R Current COMPANY NAME
+    d.existingFace||'',    // S Face Amount
+    d.existingPremium||'', // T Premium
+    d.existingPolicy||'',  // U Policy Number
+    '',               // V  Whole/Term
+    '',               // W  Graded/Level
+    '',               // X  T/NT
+    d.cashValue||'',  // Y  Cash Value
+    '',               // Z  RPU Amt
+    '',               // AA Policy Loan
+    '',               // AB Eff. Date (old coverage)
+    d.cancer||'',     // AC Cancer
+    d.heartAttack||'',// AD Heart Attack
+    d.stroke||'',     // AE Stroke
+    d.copd||'',       // AF COPD
+    d.diabetes||'',   // AG Diabetes
+    d.mental||'',     // AH Mental
+    '',               // AI SSN (never import SSN)
+    d.height||'',     // AJ Height
+    d.weight||'',     // AK Weight
+    d.newCompany||'', // AL Qualifier (new company)
+    d.newFace||'',    // AM Face Amount (new)
+    d.newPremium||'', // AN Premium (new)
+    d.apptDate||'',   // AO Appt Date
+    '',               // AP Appt Time
+    '',               // AQ Appt Notes
+    d.effectiveDate||'', // AR Effective Date
+    '',               // AS Pay Date
+    '',               // AT Pay Amt
+    '',               // AU TY Card
+    '',               // AV Stop PAC Due
+    '',               // AW Stop PAC Sent
+    '',               // AX CX Due
+    '',               // AY CX Sent
+    '',               // AZ Surrender Due
+    '',               // BA Surrender Sent
+    '',               // BB Other
+    d.beneficiary||'',// BC Beneficiary Name
+    '',               // BD Beneficiary Relationship
+    '',               // BE Beneficiary DOB
+    '',               // BF Beneficiary Address
+    '',               // BG Beneficiary Phone
+    '',               // BH Carrier Fax
+    '',               // BI Carrier Email
+    '',               // BJ Payment Info
+    d.notes||([d.healthHistory,d.medications].filter(Boolean).join(' | '))||'', // BK Notes
+  ];
+}
+
+function buildLeadRow(d) {
+  // Leads tab: Status, First, Last, Spouse, Spouse Age, Address, City, State, Zip, County, Lead Date, Phone, DOB, Age
+  return [
+    '',
+    d.firstName||'',
+    d.spouseName||'',
+    d.lastName||'',
+    d.address||'',
+    d.city||'',
+    d.county||'',
+    d.state||'IL',
+    d.zip||'',
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}),
+    d.phone||'',
+    d.dob||'',
+    d.age||'',
+  ];
+}
+
+let impLeadsArr = [], impClientsArr = [], impSkippedArr = [], impRejectedArr = [], impAllResults = [];
+let impProcessing = false;
+const IMP_MAX_SIZE = 4 * 1024 * 1024; // 4MB
+
+function openImporter() {
+  document.getElementById('importSection').classList.add('visible');
+  document.getElementById('importSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeImporter() {
+  document.getElementById('importSection').classList.remove('visible');
+  resetImporter();
+}
+function resetImporter() {
+  impLeadsArr=[]; impClientsArr=[]; impSkippedArr=[]; impRejectedArr=[]; impAllResults=[];
+  impProcessing = false;
+  document.getElementById('importStats').style.display='none';
+  document.getElementById('importProgress').classList.remove('visible');
+  document.getElementById('importQueue').classList.remove('visible');
+  document.getElementById('importLog').classList.remove('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+  document.getElementById('importQueue').innerHTML='';
+  document.getElementById('importLog').innerHTML='';
+  document.getElementById('importFileInput').value='';
+}
+
+function importHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('importDrop').classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+function importHandleFiles(fl) {
+  const files = Array.from(fl).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+
+async function importProcessFiles(files) {
+  if (impProcessing) return;
+  impProcessing = true;
+
+  // Pre-sort: flag oversized files immediately
+  const toProcess = [], oversized = [];
+  files.forEach(f => {
+    if (f.size > IMP_MAX_SIZE) oversized.push(f);
+    else toProcess.push(f);
+  });
+
+  // Add oversized to rejected list right away
+  oversized.forEach(f => {
+    const mb = (f.size/1024/1024).toFixed(1);
+    impRejectedArr.push({fileName:f.name, fileSize:mb+'MB', reason:`File too large (${mb}MB) — split in PDF Expert into smaller chunks`});
+  });
+
+  document.getElementById('importStats').style.display='flex';
+  document.getElementById('importProgress').classList.add('visible');
+  document.getElementById('importQueue').classList.add('visible');
+  document.getElementById('importLog').classList.add('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+
+  // Build queue — show oversized as pre-rejected
+  const allForDisplay = [...oversized.map(f=>({...f,_oversize:true})), ...toProcess];
+  document.getElementById('importQueue').innerHTML = files.map((f,i)=>{
+    const over = f.size > IMP_MAX_SIZE;
+    const mb = (f.size/1024/1024).toFixed(1);
+    return `<div class="iq-item"><span class="iq-name">📄 ${f.name} <span style="color:var(--muted);font-size:10px">${mb}MB</span></span><span class="iq-status ${over?'iq-err':'iq-pending'}" id="iq_${i}">${over?'✕ Too large — needs splitting':'Pending'}</span></div>`;
+  }).join('');
+
+  if (oversized.length) impLog(`⚠ ${oversized.length} file(s) too large (>4MB) — added to rejected list`, 'err');
+  impUpdateStats();
+  impLog(`Batch started: ${toProcess.length} files to process`, 'ok');
+
+  // Map original index to toProcess index for queue display
+  let qIdx = 0;
+  for (let i=0; i<files.length; i++) {
+    if (files[i].size > IMP_MAX_SIZE) continue;
+    const file = files[i];
+    impUpdateProgress(qIdx, toProcess.length, file.name);
+    setIQStatus(i,'processing','⏳ Reading…');
+    try {
+      const result = await impProcessOnePDF(file);
+      impAllResults.push(result);
+      if (result.type==='lead') {
+        impLeadsArr.push(result);
+        setIQStatus(i,'lead',`📋 Lead — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`LEAD: ${result.data.firstName} ${result.data.lastName} · ${result.data.city}`, 'lead');
+      } else if (result.type==='client') {
+        impClientsArr.push(result);
+        setIQStatus(i,'client',`✓ Client — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`CLIENT: ${result.data.firstName} ${result.data.lastName} · ${result.data.city} · ${result.data.newCompany||result.data.existingCompany||''}`, 'client');
+      } else if (result.type==='action') {
+        // Stop PAC / CX / Surrender — captured as pending action flag
+        impSkippedArr.push(result);
+        setIQStatus(i,'skip',`📋 Action — ${result.data.firstName} ${result.data.lastName} (${result.actionType})`);
+        impLog(`ACTION: ${result.data.firstName} ${result.data.lastName} · ${result.actionType}`, 'skip');
+      } else {
+        impSkippedArr.push(result);
+        setIQStatus(i,'skip',`— ${result.reason||'Skipped'}`);
+        impLog(`SKIP: ${file.name} — ${result.reason||''}`, 'skip');
+      }
+    } catch(err) {
+      const errMsg = err.message||'Unknown error';
+      const isSize = errMsg.includes('400') || errMsg.includes('413') || errMsg.includes('429');
+      const mb = (file.size/1024/1024).toFixed(1);
+      impRejectedArr.push({fileName:file.name, fileSize:mb+'MB', reason: isSize?`API error (${errMsg}) — try splitting this file`:`Error: ${errMsg}`});
+      setIQStatus(i,'err',`✕ ${isSize?'API error — needs splitting':'Error'}`);
+      impLog(`ERROR: ${file.name} — ${errMsg}`, 'err');
+      impAllResults.push({type:'error',file:file.name,reason:errMsg});
+    }
+    qIdx++;
+    impUpdateStats();
+    if (qIdx < toProcess.length) await new Promise(r=>setTimeout(r,500));
+  }
+
+  impUpdateProgress(toProcess.length, toProcess.length, 'Complete');
+  impLog(`Done — ${impLeadsArr.length} leads, ${impClientsArr.length} clients, ${impSkippedArr.length} skipped, ${impRejectedArr.length} need splitting`, 'ok');
+  impProcessing = false;
+
+  document.getElementById('importResultsArea').style.display='block';
+  document.getElementById('importActions').style.display='flex';
+  document.getElementById('irtLeads').textContent = impLeadsArr.length;
+  document.getElementById('irtClients').textContent = impClientsArr.length;
+  document.getElementById('irtSkipped').textContent = impSkippedArr.length;
+  document.getElementById('pushLeadsBtn').disabled = impLeadsArr.length === 0;
+  document.getElementById('pushClientsBtn').disabled = impClientsArr.length === 0;
+  // Actions tab count
+  const actionCount = impSkippedArr.filter(r=>r.type==='action').length;
+  const actTab = document.getElementById('irtActions');
+  if (actTab) actTab.textContent = actionCount;
+  // Rejected tab + download button
+  const rejTab = document.getElementById('irtRejected');
+  if (rejTab && impRejectedArr.length) {
+    rejTab.style.display='';
+    rejTab.textContent = `✕ Needs Splitting (${impRejectedArr.length})`;
+  }
+  const dlBtn = document.getElementById('dlRejectedBtn');
+  if (dlBtn) dlBtn.style.display = impRejectedArr.length ? '' : 'none';
+  showImportTab(impLeadsArr.length ? 'leads' : impClientsArr.length ? 'clients' : 'actions', document.querySelector('.irt'));
+}
+
+async function impProcessOnePDF(file) {
+  const base64 = await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+
+  const prompt = `You are reading an insurance document for Illinois Senior Benefit Services (ISBS).
+Analyze ALL pages carefully. Return ONLY valid JSON, no markdown, no explanation.
+
+CRITICAL RULE: If ANY page contains a filled-in T-2 card, B-26 card, or handwritten intake sheet with prospect data — ALWAYS extract that data, even if other pages contain Stop PAC or cancellation forms. Never skip a file just because it also has admin forms.
+
+DOCUMENT TYPE RULES:
+- "T2_lead" = T-2 or B-26 mailer card with prospect handwriting → type: "lead"
+- "intake_client" = Handwritten agent notepad worksheet (has DOB, bank, SSN area, health history, medications, quotes, coverage placed) → type: "client"
+- "combo" = Has BOTH a lead/intake card AND Stop PAC or admin forms → type: "client" or "lead" based on richest data present. EXTRACT the prospect data, note the admin forms in actionType.
+- "stop_pac_only" = ONLY contains Stop PAC / CX / Surrender / Cancel forms with NO lead card or intake sheet → type: "action"
+- "beneficiary" = ONLY beneficiary change forms, no lead data → type: "skip"
+- "medicare_soa" = Medicare Scope of Appointment forms → type: "skip"
+- "drivers_license" = ID scan only, no lead data → type: "skip"
+- "blank" = Blank templates with zero prospect data filled in → type: "skip"
+- "unrelated" = Tax forms, STAX-1, notes, etc. → type: "skip"
+
+FOR "action" TYPE (stop_pac_only):
+- Extract the client name and policy info from the form
+- Set actionType to: "Stop PAC" or "CX Policy" or "Surrender" or "Cash-In"
+- This lets us flag the client as having a pending action
+
+IMPORTANT RULES:
+- "Assigned To: Scott, Wayne" and "Assigned To: Scott, Michelle" = same agency, always import
+- County is in the T-2 header line e.g. "Williamson, IL" = Williamson County
+- For health history extract Cancer/Heart Attack/Stroke/COPD/Diabetes/Mental as yes/no
+- NEVER extract full SSN
+- Driver license pages: use to confirm DOB/name, contributes to combo type
+- For combo files: intake sheet data wins over T-2 card data
+
+Return ONLY this exact JSON:
+{
+  "docType": "T2_lead|intake_client|combo|stop_pac_only|beneficiary|medicare_soa|drivers_license|blank|unrelated",
+  "type": "lead|client|action|skip",
+  "actionType": "",
+  "reason": "",
+  "data": {
+    "firstName": "", "lastName": "", "spouseName": "", "spouseAge": "",
+    "address": "", "city": "", "state": "IL", "zip": "", "county": "",
+    "phone": "", "age": "", "dob": "", "email": "",
+    "tobacco": "", "ssType": "", "bank": "", "checkDate": "",
+    "height": "", "weight": "",
+    "existingCompany": "", "existingPolicy": "", "existingFace": "", "existingPremium": "",
+    "cashValue": "",
+    "newCompany": "", "newFace": "", "newPremium": "", "effectiveDate": "",
+    "apptDate": "", "beneficiary": "",
+    "cancer": "", "heartAttack": "", "stroke": "", "copd": "", "diabetes": "", "mental": "",
+    "healthHistory": "", "medications": "", "notes": ""
+  }
+}`;
+
+  const resp = await fetch(WORKER_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1500,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:prompt}
+      ]}]
+    })
+  });
+  if (!resp.ok) throw new Error(`API ${resp.status}`);
+  const apiData = await resp.json();
+  const raw = apiData.content[0].text.trim().replace(/```json|```/g,'').trim();
+  const parsed = JSON.parse(raw);
+
+  // Normalize types
+  if (['beneficiary','medicare_soa','drivers_license','blank','unrelated'].includes(parsed.docType)) {
+    parsed.type='skip'; parsed.reason=parsed.reason||parsed.docType;
+  }
+  if (parsed.docType==='stop_pac_only') parsed.type='action';
+  if (parsed.docType==='combo'||parsed.docType==='intake_client') parsed.type='client';
+  if (parsed.docType==='T2_lead') parsed.type='lead';
+  parsed.fileName = file.name;
+  return parsed;
+}
+
+// Push to Google Sheet
+async function pushToSheet(type) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const arr = type==='leads' ? impLeadsArr : impClientsArr;
+  if (!arr.length) { toast('Nothing to push'); return; }
+
+  const btn = document.getElementById(type==='leads'?'pushLeadsBtn':'pushClientsBtn');
+  btn.disabled=true; btn.textContent='Pushing…';
+
+  const tab = type==='leads' ? 'Leads' : SHEET_TAB;
+  const rows = arr.map(r => type==='leads' ? buildLeadRow(r.data) : buildClientRow(r.data));
+
+  // Append in chunks of 50 to avoid request size limits
+  const chunkSize = 50;
+  let pushed = 0;
+  try {
+    for (let i=0; i<rows.length; i+=chunkSize) {
+      const chunk = rows.slice(i, i+chunkSize);
+      const range = `${tab}!A:BK`;
+      const resp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method:'POST',
+          headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
+          body:JSON.stringify({values:chunk})
+        }
+      );
+      if (resp.status===401){accessToken=null;window.location.href=buildAuthUrl();return;}
+      if (!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${resp.status}`);}
+      pushed += chunk.length;
+      btn.textContent = `Pushing… ${pushed}/${rows.length}`;
+      if (i+chunkSize < rows.length) await new Promise(r=>setTimeout(r,300));
+    }
+    btn.textContent = `✓ ${pushed} ${type} pushed!`;
+    btn.style.background = 'var(--green)';
+    toast(`✓ ${pushed} ${type} added to Google Sheet`);
+    // Reload data to reflect new entries
+    setTimeout(()=>loadFromSheets(), 1500);
+  } catch(err) {
+    btn.disabled=false;
+    btn.textContent = type==='leads'?'📋 Push Leads to Sheet':'✓ Push Clients to Sheet';
+    toast(`Could not push — ${err.message}`);
+    console.error(err);
+  }
+}
+
+function showImportTab(tab, btn) {
+  document.querySelectorAll('.irt').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const el = document.getElementById('importTableContent');
+
+  if (tab==='rejected') {
+    if (!impRejectedArr.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No rejected files</div>';return;}
+    el.innerHTML=`<table class="import-table">
+      <tr><th>File</th><th>Size</th><th>Reason</th></tr>
+      ${impRejectedArr.map(r=>`<tr>
+        <td style="color:var(--rust);font-weight:600">${r.fileName||''}</td>
+        <td>${r.fileSize||'—'}</td>
+        <td style="color:var(--muted)">${r.reason||''}</td>
+      </tr>`).join('')}
+    </table>`;
+    return;
+  }
+
+  if (tab==='actions') {
+    const actions = impSkippedArr.filter(r=>r.type==='action');
+    if (!actions.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No action forms found</div>';return;}
+    el.innerHTML=`<table class="import-table">
+      <tr><th>Name</th><th>Action Type</th><th>Company</th><th>Policy</th><th>File</th></tr>
+      ${actions.map(r=>{
+        const d=r.data||{};
+        return `<tr>
+          <td style="font-weight:600">${[d.firstName,d.lastName].filter(Boolean).join(' ')||'—'}</td>
+          <td><span style="background:var(--rust-light);color:var(--rust);padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">${r.actionType||'Stop PAC'}</span></td>
+          <td>${d.existingCompany||'—'}</td>
+          <td>${d.existingPolicy||'—'}</td>
+          <td style="color:var(--muted);font-size:11px">${(r.fileName||'').replace('.pdf','')}</td>
+        </tr>`;
+      }).join('')}
+    </table>`;
+    return;
+  }
+
+  const data = tab==='leads'?impLeadsArr:tab==='clients'?impClientsArr:impSkippedArr.filter(r=>r.type!=='action');
+  if (!data.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Nothing here</div>';return;}
+  if (tab==='skipped'){
+    el.innerHTML=`<table class="import-table"><tr><th>File</th><th>Reason</th></tr>${data.map(r=>`<tr><td>${(r.fileName||r.file||'').replace('.pdf','')}</td><td>${r.reason||r.docType||''}</td></tr>`).join('')}</table>`;
+    return;
+  }
+  const cols = tab==='leads'?['Name','City','County','Phone','Age']:['Name','City','County','Phone','DOB','Company'];
+  el.innerHTML=`<table class="import-table"><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${data.map(r=>{
+    const d=r.data||{};
+    const name=[d.firstName,d.lastName].filter(Boolean).join(' ')||'—';
+    if(tab==='leads') return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.age||'—'}</td></tr>`;
+    return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.dob||'—'}</td><td>${d.newCompany||d.existingCompany||'—'}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+function impUpdateStats(){
+  document.getElementById('impTotal').textContent=impAllResults.length;
+  document.getElementById('impLeads').textContent=impLeadsArr.length;
+  document.getElementById('impClients').textContent=impClientsArr.length;
+  document.getElementById('impSkipped').textContent=impSkippedArr.length;
+  document.getElementById('impErrors').textContent=impRejectedArr.length;
+}
+
+function downloadRejectedList() {
+  if (!impRejectedArr.length) { alert('No rejected files to export.'); return; }
+  const lines = [
+    'ISBS Archive Import — Files Needing Attention',
+    `Generated: ${new Date().toLocaleString()}`,
+    `Total: ${impRejectedArr.length} files`,
+    '',
+    'FILE NAME | SIZE | REASON',
+    '--------------------------------------------------------------',
+    ...impRejectedArr.map(r => `${r.fileName} | ${r.fileSize||'?'} | ${r.reason}`)
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`ISBS_needs_splitting_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); URL.revokeObjectURL(url);
+}
+function impUpdateProgress(done,total,label){
+  const pct=Math.round((done/total)*100);
+  document.getElementById('impProgFill').style.width=pct+'%';
+  document.getElementById('impProgPct').textContent=pct+'%';
+  document.getElementById('impProgLabel').textContent=done>=total?`✓ Complete — ${total} files`:(`Processing ${done+1} of ${total}: ${label}`);
+}
+function setIQStatus(idx,cls,text){
+  const el=document.getElementById(`iq_${idx}`);
+  if(!el)return;
+  el.className=`iq-status iq-${cls}`;
+  el.textContent=text;
+}
+function impLog(msg,cls=''){
+  const log=document.getElementById('importLog');
+  const line=document.createElement('div');
+  line.style.color=cls==='ok'?'var(--green)':cls==='lead'?'var(--blue)':cls==='client'?'var(--gold)':cls==='err'?'var(--rust)':'var(--muted)';
+  line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
