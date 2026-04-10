@@ -749,7 +749,7 @@ let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0
 // ── REDIRECT-BASED OAUTH ─────────────────────────────────────────────────────
 let tokenExpiry = null;
 
-function buildAuthUrl(prompt='consent') {
+function buildAuthUrl() {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: window.location.href.split('?')[0].split('#')[0],
@@ -757,57 +757,48 @@ function buildAuthUrl(prompt='consent') {
     scope: SCOPES,
     include_granted_scopes: 'true',
     state: 'signin',
-    prompt: prompt,
+    prompt: 'consent',
   });
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 }
 
 window.signIn = function() {
-  window.location.href = buildAuthUrl('consent');
+  window.location.href = buildAuthUrl();
 };
 
 // Check for token in URL hash on page load (redirect return)
 function checkAuthReturn() {
   const hash = window.location.hash;
-  if (hash && hash.includes('access_token')) {
-    const params = new URLSearchParams(hash.substring(1));
-    const token = params.get('access_token');
-    const expiresIn = parseInt(params.get('expires_in') || '3600');
-    if (token) {
-      accessToken = token;
-      tokenExpiry = Date.now() + (expiresIn - 120) * 1000;
-      // Store in sessionStorage so refresh doesn't lose it
-      sessionStorage.setItem('m_token', token);
-      sessionStorage.setItem('m_token_exp', tokenExpiry);
-      // Clean URL
-      history.replaceState(null, '', window.location.pathname);
-      document.getElementById('signinPrompt').classList.add('hidden');
-      scheduleTokenRefresh(expiresIn - 120);
-      loadFromSheets();
-      return true;
-    }
-  }
-  return false;
+  if (!hash || !hash.includes('access_token')) return false;
+
+  const params = new URLSearchParams(hash.substring(1));
+  const token = params.get('access_token');
+  if (!token) return false;
+
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
+  accessToken = token;
+  tokenExpiry = Date.now() + (expiresIn - 120) * 1000;
+
+  sessionStorage.setItem('m_token', token);
+  sessionStorage.setItem('m_token_exp', String(tokenExpiry));
+
+  // Clean the URL hash so it doesn't persist
+  history.replaceState(null, '', window.location.pathname);
+  document.getElementById('signinPrompt').classList.add('hidden');
+  loadFromSheets();
+  return true;
 }
 
-function scheduleTokenRefresh(secondsUntilRefresh) {
-  setTimeout(() => {
-    silentRefresh();
-  }, secondsUntilRefresh * 1000);
-}
-
-function silentRefresh() {
-  // Redirect with prompt=none — re-auths without showing login screen
-  // if she's still signed into Google
-  window.location.href = buildAuthUrl('none');
-}
+// No silent refresh — token lasts 1 hour, then user signs in again
+// This avoids redirect loops entirely
 
 // Check token before any API call
 function ensureValidToken() {
   if (!accessToken) return false;
   if (tokenExpiry && Date.now() > tokenExpiry) {
     accessToken = null;
-    window.location.href = buildAuthUrl('none');
+    sessionStorage.removeItem('m_token');
+    sessionStorage.removeItem('m_token_exp');
     return false;
   }
   return true;
@@ -830,14 +821,14 @@ window.addEventListener('load', () => {
 
 // ── LOAD ──────────────────────────────────────────────────────────────────────
 async function loadFromSheets() {
-  if (!accessToken) { window.location.href = buildAuthUrl(); return; }
+  if (!accessToken) { document.getElementById('signinPrompt').classList.remove('hidden'); return; }
   showLoading(true); hideError();
   try {
     const resp = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_TAB)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); return; }
+    if (resp.status === 401) { accessToken = null; sessionStorage.removeItem('m_token'); sessionStorage.removeItem('m_token_exp'); document.getElementById('signinPrompt').classList.remove('hidden'); document.getElementById('dashboardSection').classList.remove('visible'); document.getElementById('searchSection').classList.remove('visible'); toast('Session expired — please sign in again'); return; }
     if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
     const data = await resp.json();
     parseRows(data.values || []);
@@ -968,7 +959,7 @@ async function writeCell(row, colIdx, value) {
       body: JSON.stringify({ values: [[value]] }),
     }
   );
-  if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); throw new Error('auth'); }
+  if (resp.status === 401) { accessToken = null; sessionStorage.removeItem('m_token'); sessionStorage.removeItem('m_token_exp'); toast('Session expired — please sign in again'); throw new Error('auth'); }
   if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
 }
 
@@ -3243,7 +3234,7 @@ async function pushToSheet(type) {
           body:JSON.stringify({values:chunk})
         }
       );
-      if (resp.status===401){accessToken=null;window.location.href=buildAuthUrl();return;}
+      if (resp.status===401){accessToken=null;sessionStorage.removeItem('m_token');sessionStorage.removeItem('m_token_exp');toast('Session expired — please sign in again');return;}
       if (!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${resp.status}`);}
       pushed += chunk.length;
       btn.textContent = `Pushing… ${pushed}/${rows.length}`;
