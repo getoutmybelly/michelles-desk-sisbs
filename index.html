@@ -1278,7 +1278,7 @@ function genStopPAC(){
   const W=612,M=72;let y=M;
   doc.setFillColor(26,26,46);doc.rect(0,0,W,78,'F');
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(20);
-  doc.text('Stop PAC – Send a Bill',M,36);
+  doc.text('Stop PAC - Send a Bill',M,36);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(184,146,58);
   doc.text(`Generated ${new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}`,M,56);
   y=106;doc.setTextColor(26,26,46);doc.setFontSize(12);doc.setFont('helvetica','normal');
@@ -2050,12 +2050,12 @@ function genBirthdayLetter(key, age) {
   doc.text(todayStr, M, y); y+=24;
 
   y+=10;
-  doc.setFont('helvetica','bold'); doc.text(c.fullName, M, y); y+=16;
+  doc.setFont('helvetica','bold'); doc.text(fmtName(c.firstName) + ' ' + fmtName(c.lastName), M, y); y+=16;
   doc.setFont('helvetica','normal');
-  if (c.address) { doc.text(c.address, M, y); y+=16; }
-  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y+=32;
+  if (c.address) { doc.text(toProperCase(c.address), M, y); y+=16; }
+  doc.text(`${toProperCase(c.city)}, ${c.state} ${c.zip}`, M, y); y+=32;
 
-  doc.text(`Dear ${c.firstName},`, M, y); y+=22;
+  doc.text(`Dear ${fmtName(c.firstName)},`, M, y); y+=22;
 
   const paras = [
     `I wanted to reach out a little ahead of your ${age}th birthday to wish you well — and to check in as your benefit coordinator.`,
@@ -2106,10 +2106,24 @@ function genMedicareLetter(key) {
   }
   if (!group) { toast('Client not found: ' + key); return; }
   const c = group[group.length-1];
+
+  // Determine if existing client (has policy) or cold T65 contact
+  const isExistingClient = !!(c.existingPolicy || c.newCompany || c.existingCompany);
+  buildMedicareLetter(c, isExistingClient);
+}
+
+function buildMedicareLetter(c, isExistingClient) {
   const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72,contentW=W-M*2; let y=M;
 
-  // Green header for Medicare
+  // Proper case names — fixes ALL CAPS from sheet
+  const firstName = fmtName(c.firstName);
+  const lastName  = fmtName(c.lastName);
+  const fullName  = [firstName, lastName].filter(Boolean).join(' ');
+  const address   = c.address ? toProperCase(c.address) : '';
+  const city      = c.city    ? toProperCase(c.city)    : '';
+
+  // Header
   doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
   addPhotoToLetter(doc, W, M);
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
@@ -2120,24 +2134,38 @@ function genMedicareLetter(key) {
   doc.setDrawColor(184,146,58); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
 
   y=106; doc.setTextColor(26,26,46);
-  const todayStr2 = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const dateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text(todayStr2, M, y); y+=24;
+  doc.text(dateStr, M, y); y+=24;
 
   y+=10;
-  doc.setFont('helvetica','bold'); doc.text(c.fullName, M, y); y+=16;
+  doc.setFont('helvetica','bold'); doc.text(fullName, M, y); y+=16;
   doc.setFont('helvetica','normal');
-  if (c.address) { doc.text(c.address, M, y); y+=16; }
-  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y+=32;
+  if (address) { doc.text(address, M, y); y+=16; }
+  if (city || c.state || c.zip) {
+    doc.text([city, c.state, c.zip].filter(Boolean).join(', '), M, y); y+=32;
+  } else { y+=16; }
 
-  doc.text(`Dear ${c.firstName},`, M, y); y+=22;
+  doc.text(`Dear ${firstName},`, M, y); y+=22;
 
-  const paras = [
-    `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. You are about to become eligible for Medicare.`,
-    `Here's what you need to know: Medicare has a 7-month Special Enrollment Period that begins 3 months before your 65th birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage. Acting early gives you the best options and the most time to make the right choice.`,
-    `Navigating Medicare can feel overwhelming — there are Parts A, B, C, and D, Supplement plans, Advantage plans, and more. My job is to simplify all of that for you, at no cost and with no obligation. I help people in your community understand their Medicare options every single day.`,
-    `I'd love to sit down with you before your birthday and walk through everything together. We'll look at what Medicare covers, what it doesn't, and what — if anything — makes sense to add to make sure you're fully protected.`,
-  ];
+  // Two versions of body copy
+  let paras;
+  if (isExistingClient) {
+    const carrier = fmtName(c.existingCompany || c.newCompany || c.displayCompany || 'your life insurance');
+    paras = [
+      `You already trust me with your ${carrier} coverage, and I want to make sure your Medicare transition goes just as smoothly.`,
+      `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. Medicare has a 7-month Special Enrollment Period that begins 3 months before your birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage that are permanent.`,
+      `There are Parts A, B, C, and D to sort through — plus Supplement plans, Advantage plans, drug coverage, and more. I've helped a lot of your neighbors navigate this same decision, and my job is to make sure you end up in the right plan at the right price, with no pressure and no obligation.`,
+      `Because we already have a relationship, I'd love to get ahead of this together before your birthday arrives. A short visit is all it takes — I'll walk you through everything and answer every question you have.`,
+    ];
+  } else {
+    paras = [
+      `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. You are about to become eligible for Medicare.`,
+      `Here's what you need to know: Medicare has a 7-month Special Enrollment Period that begins 3 months before your 65th birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage. These penalties are permanent — they follow you for life.`,
+      `I'm a licensed benefit coordinator here in Southern Illinois. I've helped hundreds of people in this area navigate Medicare without the confusion, the pressure, or the fine print. My service costs you nothing, and there is no obligation to change anything.`,
+      `I'd love to sit down with you before your birthday and walk through everything together — what Medicare covers, what it doesn't, and what makes sense for your specific situation.`,
+    ];
+  }
 
   doc.setFontSize(11);
   paras.forEach(para => {
@@ -2146,20 +2174,21 @@ function genMedicareLetter(key) {
     y += lines.length*15+14;
   });
 
-  // Green CTA box
+  // CTA box
   y+=4;
-  doc.setFillColor(253,246,232); doc.setDrawColor(184,146,58); doc.setLineWidth(1.5);
+  doc.setFillColor(232,245,238); doc.setDrawColor(45,122,79); doc.setLineWidth(1.5);
   doc.roundedRect(M, y, contentW, 68, 4, 4, 'FD');
   doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(10);
-  doc.text('⏰ Don\'t miss your Medicare enrollment window.', W/2, y+18, {align:'center'});
-  doc.setFont('helvetica','normal'); doc.setTextColor(122,117,112); doc.setFontSize(10);
-  doc.text('Call or text me today — let\'s get you prepared:', W/2, y+33, {align:'center'});
+  doc.text('Don't miss your Medicare enrollment window.', W/2, y+18, {align:'center'});
+  doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80); doc.setFontSize(10);
+  doc.text(isExistingClient ? 'Call or text me — let's take care of this together:' : 'Call or text me today — let's get you prepared:', W/2, y+33, {align:'center'});
   doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(18);
   doc.text('618-510-9143', W/2, y+52, {align:'center'});
   y+=82;
 
+  // Closing
   doc.setTextColor(26,26,46); doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text('With warmest regards,', M, y); y+=32;
+  doc.text(isExistingClient ? 'Looking forward to seeing you,' : 'Here for you,', M, y); y+=32;
   doc.setFont('helvetica','bold'); doc.text('Michelle Scott', M, y); y+=16;
   doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(122,117,112);
   doc.text('Licensed Insurance Benefit Coordinator', M, y); y+=14;
@@ -2170,7 +2199,7 @@ function genMedicareLetter(key) {
   doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
 
-  doc.save(`Medicare_Letter_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  doc.save(`Medicare_Letter_${(c.lastName||c.firstName||'client').replace(/\s/g,'_')}_${todayStr()}.pdf`);
   toast('✓ Medicare letter ready');
 }
 
@@ -2406,7 +2435,7 @@ function genBriefingPDF(key) {
     group.slice().reverse().forEach((v, i) => {
       const vDate = v.leadDate || v.apptDate || `Visit ${visitCount-i}`;
       doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
-      doc.text(`${i===0?'★ ':''}${vDate}${v.displayCompany?' · '+v.displayCompany:''}`, M, y); y += 12;
+      doc.text(`${i===0?'* ':''}${vDate}${v.displayCompany?' · '+v.displayCompany:''}`, M, y); y += 12;
       if (v.notes) {
         doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(122,117,112);
         const nl = doc.splitTextToSize(v.notes, contentW-10);
@@ -2486,7 +2515,7 @@ async function genAnniversaryLetter(key, yearsOld) {
 
   // Salutation
   doc.setFontSize(11);
-  doc.text(`Dear ${c.firstName},`, M, y); y += 22;
+  doc.text(`Dear ${fmtName(c.firstName)},`, M, y); y += 22;
 
   // Body paragraphs
   const yearStr = yearsOld === 1 ? 'one year' : `${yearsOld} years`;
@@ -2798,8 +2827,14 @@ let currentScriptClient = null;
 let currentScriptType = null;
 
 function openCallScript(key) {
-  const group = clientGroups[key];
-  if (!group) return;
+  let group = clientGroups[key];
+  if (!group) {
+    // Try case-insensitive fallback
+    const lkey = key.toLowerCase().trim();
+    const found = Object.keys(clientGroups).find(k => k.toLowerCase().trim() === lkey);
+    if (found) group = clientGroups[found];
+  }
+  if (!group) { toast('Client not found'); return; }
   const c = group[group.length-1];
   currentScriptClient = c;
   currentScriptType = detectScriptType(c);
@@ -3455,6 +3490,17 @@ function timeSince(date) {
   return Math.floor(s/86400) + 'd ago';
 }
 
+
+function toProperCase(str) {
+  if (!str) return '';
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+function fmtName(str) {
+  // Handles ALL CAPS names from sheet (e.g. "CATHY FRYER" -> "Cathy Fryer")
+  if (!str) return '';
+  if (str === str.toUpperCase()) return toProperCase(str);
+  return str;
+}
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
 function fmtPhone(v){const s=cl(v);if(!s)return'';const d=s.replace(/\D/g,'');if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;return s;}
