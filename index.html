@@ -1946,48 +1946,79 @@ function renderAnniversaries() {
 
 function renderBirthdaySignals() {
   var today = new Date(); today.setHours(0,0,0,0);
-  var signals = [];
 
+  // Deduplicate by fullName — keep the record with the most data
+  var seenNames = {};
+  var dedupedClients = [];
   allClients.forEach(function(c) {
+    var nameKey = c.fullName.toLowerCase().trim();
+    if (!seenNames[nameKey]) {
+      seenNames[nameKey] = c;
+      dedupedClients.push(c);
+    } else {
+      // Keep the one with more data (has existing policy or phone)
+      var existing = seenNames[nameKey];
+      if (!existing.phone && c.phone) { seenNames[nameKey] = c; }
+    }
+  });
+
+  var upcomingMedicare = [], recentlyAgedIn = [], birthdaySignals = [];
+
+  dedupedClients.forEach(function(c) {
     if (!c.dob) return;
     var dob = new Date(c.dob);
     if (isNaN(dob)) return;
+
+    // Calculate this year's 65th birthday
+    var bday65 = new Date(dob);
+    bday65.setFullYear(dob.getFullYear() + 65);
+    bday65.setHours(0,0,0,0);
+
+    var daysFromBday65 = Math.round((today - bday65) / 86400000); // positive = past, negative = future
+    var daysUntilBday65 = -daysFromBday65;
+
+    // Upcoming Medicare: birthday within next 75 days
+    if (daysUntilBday65 >= 0 && daysUntilBday65 <= 75) {
+      upcomingMedicare.push({ client:c, daysUntil:daysUntilBday65, date:bday65 });
+    }
+
+    // Recently aged in: turned 65 within past 90 days (still in enrollment window)
+    if (daysFromBday65 > 0 && daysFromBday65 <= 90) {
+      recentlyAgedIn.push({ client:c, daysAgo:daysFromBday65, date:bday65 });
+    }
+
+    // Upcoming birthdays (non-Medicare, within 60 days)
     var nextBday = new Date(dob);
     nextBday.setFullYear(today.getFullYear());
     nextBday.setHours(0,0,0,0);
     if (nextBday < today) nextBday.setFullYear(today.getFullYear()+1);
     var daysUntilBday = Math.round((nextBday - today) / 86400000);
-    var ageAtNextBday = nextBday.getFullYear() - dob.getFullYear();
-    if (daysUntilBday <= 60 && daysUntilBday >= 0) {
-      signals.push({ type:'birthday', client:c, daysUntil:daysUntilBday, age:ageAtNextBday, date:nextBday });
-    }
-    if (ageAtNextBday === 65 && daysUntilBday <= 75 && daysUntilBday >= 0) {
-      signals.push({ type:'medicare', client:c, daysUntil:daysUntilBday, age:65, date:nextBday });
+    var ageAtNext = nextBday.getFullYear() - dob.getFullYear();
+    if (daysUntilBday <= 60 && daysUntilBday >= 0 && ageAtNext !== 65) {
+      birthdaySignals.push({ client:c, daysUntil:daysUntilBday, age:ageAtNext, date:nextBday });
     }
   });
 
-  signals.sort(function(a,b) {
-    if (a.type !== b.type) return a.type === 'medicare' ? -1 : 1;
-    return a.daysUntil - b.daysUntil;
-  });
+  upcomingMedicare.sort(function(a,b){ return a.daysUntil - b.daysUntil; });
+  recentlyAgedIn.sort(function(a,b){ return a.daysAgo - b.daysAgo; });
+  birthdaySignals.sort(function(a,b){ return a.daysUntil - b.daysUntil; });
 
   var el = document.getElementById('birthdaySection');
-  if (!signals.length) { el.innerHTML=''; return; }
+  if (!upcomingMedicare.length && !recentlyAgedIn.length && !birthdaySignals.length) { el.innerHTML=''; return; }
 
-  var medicareSignals = signals.filter(function(s){return s.type==='medicare';});
-  var birthdaySignals = signals.filter(function(s){return s.type==='birthday';});
   var html = '';
 
-  if (medicareSignals.length) {
+  // ── UPCOMING MEDICARE ────────────────────────────────────────────────────
+  if (upcomingMedicare.length) {
     html += '<div class="section-divider" style="margin-top:4px"><h2>\uD83C\uDFE5 Aging into Medicare <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 75 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
-    medicareSignals.forEach(function(sig) {
+    upcomingMedicare.forEach(function(sig) {
       var c = sig.client, daysUntil = sig.daysUntil, date = sig.date;
       var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
       var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       var badge = daysUntil <= 14 ? '<span class="anniv-badge anniv-soon">URGENT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
       html += '<div class="anniv-card" style="border-color:#2d7a4f">';
-      html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+c.fullName+badge+'</div>';
+      html += '<div><div class="anniv-name" style="color:#2d7a4f">\uD83C\uDFE5 '+fmtName(c.firstName)+' '+fmtName(c.lastName)+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:#2d7a4f">Turns 65 on '+dateStr+'</div></div>';
       html += '<div class="anniv-actions">';
@@ -1999,6 +2030,34 @@ function renderBirthdaySignals() {
     html += '</div>';
   }
 
+  // ── RECENTLY AGED IN — still in enrollment window ────────────────────────
+  if (recentlyAgedIn.length) {
+    html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83D\uDCC5 Recently Turned 65 <span style="font-size:14px;font-weight:400;color:var(--muted)">still in enrollment window</span></h2><div class="divider-line"></div></div>';
+    html += '<div style="background:var(--green-light);border:1.5px solid var(--green);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--green)">';
+    html += '<b>Enrollment window is 7 months</b> — 3 months before to 3 months after the 65th birthday. These clients can still sign up for Medicare with no penalty.';
+    html += '</div>';
+    html += '<div class="followup-grid">';
+    recentlyAgedIn.forEach(function(sig) {
+      var c = sig.client, daysAgo = sig.daysAgo, date = sig.date;
+      var clientKey = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      var safeKey = clientKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+      var daysLeft = 90 - daysAgo; // rough days left in window
+      var urgency = daysLeft <= 14 ? '<span class="anniv-badge anniv-soon">'+daysLeft+'d LEFT</span>' : '<span class="anniv-badge anniv-upcoming">'+daysLeft+'d left</span>';
+      html += '<div class="anniv-card" style="border-color:var(--sage)">';
+      html += '<div><div class="anniv-name" style="color:var(--sage)">\uD83D\uDCC5 '+fmtName(c.firstName)+' '+fmtName(c.lastName)+urgency+'</div>';
+      html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
+      html += '<div class="anniv-date" style="color:var(--sage)">Turned 65 on '+dateStr+' ('+daysAgo+'d ago)</div></div>';
+      html += '<div class="anniv-actions">';
+      if (c.phone) html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCallScript(\'' + safeKey + '\')">\uD83D\uDCDE Call</button>';
+      html += '<button class="anniv-btn" style="border-color:var(--sage);color:var(--sage)" onclick="genMedicareLetter(\'' + safeKey + '\')">\uD83D\uDCC4 Letter</button>';
+      html += '<button class="anniv-btn anniv-btn-view" onclick="openGroup(\'' + safeKey + '\');window.scrollTo({top:0,behavior:\'smooth\'})">View</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  // ── UPCOMING BIRTHDAYS (non-Medicare) ────────────────────────────────────
   if (birthdaySignals.length) {
     html += '<div class="section-divider" style="margin-top:8px"><h2>\uD83C\uDF82 Upcoming Birthdays <span style="font-size:14px;font-weight:400;color:var(--muted)">(next 60 days)</span></h2><div class="divider-line"></div></div><div class="followup-grid">';
     birthdaySignals.forEach(function(sig) {
@@ -2008,7 +2067,7 @@ function renderBirthdaySignals() {
       var dateStr = date.toLocaleDateString('en-US',{month:'long',day:'numeric'});
       var badge = daysUntil <= 7 ? '<span class="anniv-badge anniv-soon">'+daysUntil+'d</span>' : '<span class="anniv-badge anniv-upcoming">'+daysUntil+'d</span>';
       html += '<div class="anniv-card" style="border-color:var(--rust)">';
-      html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+c.fullName+badge+'</div>';
+      html += '<div><div class="anniv-name" style="color:var(--rust)">\uD83C\uDF82 '+fmtName(c.firstName)+' '+fmtName(c.lastName)+badge+'</div>';
       html += '<div class="anniv-meta">'+(c.displayCompany||'')+(c.city?' &middot; '+c.city:'')+'</div>';
       html += '<div class="anniv-date" style="color:var(--rust)">'+dateStr+' &middot; Turning '+age+'</div></div>';
       html += '<div class="anniv-actions">';
@@ -2021,7 +2080,6 @@ function renderBirthdaySignals() {
   }
 
   el.innerHTML = html;
-  // No event delegation needed — all onclick handlers are inline per card
 }
 
 
