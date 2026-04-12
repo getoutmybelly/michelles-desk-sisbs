@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Michelle's Desk</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <!-- Google auth handled via redirect -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
@@ -762,6 +763,7 @@ const C = {
 };
 
 const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
+const CALENDLY_URL = 'https://calendly.com/michelle-seniorbenefitsofillinois';
 
 let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
@@ -2173,6 +2175,9 @@ function genBirthdayLetter(key, age) {
   doc.text('Illinois Senior Benefit Services', M, y); y+=14;
   doc.setTextColor(184,146,58); doc.setFont('helvetica','bold');
   doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
 
   doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
@@ -2285,6 +2290,9 @@ function buildMedicareLetter(c, isExistingClient) {
   doc.text('Illinois Senior Benefit Services', M, y); y+=14;
   doc.setTextColor(45,122,79); doc.setFont('helvetica','bold');
   doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
 
   doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
@@ -2656,6 +2664,9 @@ async function genAnniversaryLetter(key, yearsOld) {
   doc.setTextColor(184, 146, 58);
   doc.setFont('helvetica', 'bold');
   doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
 
   // Footer
   doc.setTextColor(180, 180, 180);
@@ -3836,6 +3847,72 @@ function renderLapseSection() {
 
   html += '</div>';
   el.innerHTML = html;
+}
+
+
+// ── QR CODE HELPER ────────────────────────────────────────────────────────────
+function addQRCodeToLetter(doc, url, x, y, size) {
+  // Generate QR code offscreen, convert to image, embed in PDF
+  try {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '-9999px';
+    document.body.appendChild(container);
+
+    new QRCode(container, {
+      text: url,
+      width: 128,
+      height: 128,
+      colorDark: '#1a1a2e',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    // Give it a moment to render then grab canvas
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png');
+      doc.addImage(dataUrl, 'PNG', x, y, size, size);
+    }
+    document.body.removeChild(container);
+  } catch(e) {
+    console.log('QR generation error:', e);
+  }
+}
+
+function addCalendlyQR(doc, W, M, y) {
+  // Adds a QR block at the bottom of the letter before the footer
+  const qrSize = 54;
+  const boxH = 70;
+  const boxY = y;
+
+  doc.setFillColor(250, 247, 242);
+  doc.setDrawColor(220, 216, 208);
+  doc.setLineWidth(1);
+  doc.roundedRect(M, boxY, W - M*2, boxH, 4, 4, 'FD');
+
+  // QR code on the right
+  addQRCodeToLetter(doc, CALENDLY_URL, W - M - qrSize - 8, boxY + 8, qrSize);
+
+  // Text on the left
+  doc.setTextColor(122, 117, 112);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Schedule a free conversation:', M + 10, boxY + 22);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Scan the QR code or visit:', M + 10, boxY + 35);
+  doc.setTextColor(26, 26, 46);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('calendly.com/michelle-seniorbenefitsofillinois', M + 10, boxY + 47);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(122, 117, 112);
+  doc.setFontSize(7.5);
+  doc.text('No obligation. Pick a time that works for you.', M + 10, boxY + 59);
+
+  return boxY + boxH + 10;
 }
 
 // ── PHOTO HELPER FOR LETTERS ──────────────────────────────────────────────────
