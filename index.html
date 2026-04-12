@@ -285,6 +285,26 @@
   .anniv-btn-email:hover{background:var(--blue-light);}
   .anniv-btn-view{border-color:var(--border);color:var(--muted);}
   .anniv-btn-view:hover{background:var(--cream);}
+  /* LAPSE SCANNER */
+  .lapse-card{background:#fff;border:1.5px solid var(--rust);border-radius:12px;padding:14px;transition:all .15s;}
+  .lapse-card.reinstating{border-color:var(--gold);}
+  .lapse-card.expired{border-color:var(--muted);opacity:.6;}
+  .lapse-name{font-weight:600;font-size:14px;color:var(--rust);}
+  .lapse-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .lapse-policy{font-size:12px;font-weight:600;color:var(--ink);margin-top:4px;}
+  .lapse-timer{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;}
+  .lapse-timer.urgent{background:var(--rust-light);color:var(--rust);}
+  .lapse-timer.ok{background:var(--gold-light);color:var(--gold);}
+  .lapse-timer.expired{background:var(--cream);color:var(--muted);}
+  .lapse-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .lapse-btn{padding:6px 12px;border-radius:20px;border:1.5px solid;font-size:12px;font-weight:600;cursor:pointer;background:#fff;font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .lapse-btn-reinstate{border-color:var(--green);color:var(--green);}
+  .lapse-btn-reinstate:hover{background:var(--green-light);}
+  .lapse-btn-rewrite{border-color:var(--blue);color:var(--blue);}
+  .lapse-btn-rewrite:hover{background:var(--blue-light);}
+  .lapse-btn-remove{border-color:var(--border);color:var(--muted);}
+  .lapse-btn-remove:hover{background:var(--cream);}
+  .lapse-scanning{text-align:center;padding:16px;color:var(--muted);font-size:13px;}
   /* WEB LEADS */
   .web-leads-section{margin-bottom:18px;}
   .web-lead-card{background:#fff;border:1.5px solid var(--blue);border-radius:11px;padding:13px;cursor:pointer;transition:all .15s;position:relative;}
@@ -651,6 +671,7 @@
       <div class="divider-line"></div>
     </div>
     <div class="stats-row" id="statsRow"></div>
+    <div id="lapseSection"></div>
     <div id="webLeadsSection"></div>
     <div id="apptSection"></div>
     <div id="anniversarySection"></div>
@@ -1383,6 +1404,7 @@ function renderDashboard(){
     <div class="stat-box" style="${statClick}" ${statHover} onclick="renderPipelineTab('pending');document.getElementById('pipelineContent').scrollIntoView({behavior:'smooth',block:'start'})" title="View Surrenders">
       <div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
+  renderLapseSection();
   renderWebLeads();
 
   // Appointments
@@ -3563,6 +3585,252 @@ function fmtName(str) {
   if (str === str.toUpperCase()) return toProperCase(str);
   return str;
 }
+// ── LAPSE SCANNER ────────────────────────────────────────────────────────────
+const LAPSE_STORAGE_KEY = 'isbs_lapsed_policies';
+const CARRIER_WINDOWS = {
+  'trinity':       30,
+  'transamerica':  45,
+  'corebridge':    60,
+  'american general': 60,
+  'gtl':           30,
+  'illinois mutual': 30,
+  'default':       30,
+};
+const LAPSE_KEYWORDS = ['lapse', 'lapsed', 'cancellation notice', 'policy cancelled',
+  'premium past due', 'policy terminated', 'grace period', 'notice of lapse'];
+const CARRIER_SENDERS = [
+  'trinity', 'transamerica', 'corebridge', 'americo', 'american general',
+  'illinois mutual', 'gtl', 'guarantee trust', 'kskj', 'polish falcons',
+  'lifeshield', 'sbli', 'foresters'
+];
+
+function getLapsedPolicies() {
+  try { return JSON.parse(localStorage.getItem(LAPSE_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveLapsedPolicies(arr) {
+  try { localStorage.setItem(LAPSE_STORAGE_KEY, JSON.stringify(arr)); } catch(e) {}
+}
+
+function getCarrierWindow(carrier) {
+  const c = (carrier || '').toLowerCase();
+  for (const [key, days] of Object.entries(CARRIER_WINDOWS)) {
+    if (c.includes(key)) return days;
+  }
+  return CARRIER_WINDOWS.default;
+}
+
+function getDaysLeft(lapse) {
+  const window = getCarrierWindow(lapse.carrier);
+  const lapseDate = new Date(lapse.detectedAt);
+  const expiry = new Date(lapseDate.getTime() + window * 86400000);
+  return Math.ceil((expiry - new Date()) / 86400000);
+}
+
+async function scanGmailForLapses() {
+  if (!accessToken) return;
+  const el = document.getElementById('lapseSection');
+  if (!el) return;
+
+  // Build Gmail search query for lapse emails from carriers
+  const senderQuery = CARRIER_SENDERS.map(s => 'from:' + s).join(' OR ');
+  const q = `(${senderQuery}) newer_than:30d`;
+
+  try {
+    const resp = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=50`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const messages = data.messages || [];
+    if (!messages.length) return;
+
+    const existing = getLapsedPolicies();
+    const existingIds = new Set(existing.map(l => l.emailId));
+    const newLapses = [];
+
+    // Check each email for lapse keywords
+    for (const msg of messages.slice(0, 20)) {
+      if (existingIds.has(msg.id)) continue;
+      try {
+        const msgResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!msgResp.ok) continue;
+        const msgData = await msgResp.json();
+        const headers = msgData.payload?.headers || [];
+        const subject = (headers.find(h => h.name === 'Subject')?.value || '').toLowerCase();
+        const from = (headers.find(h => h.name === 'From')?.value || '').toLowerCase();
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+
+        // Check if subject contains lapse keywords
+        const isLapse = LAPSE_KEYWORDS.some(kw => subject.includes(kw));
+        if (!isLapse) continue;
+
+        // Detect carrier from sender
+        let carrier = 'Unknown';
+        for (const c of CARRIER_SENDERS) {
+          if (from.includes(c)) { carrier = c.charAt(0).toUpperCase() + c.slice(1); break; }
+        }
+
+        // Try to extract policy number from subject
+        const policyMatch = subject.match(/policy[\s#:]+([a-z0-9-]+)/i) ||
+                           subject.match(/([a-z]{2,4}[0-9]{6,12})/i);
+        const policyNum = policyMatch ? policyMatch[1].toUpperCase() : '';
+
+        // Try to extract name from subject
+        const nameMatch = subject.match(/(?:for|insured:|re:)\s+([a-z\s,]+?)(?:\s*[-,]|\s*policy|$)/i);
+        const extractedName = nameMatch ? nameMatch[1].trim() : '';
+
+        // Try to match against clients in sheet
+        let matchedClient = null;
+        if (policyNum) {
+          matchedClient = allClients.find(c =>
+            c.existingPolicy && c.existingPolicy.toUpperCase().includes(policyNum)
+          );
+        }
+        if (!matchedClient && extractedName) {
+          const nameLower = extractedName.toLowerCase();
+          matchedClient = allClients.find(c =>
+            c.fullName.toLowerCase().includes(nameLower) ||
+            nameLower.includes(c.lastName?.toLowerCase() || '')
+          );
+        }
+
+        newLapses.push({
+          emailId: msg.id,
+          carrier,
+          subject: headers.find(h => h.name === 'Subject')?.value || '',
+          from,
+          date,
+          policyNum,
+          extractedName,
+          matchedClientKey: matchedClient ? matchedClient.fullName.toLowerCase().replace(/\s+/g,' ').trim() : null,
+          matchedClientName: matchedClient ? matchedClient.fullName : null,
+          matchedPolicy: matchedClient ? matchedClient.existingPolicy : null,
+          matchedCompany: matchedClient ? matchedClient.displayCompany : null,
+          detectedAt: new Date().toISOString(),
+          status: 'pending', // pending | reinstating | rewritten | removed
+        });
+      } catch(e) { continue; }
+    }
+
+    if (newLapses.length) {
+      const updated = [...newLapses, ...existing].slice(0, 100);
+      saveLapsedPolicies(updated);
+      if (newLapses.length === 1) toast('⚠ 1 new lapse notice detected');
+      else toast('⚠ ' + newLapses.length + ' new lapse notices detected');
+    }
+
+    renderLapseSection();
+  } catch(e) {
+    console.error('Lapse scan error:', e);
+  }
+}
+
+function markLapse(emailId, status) {
+  const lapses = getLapsedPolicies();
+  const lapse = lapses.find(l => l.emailId === emailId);
+  if (!lapse) return;
+  lapse.status = status;
+  lapse.resolvedAt = new Date().toISOString();
+  saveLapsedPolicies(lapses);
+  renderLapseSection();
+  renderDashboard();
+
+  if (status === 'rewritten' && lapse.matchedClientKey) {
+    toast('Marked as rewrite — open client record to add new policy details');
+  } else if (status === 'reinstating') {
+    toast('Marked as reinstating — will auto-archive after ' + getCarrierWindow(lapse.carrier) + ' days');
+  } else if (status === 'removed') {
+    toast('Removed from lapse list');
+  }
+}
+
+function markLapseBtn(btn) {
+  var eid = btn.dataset.eid;
+  var action = btn.dataset.action;
+  var clientkey = btn.dataset.clientkey;
+  markLapse(eid, action);
+  if (action === 'rewritten' && clientkey) {
+    setTimeout(function() {
+      openGroup(clientkey);
+      window.scrollTo({top:0,behavior:'smooth'});
+    }, 300);
+  }
+}
+
+function renderLapseSection() {
+  const el = document.getElementById('lapseSection');
+  if (!el) return;
+
+  const allLapses = getLapsedPolicies();
+  // Show only pending and reinstating, hide resolved/expired
+  const active = allLapses.filter(l => {
+    if (l.status === 'removed' || l.status === 'rewritten') return false;
+    if (l.status === 'reinstating') {
+      const daysLeft = getDaysLeft(l);
+      if (daysLeft <= 0) {
+        l.status = 'expired';
+        saveLapsedPolicies(allLapses);
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (!active.length) { el.innerHTML = ''; return; }
+
+  let html = `<div class="section-divider" style="margin-top:4px">
+    <h2>⚠️ Lapsed Policies <span style="font-size:14px;font-weight:400;color:var(--muted)">${active.length} active</span></h2>
+    <div class="divider-line"></div>
+  </div><div class="followup-grid">`;
+
+  active.forEach(function(lapse) {
+    const daysLeft = getDaysLeft(lapse);
+    const isExpired = daysLeft <= 0;
+    const isUrgent = daysLeft <= 7 && daysLeft > 0;
+    const timerClass = isExpired ? 'expired' : isUrgent ? 'urgent' : 'ok';
+    const timerText = isExpired ? 'Window closed' : daysLeft + 'd to reinstate';
+    const cardClass = isExpired ? 'lapse-card expired' : lapse.status === 'reinstating' ? 'lapse-card reinstating' : 'lapse-card';
+
+    html += '<div class="' + cardClass + '">';
+    html += '<div>';
+
+    // Client name — matched or extracted
+    const displayName = lapse.matchedClientName || lapse.extractedName || 'Unknown Client';
+    html += '<div class="lapse-name">' + displayName + '<span class="lapse-timer ' + timerClass + '">' + timerText + '</span></div>';
+    html += '<div class="lapse-meta">' + lapse.carrier + (lapse.matchedCompany ? ' · ' + lapse.matchedCompany : '') + '</div>';
+    if (lapse.policyNum || lapse.matchedPolicy) {
+      html += '<div class="lapse-policy">Policy: ' + (lapse.matchedPolicy || lapse.policyNum) + '</div>';
+    }
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + lapse.subject + '</div>';
+    html += '</div>';
+
+    html += '<div class="lapse-actions">';
+    var eid = lapse.emailId;
+    var mck = lapse.matchedClientKey || '';
+    if (lapse.status === 'pending') {
+      html += '<button class="lapse-btn lapse-btn-reinstate" data-eid="'+eid+'" data-action="reinstating" onclick="markLapseBtn(this)">↺ Reinstating</button>';
+      if (mck) {
+        html += '<button class="lapse-btn lapse-btn-rewrite" data-eid="'+eid+'" data-action="rewritten" data-clientkey="'+mck+'" onclick="markLapseBtn(this)">✎ Rewrite &#8594;</button>';
+      } else {
+        html += '<button class="lapse-btn lapse-btn-rewrite" data-eid="'+eid+'" data-action="rewritten" onclick="markLapseBtn(this)">✎ Rewrite</button>';
+      }
+      html += '<button class="lapse-btn lapse-btn-remove" data-eid="'+eid+'" data-action="removed" onclick="markLapseBtn(this)">✕ Remove</button>';
+    } else if (lapse.status === 'reinstating') {
+      html += '<span style="font-size:12px;font-weight:600;color:var(--gold)">↺ Reinstating in progress</span>';
+      html += '<button class="lapse-btn lapse-btn-rewrite" data-eid="'+eid+'" data-action="rewritten" onclick="markLapseBtn(this)">✎ Switch to Rewrite</button>';
+      html += '<button class="lapse-btn lapse-btn-remove" data-eid="'+eid+'" data-action="removed" onclick="markLapseBtn(this)">✕ Remove</button>';
+    }
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
 function fmtPhone(v){const s=cl(v);if(!s)return'';const d=s.replace(/\D/g,'');if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;return s;}
