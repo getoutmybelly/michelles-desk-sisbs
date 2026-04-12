@@ -2106,6 +2106,7 @@ function renderBirthdaySignals() {
 
 
 function genBirthdayLetter(key, age) {
+  try {
   // Try direct key, then case-insensitive search
   let group = clientGroups[key];
   if (!group) {
@@ -2136,7 +2137,8 @@ function genBirthdayLetter(key, age) {
   doc.setFont('helvetica','bold'); doc.text(fmtName(c.firstName) + ' ' + fmtName(c.lastName), M, y); y+=16;
   doc.setFont('helvetica','normal');
   if (c.address) { doc.text(toProperCase(c.address), M, y); y+=16; }
-  doc.text(`${toProperCase(c.city)}, ${c.state} ${c.zip}`, M, y); y+=32;
+  const cityLine = [toProperCase(c.city||''), c.state||'', c.zip||''].filter(Boolean).join(', ');
+  if (cityLine) { doc.text(cityLine, M, y); } y+=32;
 
   doc.text(`Dear ${fmtName(c.firstName)},`, M, y); y+=22;
 
@@ -2177,10 +2179,12 @@ function genBirthdayLetter(key, age) {
 
   doc.save(`Birthday_Letter_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
   toast('✓ Birthday letter ready');
+  } catch(err) { console.error('Birthday letter error:', err); toast('Letter error: ' + err.message); }
 }
 
 // ── MEDICARE LETTER ───────────────────────────────────────────────────────────
 function genMedicareLetter(key) {
+  try {
   let group = clientGroups[key];
   if (!group) {
     const lkey = key.toLowerCase().trim();
@@ -2193,9 +2197,11 @@ function genMedicareLetter(key) {
   // Determine if existing client (has policy) or cold T65 contact
   const isExistingClient = !!(c.existingPolicy || c.newCompany || c.existingCompany);
   buildMedicareLetter(c, isExistingClient);
+  } catch(err) { console.error('Medicare letter error:', err); toast('Letter error: ' + err.message); }
 }
 
 function buildMedicareLetter(c, isExistingClient) {
+  try {
   const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72,contentW=W-M*2; let y=M;
 
@@ -2285,6 +2291,7 @@ function buildMedicareLetter(c, isExistingClient) {
 
   doc.save(`Medicare_Letter_${(c.lastName||c.firstName||'client').replace(/\s/g,'_')}_${todayStr()}.pdf`);
   toast('✓ Medicare letter ready');
+  } catch(err) { console.error('buildMedicareLetter error:', err); toast('Letter error: ' + err.message); }
 }
 
 // ── FOLLOW-UP VISIT ──────────────────────────────────────────────────────────
