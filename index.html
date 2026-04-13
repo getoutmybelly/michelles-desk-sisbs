@@ -2131,9 +2131,9 @@ function genBirthdayLetter(key, age) {
   doc.setDrawColor(184,146,58); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
 
   y=106; doc.setTextColor(26,26,46);
-  const todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const letterDateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text(todayStr, M, y); y+=24;
+  doc.text(letterDateStr, M, y); y+=24;
 
   y+=10;
   doc.setFont('helvetica','bold'); doc.text(fmtName(c.firstName) + ' ' + fmtName(c.lastName), M, y); y+=16;
@@ -2601,8 +2601,8 @@ async function genAnniversaryLetter(key, yearsOld) {
   // Date
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  const todayStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  doc.text(todayStr, M, y); y += 24;
+  const letterDateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.text(letterDateStr, M, y); y += 24;
 
   // Client address block
   y += 10;
@@ -3615,12 +3615,16 @@ const CARRIER_WINDOWS = {
   'default':       30,
 };
 const LAPSE_KEYWORDS = ['lapse', 'lapsed', 'cancellation notice', 'policy cancelled',
-  'premium past due', 'policy terminated', 'grace period', 'notice of lapse'];
+  'premium past due', 'policy terminated', 'grace period', 'notice of lapse',
+  'conservation', 'past due', 'days past due', 'inforce policy alert',
+  'surrender notification', 'policy lapsing'];
 const CARRIER_SENDERS = [
   'trinity', 'transamerica', 'corebridge', 'americo', 'american general',
-  'illinois mutual', 'gtl', 'guarantee trust', 'kskj', 'polish falcons',
-  'lifeshield', 'sbli', 'foresters'
+  'illinois mutual', 'ihlic.com', 'pservices@ihlic', 'gtl', 'guarantee trust',
+  'kskj', 'polish falcons', 'lifeshield', 'sbli', 'foresters'
 ];
+const DELIVERY_KEYWORDS = ['policy e-delivery', 'policy delivery', 'your policy is ready',
+  'policy documents', 'e-policy'];
 
 function getLapsedPolicies() {
   try { return JSON.parse(localStorage.getItem(LAPSE_STORAGE_KEY) || '[]'); } catch(e) { return []; }
@@ -3681,6 +3685,28 @@ async function scanGmailForLapses() {
         const subject = (headers.find(h => h.name === 'Subject')?.value || '').toLowerCase();
         const from = (headers.find(h => h.name === 'From')?.value || '').toLowerCase();
         const date = headers.find(h => h.name === 'Date')?.value || '';
+
+        // Check if subject contains policy delivery keywords — handle separately
+        const isDelivery = DELIVERY_KEYWORDS.some(kw => subject.includes(kw));
+        if (isDelivery) {
+          newLapses.push({
+            emailId: msg.id,
+            carrier,
+            subject: headers.find(h => h.name === 'Subject')?.value || '',
+            from,
+            date,
+            policyNum,
+            extractedName,
+            matchedClientKey: null,
+            matchedClientName: extractedName || null,
+            matchedPolicy: policyNum || null,
+            matchedCompany: carrier,
+            detectedAt: new Date().toISOString(),
+            status: 'pending',
+            type: 'delivery',
+          });
+          continue;
+        }
 
         // Check if subject contains lapse keywords
         const isLapse = LAPSE_KEYWORDS.some(kw => subject.includes(kw));
@@ -3800,8 +3826,13 @@ function renderLapseSection() {
 
   if (!active.length) { el.innerHTML = ''; return; }
 
+  const lapseCount = active.filter(l => l.type !== 'delivery').length;
+  const deliveryCount = active.filter(l => l.type === 'delivery').length;
+  const titleParts = [];
+  if (lapseCount) titleParts.push(lapseCount + ' lapse' + (lapseCount > 1 ? 's' : ''));
+  if (deliveryCount) titleParts.push(deliveryCount + ' delivery');
   let html = `<div class="section-divider" style="margin-top:4px">
-    <h2>⚠️ Lapsed Policies <span style="font-size:14px;font-weight:400;color:var(--muted)">${active.length} active</span></h2>
+    <h2>⚠️ Policy Alerts <span style="font-size:14px;font-weight:400;color:var(--muted)">${titleParts.join(' · ')}</span></h2>
     <div class="divider-line"></div>
   </div><div class="followup-grid">`;
 
@@ -3818,7 +3849,9 @@ function renderLapseSection() {
 
     // Client name — matched or extracted
     const displayName = lapse.matchedClientName || lapse.extractedName || 'Unknown Client';
-    html += '<div class="lapse-name">' + displayName + '<span class="lapse-timer ' + timerClass + '">' + timerText + '</span></div>';
+    const isDeliveryCard = lapse.type === 'delivery';
+    const cardIcon = isDeliveryCard ? '📬' : '⚠️';
+    html += '<div class="lapse-name">' + cardIcon + ' ' + displayName + '<span class="lapse-timer ' + (isDeliveryCard ? 'ok' : timerClass) + '">' + (isDeliveryCard ? 'Policy delivered' : timerText) + '</span></div>';
     html += '<div class="lapse-meta">' + lapse.carrier + (lapse.matchedCompany ? ' · ' + lapse.matchedCompany : '') + '</div>';
     if (lapse.policyNum || lapse.matchedPolicy) {
       html += '<div class="lapse-policy">Policy: ' + (lapse.matchedPolicy || lapse.policyNum) + '</div>';
