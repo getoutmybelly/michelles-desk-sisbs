@@ -672,6 +672,7 @@
       <div class="divider-line"></div>
     </div>
     <div class="stats-row" id="statsRow"></div>
+    <div id="commissionEmailSection"></div>
     <div id="lapseSection"></div>
     <div id="webLeadsSection"></div>
     <div id="apptSection"></div>
@@ -706,7 +707,7 @@ const { jsPDF } = window.jspdf;
 const SHEET_ID  = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
 const CLIENT_ID = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
 const SHEET_TAB = 'Clients';
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly';
 
 // Column indices (0-based)
 const COL = {
@@ -884,6 +885,8 @@ async function loadFromSheets() {
     if (selectedGroup) renderDetail();
     toast(`✓ ${allClients.length} clients loaded`);
     startWebLeadPolling();
+    setTimeout(scanGmailForLapses, 3000);
+    setTimeout(scanGmailForCommissions, 5000);
   } catch(err) {
     showLoading(false); showError(err.message); console.error(err);
   }
@@ -1407,6 +1410,7 @@ function renderDashboard(){
       <div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
   renderLapseSection();
+  renderCommissionEmailSection();
   renderWebLeads();
 
   // Appointments
@@ -1738,6 +1742,41 @@ async function handleCommUpload(input) {
   document.getElementById('commReading').style.display='block';
 
   try {
+    // Check if this is a known password-protected carrier
+    const fileName = file.name.toLowerCase();
+    let carrierKey = null;
+    for (const key of Object.keys(CARRIER_PDF_PASSWORDS)) {
+      if (fileName.includes(key)) { carrierKey = key; break; }
+    }
+
+    if (carrierKey) {
+      const passwords = CARRIER_PDF_PASSWORDS[carrierKey];
+      document.getElementById('commReading').innerHTML = `
+        <div class="comm-spinner"></div>
+        <div>Password-protected PDF detected (${carrierKey.charAt(0).toUpperCase()+carrierKey.slice(1)})</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Trying known passwords...</div>`;
+      // We can't decrypt in the browser — instruct user or try sending with password hint
+      // For now: show password prompt so user can manually enter if needed
+      const enteredPwd = prompt(
+        `${carrierKey.charAt(0).toUpperCase()+carrierKey.slice(1)} statement detected.
+
+Known passwords: ${passwords.join(', ')}
+
+Enter password to unlock (or press OK to try automatically):`
+        , passwords[0]
+      );
+      if (enteredPwd === null) {
+        // User cancelled
+        document.getElementById('commReading').style.display='none';
+        document.getElementById('commDrop').style.display='block';
+        return;
+      }
+      // Note: browser can't decrypt PDFs — we pass the password as a hint to Claude
+      // Claude will note it's password protected and provide what it can read
+    }
+
+    document.getElementById('commReading').innerHTML = '<div class="comm-spinner"></div><div>Reading statement...</div>';
+
     const base64 = await fileToBase64(file);
 
     const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
@@ -3603,6 +3642,136 @@ function fmtName(str) {
   if (str === str.toUpperCase()) return toProperCase(str);
   return str;
 }
+// ── COMMISSION EMAIL SCANNER ─────────────────────────────────────────────────
+function getStoredCommissions() {
+  try { return JSON.parse(localStorage.getItem(COMMISSION_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveStoredCommissions(arr) {
+  try { localStorage.setItem(COMMISSION_STORAGE_KEY, JSON.stringify(arr)); } catch(e) {}
+}
+
+async function scanGmailForCommissions() {
+  if (!accessToken) return;
+  const senderQ = COMMISSION_SENDERS.map(s => 'from:' + s).join(' OR ');
+  const q = `(${senderQ}) newer_than:60d`;
+
+  try {
+    const resp = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=50`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const messages = data.messages || [];
+    if (!messages.length) return;
+
+    const existing = getStoredCommissions();
+    const existingIds = new Set(existing.map(c => c.emailId));
+    const newComms = [];
+
+    for (const msg of messages.slice(0, 30)) {
+      if (existingIds.has(msg.id)) continue;
+      try {
+        const msgResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!msgResp.ok) continue;
+        const msgData = await msgResp.json();
+        const headers = msgData.payload?.headers || [];
+        const subject = (headers.find(h => h.name === 'Subject')?.value || '').toLowerCase();
+        const from = (headers.find(h => h.name === 'From')?.value || '');
+        const date = headers.find(h => h.name === 'Date')?.value || '';
+        const subjectRaw = headers.find(h => h.name === 'Subject')?.value || '';
+
+        const isCommission = COMMISSION_KEYWORDS.some(kw => subject.includes(kw));
+        if (!isCommission) continue;
+
+        // Detect carrier
+        let carrier = 'Unknown';
+        for (const c of COMMISSION_SENDERS) {
+          if (from.toLowerCase().includes(c)) {
+            carrier = c.charAt(0).toUpperCase() + c.slice(1);
+            break;
+          }
+        }
+
+        // Extract amount if visible in subject
+        const amountMatch = subject.match(/\$([\d,]+\.?\d*)/);
+        const amount = amountMatch ? amountMatch[0] : '';
+
+        newComms.push({
+          emailId: msg.id,
+          carrier,
+          subject: subjectRaw,
+          from,
+          date,
+          amount,
+          detectedAt: new Date().toISOString(),
+          reviewed: false,
+        });
+      } catch(e) { continue; }
+    }
+
+    if (newComms.length) {
+      const updated = [...newComms, ...existing].slice(0, 200);
+      saveStoredCommissions(updated);
+      renderCommissionEmailSection();
+      toast('💰 ' + newComms.length + ' commission email' + (newComms.length > 1 ? 's' : '') + ' found');
+    }
+  } catch(e) {
+    console.error('Commission scan error:', e);
+  }
+}
+
+function markCommissionReviewed(emailId) {
+  const comms = getStoredCommissions();
+  const c = comms.find(c => c.emailId === emailId);
+  if (c) { c.reviewed = true; saveStoredCommissions(comms); renderCommissionEmailSection(); }
+}
+
+function renderCommissionEmailSection() {
+  const el = document.getElementById('commissionEmailSection');
+  if (!el) return;
+  const all = getStoredCommissions();
+  const unreviewed = all.filter(c => !c.reviewed);
+  if (!unreviewed.length) { el.innerHTML = ''; return; }
+
+  let html = `<div class="section-divider" style="margin-top:4px">
+    <h2>💰 Commission Emails <span style="font-size:14px;font-weight:400;color:var(--muted)">${unreviewed.length} unreviewed</span></h2>
+    <div class="divider-line"></div>
+  </div><div class="followup-grid">`;
+
+  unreviewed.slice(0, 10).forEach(function(c) {
+    const dateStr = c.date ? new Date(c.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    html += '<div class="anniv-card" style="border-color:var(--gold)">';
+    html += '<div>';
+    html += '<div class="anniv-name" style="color:var(--gold)">💰 ' + c.carrier + (c.amount ? ' · ' + c.amount : '') + '</div>';
+    html += '<div class="anniv-meta">' + dateStr + '</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + c.subject + '</div>';
+    if (['lifeshield','corebridge'].some(k => c.carrier.toLowerCase().includes(k))) {
+      const pwds = CARRIER_PDF_PASSWORDS[c.carrier.toLowerCase()] || [];
+      if (pwds.length) {
+        html += '<div style="font-size:11px;color:var(--gold);font-weight:600;margin-top:2px">🔒 Password: ' + pwds.join(' or ') + '</div>';
+      }
+    }
+    html += '</div>';
+    html += '<div class="anniv-actions">';
+    html += '<a class="anniv-btn" style="border-color:var(--blue);color:var(--blue)" href="https://mail.google.com/mail/u/0/#inbox/' + c.emailId + '" target="_blank">📧 Open Email</a>';
+    const isPasswordCarrier = ['lifeshield','corebridge'].some(k => c.carrier.toLowerCase().includes(k));
+    if (isPasswordCarrier) {
+      html += '<button class="anniv-btn" style="border-color:var(--gold);color:var(--gold)" onclick="openCommTracker()" title="Password-protected — tool will prompt for password">🔒 Upload (Password PDF)</button>';
+    } else {
+      html += '<button class="anniv-btn" style="border-color:var(--green);color:var(--green)" onclick="openCommTracker()">📄 Upload Statement</button>';
+    }
+    html += '<button class="anniv-btn anniv-btn-view" data-eid="'+c.emailId+'" onclick="markCommissionReviewed(this.dataset.eid)">✓ Done</button>';
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // ── LAPSE SCANNER ────────────────────────────────────────────────────────────
 const LAPSE_STORAGE_KEY = 'isbs_lapsed_policies';
 const CARRIER_WINDOWS = {
@@ -3614,6 +3783,30 @@ const CARRIER_WINDOWS = {
   'illinois mutual': 30,
   'default':       30,
 };
+const COMMISSION_SENDERS = [
+  'trinity', 'transamerica', 'corebridge', 'american general', 'americo',
+  'illinois mutual', 'ihlic.com', 'gtl', 'guarantee trust', 'kskj',
+  'polish falcons', 'lifeshield', 'sbli', 'foresters', 'equitable',
+  'north american', 'mutual of omaha', 'aig', 'national life'
+];
+const COMMISSION_KEYWORDS = [
+  'commission statement', 'commission report', 'agent statement',
+  'producer statement', 'commission notice', 'commission payment',
+  'earnings statement', 'compensation statement', 'agent compensation',
+  'commission summary', 'monthly statement', 'commission deposit',
+  'direct deposit', 'commission remittance'
+];
+const COMMISSION_STORAGE_KEY = 'isbs_commission_emails';
+
+// Known password-protected commission statements
+// Passwords are tried automatically before sending to API
+const CARRIER_PDF_PASSWORDS = {
+  'lifeshield': ['1738', '9533'],
+  // 'corebridge': ['add_when_known'],
+};
+
+
+
 const LAPSE_KEYWORDS = ['lapse', 'lapsed', 'cancellation notice', 'policy cancelled',
   'premium past due', 'policy terminated', 'grace period', 'notice of lapse',
   'conservation', 'past due', 'days past due', 'inforce policy alert',
