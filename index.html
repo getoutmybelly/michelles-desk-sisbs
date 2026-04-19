@@ -3675,8 +3675,9 @@ function saveStoredCommissions(arr) {
 
 async function scanGmailForCommissions() {
   if (!accessToken) return;
-  const senderQ = COMMISSION_SENDERS.map(s => 'from:' + s).join(' OR ');
-  const q = `(${senderQ}) newer_than:60d`;
+  // Search by subject keywords — more reliable than partial sender name matching
+  const commSubjectQ = COMMISSION_KEYWORDS.map(k => `subject:"${k}"`).join(' OR ');
+  const q = `(${commSubjectQ}) newer_than:60d has:attachment`;
 
   try {
     const resp = await fetch(
@@ -3817,7 +3818,7 @@ const COMMISSION_KEYWORDS = [
   'producer statement', 'commission notice', 'commission payment',
   'earnings statement', 'compensation statement', 'agent compensation',
   'commission summary', 'monthly statement', 'commission deposit',
-  'direct deposit', 'commission remittance'
+  'direct deposit', 'commission remittance', 'your statement'
 ];
 const COMMISSION_STORAGE_KEY = 'isbs_commission_emails';
 
@@ -3869,9 +3870,10 @@ async function scanGmailForLapses() {
   const el = document.getElementById('lapseSection');
   if (!el) return;
 
-  // Build Gmail search query for lapse emails from carriers
-  const senderQuery = CARRIER_SENDERS.map(s => 'from:' + s).join(' OR ');
-  const q = `(${senderQuery}) newer_than:30d`;
+  // Search by subject keywords — more reliable than sender matching via Gmail API
+  const lapseSubjectQ = LAPSE_KEYWORDS.slice(0,8).map(k => `subject:"${k}"`).join(' OR ');
+  const deliverySubjectQ = DELIVERY_KEYWORDS.map(k => `subject:"${k}"`).join(' OR ');
+  const q = `(${lapseSubjectQ} OR ${deliverySubjectQ}) newer_than:60d`;
 
   try {
     const resp = await fetch(
@@ -4240,19 +4242,25 @@ async function checkFexLeads() {
   </div><div class="fex-scanning"><div class="fex-scan-spinner"></div>Checking Gmail for new leads…</div>`;
 
   try {
-    const q = `from:${FEX_SENDER} newer_than:90d has:attachment`;
+    const q = `(from:${FEX_SENDER} OR subject:"FE" subject:"lead") newer_than:90d has:attachment`;
     const listResp = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (!listResp.ok) throw new Error('Gmail error ' + listResp.status);
+    if (!listResp.ok) {
+      const errData = await listResp.json().catch(()=>({}));
+      throw new Error('Gmail error ' + listResp.status + ': ' + (errData?.error?.message || 'unknown'));
+    }
     const listData = await listResp.json();
     const messages = listData.messages || [];
 
     if (!messages.length) {
       el.innerHTML = `<div class="section-divider" style="margin-top:4px">
         <h2>📬 FEX Leads</h2><div class="divider-line"></div>
-      </div><div style="padding:18px;color:var(--muted);font-size:13px;text-align:center">No FEX lead emails found in the last 90 days.</div>`;
+      </div><div style="padding:18px;color:var(--muted);font-size:13px;text-align:center">
+        No FEX lead emails found.<br>
+        <span style="font-size:11px;color:#bbb;word-break:break-all">Query: ${q}</span>
+      </div>`;
       btn.textContent = '📬 FEX Leads';
       btn.disabled = false;
       return;
