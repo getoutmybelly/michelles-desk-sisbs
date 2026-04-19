@@ -452,6 +452,25 @@
   .iab-reset{background:#fff;color:var(--muted);border:1.5px solid var(--border);}
   .iab-reset:hover{background:var(--cream);}
   .import-action-btn:disabled{opacity:.4;cursor:default;}
+
+  /* FEX LEAD PREVIEW CARDS */
+  .fex-lead-card{background:#fff;border:1.5px solid var(--blue);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .fex-lead-card.fex-done{border-color:var(--green);opacity:.65;}
+  .fex-lead-name{font-weight:700;font-size:15px;color:var(--ink);margin-bottom:2px;}
+  .fex-lead-meta{font-size:12px;color:var(--muted);margin-bottom:10px;}
+  .fex-lead-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px 14px;margin-bottom:12px;}
+  .fex-lead-field label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px;}
+  .fex-lead-field input{width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--ink);outline:none;transition:border-color .2s;}
+  .fex-lead-field input:focus{border-color:var(--blue);}
+  .fex-lead-field.fex-full{grid-column:1/-1;}
+  .fex-lead-actions{display:flex;gap:7px;flex-wrap:wrap;}
+  .fex-save-btn{padding:8px 18px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s;}
+  .fex-save-btn:hover{background:#1e3d8a;}
+  .fex-save-btn:disabled{opacity:.5;cursor:default;}
+  .fex-dismiss-btn{padding:8px 14px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;}
+  .fex-saved-badge{font-size:12px;font-weight:600;color:var(--green);}
+  .fex-scanning{text-align:center;padding:18px;color:var(--muted);font-size:13px;}
+  .fex-scan-spinner{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 8px;}
   .import-results-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
   .irt{padding:5px 12px;border-radius:20px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s;}
   .irt.active{background:var(--ink);color:#fff;border-color:var(--ink);}
@@ -474,6 +493,7 @@
     <button id="mapBtn" onclick="openNearbyMap()" style="display:none;background:rgba(42,77,160,.4);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🗺 Nearby</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
     <button id="importBtn" onclick="openImporter()" style="display:none;background:rgba(92,122,107,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📂 Import Archive</button>
+    <button id="fexBtn" onclick="checkFexLeads()" style="display:none;background:rgba(42,77,160,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📬 FEX Leads</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
   </div>
@@ -674,6 +694,7 @@
     <div class="stats-row" id="statsRow"></div>
     <div id="commissionEmailSection"></div>
     <div id="lapseSection"></div>
+    <div id="fexLeadsSection"></div>
     <div id="webLeadsSection"></div>
     <div id="apptSection"></div>
     <div id="anniversarySection"></div>
@@ -878,6 +899,7 @@ async function loadFromSheets() {
     document.getElementById('commBtn').style.display = 'block';
     document.getElementById('mapBtn').style.display = 'block';
     document.getElementById('importBtn').style.display = 'block';
+    document.getElementById('fexBtn').style.display = 'block';
 
     document.getElementById('lastSync').textContent =
       `Synced ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
@@ -1411,6 +1433,7 @@ function renderDashboard(){
 
   renderLapseSection();
   renderCommissionEmailSection();
+  renderFexLeadsOnLoad();
   renderWebLeads();
 
   // Appointments
@@ -4160,6 +4183,327 @@ function addPhotoToLetter(doc, W, M) {
     };
     img.src = MICHELLE_HEADSHOT;
   } catch(e) { /* fail silently */ }
+}
+
+// ── FEX LEADS EMAIL SCANNER ──────────────────────────────────────────────────
+const FEX_STORAGE_KEY = 'isbs_fex_leads';
+const FEX_SENDER = 'leads@fexcontracting.com';
+
+function getStoredFexLeads() {
+  try { return JSON.parse(localStorage.getItem(FEX_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveStoredFexLeads(arr) {
+  try { localStorage.setItem(FEX_STORAGE_KEY, JSON.stringify(arr.slice(0,200))); } catch(e) {}
+}
+
+// County lookup by IL city name (common Southern IL cities)
+const IL_COUNTY_MAP = {
+  'sesser':'Franklin','benton':'Franklin','west frankfort':'Franklin','christopher':'Franklin','zeigler':'Franklin',
+  'carbondale':'Jackson','murphysboro':'Jackson','du quoin':'Perry','sparta':'Randolph',
+  'marion':'Williamson','herrin':'Williamson','carterville':'Williamson',
+  'harrisburg':'Saline','eldorado':'Saline','carrier mills':'Saline',
+  'mount vernon':'Jefferson','belle rive':'Jefferson',
+  'flora':'Clay','louisville':'Clay','xenia':'Clay',
+  'olney':'Richland','noble':'Richland',
+  'wayne city':'Wayne','fairfield':'Wayne',
+  'mt carmel':'Wabash',
+  'albion':'Edwards',
+  'grayville':'White','carmi':'White',
+  'mcleansboro':'Hamilton','dahlgren':'Hamilton',
+  'vienna':'Johnson','goreville':'Johnson',
+  'anna':'Union','jonesboro':'Union','cobden':'Union',
+  'cairo':'Alexander','mounds':'Alexander',
+  'pulaski':'Pulaski','mound city':'Pulaski',
+  'golconda':'Pope','eddyville':'Pope',
+  'elizabethtown':'Hardin',
+  'shawneetown':'Gallatin','junction':'Gallatin',
+  'equality':'Gallatin',
+  'lawrenceville':'Lawrence','bridgeport':'Lawrence',
+  'centralia':'Marion','salem':'Marion',
+  'effingham':'Effingham','altamont':'Effingham',
+};
+
+function guessCounty(city) {
+  if (!city) return '';
+  return IL_COUNTY_MAP[city.toLowerCase().trim()] || '';
+}
+
+async function checkFexLeads() {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const btn = document.getElementById('fexBtn');
+  btn.textContent = '⏳ Checking…';
+  btn.disabled = true;
+
+  const el = document.getElementById('fexLeadsSection');
+  el.innerHTML = `<div class="section-divider" style="margin-top:4px">
+    <h2>📬 FEX Leads</h2><div class="divider-line"></div>
+  </div><div class="fex-scanning"><div class="fex-scan-spinner"></div>Checking Gmail for new leads…</div>`;
+
+  try {
+    const q = `from:${FEX_SENDER} newer_than:90d has:attachment`;
+    const listResp = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!listResp.ok) throw new Error('Gmail error ' + listResp.status);
+    const listData = await listResp.json();
+    const messages = listData.messages || [];
+
+    if (!messages.length) {
+      el.innerHTML = `<div class="section-divider" style="margin-top:4px">
+        <h2>📬 FEX Leads</h2><div class="divider-line"></div>
+      </div><div style="padding:18px;color:var(--muted);font-size:13px;text-align:center">No FEX lead emails found in the last 90 days.</div>`;
+      btn.textContent = '📬 FEX Leads';
+      btn.disabled = false;
+      return;
+    }
+
+    const stored = getStoredFexLeads();
+    const storedEmailIds = new Set(stored.map(l => l.emailId));
+    const newLeads = [];
+
+    for (const msg of messages) {
+      if (storedEmailIds.has(msg.id)) continue;
+      try {
+        // Get full message to find PDF attachment
+        const msgResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!msgResp.ok) continue;
+        const msgData = await msgResp.json();
+
+        // Find PDF attachment part
+        const pdfPart = findPdfPart(msgData.payload);
+        if (!pdfPart) continue;
+
+        const headers = msgData.payload?.headers || [];
+        const subject = headers.find(h => h.name === 'Subject')?.value || '';
+        const dateStr = headers.find(h => h.name === 'Date')?.value || '';
+
+        // Fetch attachment bytes
+        const attResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/attachments/${pdfPart.body.attachmentId}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!attResp.ok) continue;
+        const attData = await attResp.json();
+        // Gmail returns base64url — convert to standard base64
+        const b64 = attData.data.replace(/-/g,'+').replace(/_/g,'/');
+
+        // Send to Claude vision to extract fields
+        const extracted = await extractLeadFromPdfBase64(b64);
+        if (!extracted) continue;
+
+        newLeads.push({
+          id: msg.id + '_' + Date.now(),
+          emailId: msg.id,
+          subject,
+          emailDate: dateStr,
+          detectedAt: new Date().toISOString(),
+          addedToSheet: false,
+          dismissed: false,
+          ...extracted,
+        });
+      } catch(e) {
+        console.error('FEX lead parse error:', e);
+        continue;
+      }
+    }
+
+    const merged = [...newLeads, ...stored].slice(0,200);
+    saveStoredFexLeads(merged);
+    renderFexLeads();
+
+    if (newLeads.length) {
+      toast('📬 ' + newLeads.length + ' new FEX lead' + (newLeads.length > 1 ? 's' : '') + ' found');
+    } else {
+      toast('✓ No new FEX leads — all caught up');
+    }
+  } catch(e) {
+    console.error('FEX scan error:', e);
+    toast('Could not check FEX leads — ' + e.message);
+    el.innerHTML = '';
+  }
+
+  btn.textContent = '📬 FEX Leads';
+  btn.disabled = false;
+}
+
+function findPdfPart(part) {
+  if (!part) return null;
+  if (part.mimeType === 'application/pdf' && part.body?.attachmentId) return part;
+  if (part.parts) {
+    for (const p of part.parts) {
+      const found = findPdfPart(p);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+async function extractLeadFromPdfBase64(b64) {
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: b64 }
+            },
+            {
+              type: 'text',
+              text: `This is a final expense lead card. Extract the handwritten information from the response box on the right side of the card. Return ONLY valid JSON with these exact keys:
+{
+  "firstName": "",
+  "lastName": "",
+  "spouseName": "",
+  "spouseAge": "",
+  "address": "",
+  "city": "",
+  "state": "IL",
+  "zip": "",
+  "phone": "",
+  "age": "",
+  "dob": ""
+}
+For the name field: split "First Last" format into firstName and lastName. If only one name, put it in lastName.
+For phone: format as (XXX) XXX-XXXX if 10 digits are present.
+If a field is blank on the card, return empty string. Return ONLY the JSON object, nothing else.`
+            }
+          ]
+        }]
+      })
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || '';
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    // Auto-fill county from city
+    if (!parsed.county && parsed.city) parsed.county = guessCounty(parsed.city);
+    return parsed;
+  } catch(e) {
+    console.error('Claude extraction error:', e);
+    return null;
+  }
+}
+
+function renderFexLeads() {
+  const el = document.getElementById('fexLeadsSection');
+  if (!el) return;
+  const all = getStoredFexLeads();
+  const active = all.filter(l => !l.dismissed);
+  if (!active.length) { el.innerHTML = ''; return; }
+
+  const pending = active.filter(l => !l.addedToSheet);
+
+  let html = `<div class="section-divider" style="margin-top:4px">
+    <h2>📬 FEX Leads <span style="font-size:13px;font-weight:400;color:var(--muted)">${pending.length} pending</span></h2>
+    <div class="divider-line"></div>
+  </div>`;
+
+  active.slice(0,20).forEach(lead => {
+    const dateStr = lead.emailDate ? new Date(lead.emailDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    const isDone = lead.addedToSheet;
+    html += `<div class="fex-lead-card${isDone?' fex-done':''}" id="fex-card-${lead.id}">
+      <div class="fex-lead-name">${lead.firstName||''} ${lead.lastName||''}</div>
+      <div class="fex-lead-meta">${[lead.city, lead.phone, dateStr].filter(Boolean).join(' · ')}</div>
+      ${isDone ? '<div class="fex-saved-badge">✓ Added to Leads sheet</div>' : `
+      <div class="fex-lead-fields">
+        <div class="fex-lead-field"><label>First Name</label><input id="fx_first_${lead.id}" value="${esc2(lead.firstName||'')}"></div>
+        <div class="fex-lead-field"><label>Last Name</label><input id="fx_last_${lead.id}" value="${esc2(lead.lastName||'')}"></div>
+        <div class="fex-lead-field"><label>Spouse Name</label><input id="fx_spouse_${lead.id}" value="${esc2(lead.spouseName||'')}"></div>
+        <div class="fex-lead-field"><label>Age</label><input id="fx_age_${lead.id}" value="${esc2(lead.age||'')}"></div>
+        <div class="fex-lead-field fex-full"><label>Address</label><input id="fx_address_${lead.id}" value="${esc2(lead.address||'')}"></div>
+        <div class="fex-lead-field"><label>City</label><input id="fx_city_${lead.id}" value="${esc2(lead.city||'')}"></div>
+        <div class="fex-lead-field"><label>County</label><input id="fx_county_${lead.id}" value="${esc2(lead.county||'')}"></div>
+        <div class="fex-lead-field"><label>State</label><input id="fx_state_${lead.id}" value="${esc2(lead.state||'IL')}"></div>
+        <div class="fex-lead-field"><label>Zip</label><input id="fx_zip_${lead.id}" value="${esc2(lead.zip||'')}"></div>
+        <div class="fex-lead-field"><label>Phone</label><input id="fx_phone_${lead.id}" value="${esc2(lead.phone||'')}"></div>
+        <div class="fex-lead-field"><label>DOB</label><input id="fx_dob_${lead.id}" value="${esc2(lead.dob||'')}"></div>
+      </div>
+      <div class="fex-lead-actions">
+        <button class="fex-save-btn" id="fx_savebtn_${lead.id}" onclick="saveFexLeadToSheet('${lead.id}')">💾 Add to Leads Sheet</button>
+        <button class="fex-dismiss-btn" onclick="dismissFexLead('${lead.id}')">Dismiss</button>
+      </div>`}
+    </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function esc2(v) {
+  return String(v||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function saveFexLeadToSheet(id) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const btn = document.getElementById('fx_savebtn_' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+
+  const g = (field) => {
+    const el = document.getElementById('fx_' + field + '_' + id);
+    return el ? el.value.trim() : '';
+  };
+
+  // Leads tab columns: A=status, B=?, C=?, D=FirstName, E=Spouse, F=LastName, G=Address, H=City, I=County, J=State, K=Zip, L=LeadDate, M=Phone, N=DOB, O=Age
+  const row = [
+    '', '', '',
+    g('first'),
+    g('spouse'),
+    g('last'),
+    g('address'),
+    g('city'),
+    g('county'),
+    g('state') || 'IL',
+    g('zip'),
+    today,
+    g('phone'),
+    g('dob'),
+    g('age'),
+  ];
+
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A:O:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [row] })
+      }
+    );
+    if (!resp.ok) throw new Error('Sheet error ' + resp.status);
+
+    const leads = getStoredFexLeads();
+    const lead = leads.find(l => l.id === id);
+    if (lead) { lead.addedToSheet = true; saveStoredFexLeads(leads); }
+    renderFexLeads();
+    toast(`✓ ${g('first')} ${g('last')} added to Leads tab`);
+  } catch(err) {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Add to Leads Sheet'; }
+    toast('Could not save — check connection');
+  }
+}
+
+function dismissFexLead(id) {
+  const leads = getStoredFexLeads();
+  const lead = leads.find(l => l.id === id);
+  if (lead) { lead.dismissed = true; saveStoredFexLeads(leads); renderFexLeads(); }
+}
+
+// Render on dashboard load
+function renderFexLeadsOnLoad() {
+  const stored = getStoredFexLeads().filter(l => !l.dismissed && !l.addedToSheet);
+  if (stored.length) renderFexLeads();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
