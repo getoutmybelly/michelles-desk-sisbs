@@ -4371,53 +4371,24 @@ function findPdfPart(part) {
 
 async function extractLeadFromPdfBase64(b64) {
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    // Route through Cloudflare Worker to avoid CORS — Worker calls Anthropic server-side
+    const resp = await fetch('https://isbs-leads.michelle-cb4.workers.dev/extract-lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: b64 }
-            },
-            {
-              type: 'text',
-              text: `This is a final expense lead card. Extract the handwritten information from the response box on the right side of the card. Return ONLY valid JSON with these exact keys:
-{
-  "firstName": "",
-  "lastName": "",
-  "spouseName": "",
-  "spouseAge": "",
-  "address": "",
-  "city": "",
-  "state": "IL",
-  "zip": "",
-  "phone": "",
-  "age": "",
-  "dob": ""
-}
-For the name field: split "First Last" format into firstName and lastName. If only one name, put it in lastName.
-For phone: format as (XXX) XXX-XXXX if 10 digits are present.
-If a field is blank on the card, return empty string. Return ONLY the JSON object, nothing else.`
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify({ pdfBase64: b64 })
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const err = await resp.json().catch(()=>({}));
+      console.error('Worker extract-lead error:', err);
+      return null;
+    }
     const data = await resp.json();
-    const text = data.content?.find(b => b.type === 'text')?.text || '';
-    const clean = text.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean);
-    // Auto-fill county from city
+    if (!data.ok || !data.data) { console.error('Worker returned error:', data); return null; }
+    const parsed = data.data;
     if (!parsed.county && parsed.city) parsed.county = guessCounty(parsed.city);
     return parsed;
   } catch(e) {
-    console.error('Claude extraction error:', e);
+    console.error('extract-lead fetch error:', e);
     return null;
   }
 }
