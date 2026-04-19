@@ -4259,11 +4259,15 @@ async function checkFexLeads() {
     }
 
     const stored = getStoredFexLeads();
-    const storedEmailIds = new Set(stored.map(l => l.emailId));
+    // Only skip emails already successfully pushed to the sheet
+    const doneEmailIds = new Set(stored.filter(l => l.addedToSheet).map(l => l.emailId));
+    // Remove any cached entries that were never added to sheet so we re-process them fresh
+    const cleanedStored = stored.filter(l => l.addedToSheet);
+    saveStoredFexLeads(cleanedStored);
     const newLeads = [];
 
     for (const msg of messages) {
-      if (storedEmailIds.has(msg.id)) continue;
+      if (doneEmailIds.has(msg.id)) continue;
       try {
         // Get full message to find PDF attachment
         const msgResp = await fetch(
@@ -4311,14 +4315,15 @@ async function checkFexLeads() {
       }
     }
 
-    const merged = [...newLeads, ...stored].slice(0,200);
+    const freshStored = getStoredFexLeads();
+    const merged = [...newLeads, ...freshStored].slice(0,200);
     saveStoredFexLeads(merged);
     renderFexLeads();
 
     if (newLeads.length) {
       toast('📬 ' + newLeads.length + ' new FEX lead' + (newLeads.length > 1 ? 's' : '') + ' found');
     } else {
-      toast('✓ No new FEX leads — all caught up');
+      toast('✓ No unprocessed FEX leads found');
     }
   } catch(e) {
     console.error('FEX scan error:', e);
