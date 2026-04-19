@@ -4242,24 +4242,38 @@ async function checkFexLeads() {
   </div><div class="fex-scanning"><div class="fex-scan-spinner"></div>Checking Gmail for new leads…</div>`;
 
   try {
-    const q = `(from:${FEX_SENDER} OR subject:"FE" subject:"lead") newer_than:90d has:attachment`;
-    const listResp = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (!listResp.ok) {
-      const errData = await listResp.json().catch(()=>({}));
-      throw new Error('Gmail error ' + listResp.status + ': ' + (errData?.error?.message || 'unknown'));
+    // Try multiple queries since Gmail API can be finicky with OR syntax
+    // Primary: exact sender. Fallback: subject pattern from FEX emails ("IL FE")
+    const queries = [
+      `from:fexcontracting.com newer_than:180d has:attachment`,
+      `subject:"IL FE" newer_than:180d has:attachment`,
+      `subject:"FE" from:leads newer_than:180d has:attachment`,
+    ];
+
+    let messages = [];
+    for (const q of queries) {
+      const listResp = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!listResp.ok) {
+        const errData = await listResp.json().catch(()=>({}));
+        throw new Error('Gmail error ' + listResp.status + ': ' + (errData?.error?.message || 'unknown'));
+      }
+      const listData = await listResp.json();
+      if (listData.messages?.length) {
+        messages = listData.messages;
+        break; // found results, stop trying
+      }
     }
-    const listData = await listResp.json();
-    const messages = listData.messages || [];
+    const q = queries[0]; // for display purposes
 
     if (!messages.length) {
       el.innerHTML = `<div class="section-divider" style="margin-top:4px">
         <h2>📬 FEX Leads</h2><div class="divider-line"></div>
       </div><div style="padding:18px;color:var(--muted);font-size:13px;text-align:center">
-        No FEX lead emails found.<br>
-        <span style="font-size:11px;color:#bbb;word-break:break-all">Query: ${q}</span>
+        No FEX lead emails found after trying ${queries.length} queries.<br>
+        <span style="font-size:11px;color:#bbb;word-break:break-all">Last tried: ${queries[queries.length-1]}</span>
       </div>`;
       btn.textContent = '📬 FEX Leads';
       btn.disabled = false;
@@ -4420,6 +4434,7 @@ function renderFexLeads() {
   let html = `<div class="section-divider" style="margin-top:4px">
     <h2>📬 FEX Leads <span style="font-size:13px;font-weight:400;color:var(--muted)">${pending.length} pending</span></h2>
     <div class="divider-line"></div>
+    <button onclick="clearFexCache()" style="flex-shrink:0;padding:4px 11px;border-radius:20px;border:1.5px solid var(--border);background:#fff;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap">↺ Reset</button>
   </div>`;
 
   active.slice(0,20).forEach(lead => {
@@ -4514,6 +4529,12 @@ function dismissFexLead(id) {
 }
 
 // Render on dashboard load
+function clearFexCache() {
+  localStorage.removeItem(FEX_STORAGE_KEY);
+  document.getElementById('fexLeadsSection').innerHTML = '';
+  toast('FEX cache cleared — hit the button to rescan');
+}
+
 function renderFexLeadsOnLoad() {
   const stored = getStoredFexLeads().filter(l => !l.dismissed && !l.addedToSheet);
   if (stored.length) renderFexLeads();
