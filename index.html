@@ -1637,33 +1637,16 @@ async function processCardFile(file) {
     const mediaType = isPDF ? 'application/pdf' : file.type;
 
     // Call Claude API to read the card
-    const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+    const response = await fetch('https://isbs-leads.michelle-cb4.workers.dev/extract-lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: isPDF ? 'document' : 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: 'This is an insurance lead card. Extract the handwritten information and return ONLY a JSON object with these exact keys: firstName, lastName, spouseName, spouseAge, address, city, state, zip, phone, age, dob. Use empty string for any field not found. For state, use 2-letter abbreviation. For phone, format as (XXX) XXX-XXXX. Return only the JSON, no other text.'
-            }
-          ]
-        }]
-      })
+      body: JSON.stringify({ pdfBase64: base64 })
     });
 
     if (!response.ok) throw new Error('API error');
     const data = await response.json();
-    const text = data.content[0].text.trim();
-    const clean = text.replace(/```json|```/g,'').trim();
-    const extracted = JSON.parse(clean);
+    if (!data.ok || !data.data) throw new Error('Extraction failed: ' + JSON.stringify(data));
+    const extracted = data.data;
 
     // Fill form
     document.getElementById('lf_first').value = extracted.firstName || '';
@@ -1802,7 +1785,7 @@ Enter password to unlock (or press OK to try automatically):`
 
     const base64 = await fileToBase64(file);
 
-    const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+    const response = await fetch('https://isbs-leads.michelle-cb4.workers.dev/extract-lead', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -4242,31 +4225,33 @@ async function checkFexLeads() {
   </div><div class="fex-scanning"><div class="fex-scan-spinner"></div>Checking Gmail for new leads…</div>`;
 
   try {
-    // Try multiple queries since Gmail API can be finicky with OR syntax
-    // Primary: exact sender. Fallback: subject pattern from FEX emails ("IL FE")
+    // Try multiple queries — each is a different way to find FEX lead emails
     const queries = [
-      `from:fexcontracting.com newer_than:180d has:attachment`,
-      `subject:"IL FE" newer_than:180d has:attachment`,
-      `subject:"FE" from:leads newer_than:180d has:attachment`,
+      `from:fexcontracting.com`,
+      `from:leads@fexcontracting.com`,
+      `subject:"IL FE" has:attachment`,
+      `subject:"FE" has:attachment newer_than:180d`,
     ];
 
     let messages = [];
+    let usedQuery = '';
     for (const q of queries) {
-      const listResp = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      if (!listResp.ok) {
-        const errData = await listResp.json().catch(()=>({}));
-        throw new Error('Gmail error ' + listResp.status + ': ' + (errData?.error?.message || 'unknown'));
-      }
-      const listData = await listResp.json();
-      if (listData.messages?.length) {
-        messages = listData.messages;
-        break; // found results, stop trying
-      }
+      try {
+        const listResp = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=30`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!listResp.ok) continue;
+        const listData = await listResp.json();
+        console.log('FEX query:', q, '→', listData.messages?.length || 0, 'results');
+        if (listData.messages?.length) {
+          messages = listData.messages;
+          usedQuery = q;
+          break;
+        }
+      } catch(e) { console.error('Query failed:', q, e); continue; }
     }
-    const q = queries[0]; // for display purposes
+    const q = usedQuery || queries[queries.length-1];
 
     if (!messages.length) {
       el.innerHTML = `<div class="section-divider" style="margin-top:4px">
