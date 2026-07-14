@@ -2373,7 +2373,11 @@ Return only the JSON array, no other text.`
       })
     });
 
-    if (!aiResp.ok) throw new Error('AI worker error');
+    if (!aiResp.ok) {
+      const errText = await aiResp.text().catch(()=>'');
+      console.error('Worker error:', aiResp.status, errText);
+      throw new Error(aiResp.status + ': ' + errText.substring(0,120));
+    }
     const aiData = await aiResp.json();
     const text = aiData.content[0].text.trim().replace(/```json|```/g,'').trim();
     const leads = JSON.parse(text);
