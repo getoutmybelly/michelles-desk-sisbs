@@ -2428,28 +2428,35 @@ async function saveFexLeads(leads, btn) {
 
   for (const lead of leads) {
     try {
+      // Column mapping (0-based): A=status, B=notes, C=empty, D=FirstName, E=Spouse,
+      // F=LastName, G=Address, H=City, I=County, J=State, K=Zip, L=LeadDate,
+      // M=Phone, N=DOB, O=Age, P=AgeRange, Q=Health, R=BestTime, S=InterestedIn
       const row = [
-        '', '', '',
-        lead.firstName || '',
-        lead.spouseName || '',
-        lead.lastName || '',
-        lead.address || '',
-        lead.city || '',
-        '',  // county
-        lead.state || 'IL',
-        lead.zip || '',
-        today,
-        lead.phone || '',
-        '',  // dob
-        '',  // age
-        lead.ageRange || '',
-        lead.health || '',
-        lead.bestTimeToCall || '',
-        lead.interestedIn || '',
+        'Door Knock',  // A - status
+        '',            // B - notes
+        '',            // C - empty
+        lead.firstName || '',      // D - First Name
+        lead.spouseName || '',     // E - Spouse
+        lead.lastName || '',       // F - Last Name
+        lead.address || '',        // G - Address
+        lead.city || '',           // H - City
+        '',                        // I - County
+        lead.state || 'IL',        // J - State
+        lead.zip || '',            // K - Zip
+        today,                     // L - Lead Date
+        lead.phone || '',          // M - Phone
+        '',                        // N - DOB
+        '',                        // O - Age
+        '',                        // P - TOB
+        '',                        // Q - SS
+        lead.ageRange || '',       // R - Age Range
+        lead.health || '',         // S - Health
+        lead.bestTimeToCall || '', // T - Best Time to Call
+        lead.interestedIn || '',   // U - Interested In
       ];
 
       const resp = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A:S:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Clients!A:U:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
