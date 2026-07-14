@@ -1497,12 +1497,231 @@ function renderLeadsPanel() {
 
 function renderCommissionPanel() {
   const panel = document.getElementById('panel_commission');
-  panel.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
-    <button onclick="openCommTracker()" style="padding:16px;background:#fff;border:1.5px solid var(--gold);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;color:var(--gold);cursor:pointer;text-align:left;display:flex;align-items:center;gap:12px">
-      <span style="font-size:24px">💰</span>
-      <div><div>Upload Commission Statement</div><div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:2px">Trinity, Illinois Mutual, American General, Polish Falcons & more</div></div>
-    </button>
-  </div>`;
+  panel.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button onclick="openCommTracker()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--gold);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--gold);cursor:pointer">📄 Upload Statement</button>
+      <button onclick="renderCommissionPanel()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--border);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">↻ Refresh</button>
+    </div>
+    <div id="commEmailsInline">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="font-family:'DM Serif Display',serif;font-size:17px">💰 Commission & Lapse Emails</div>
+        <div class="loading-spinner" style="width:16px;height:16px;flex-shrink:0"></div>
+      </div>
+    </div>`;
+  loadCommissionEmailsInline();
+}
+
+async function loadCommissionEmailsInline() {
+  const container = document.getElementById('commEmailsInline');
+  if (!container || !accessToken) return;
+
+  const CARRIERS = ['trinity life','illinois mutual','american general','polish falcons',
+    'corebridge','gerber life','foresters','transamerica','sons of norway','lifeshield',
+    'kskj','accendo','sbli','amam','pfa','seniorlife','american amicable','aetna'];
+
+  const LAPSE_TERMS = ['lapse','lapsed','termination notice','policy terminated',
+    'cancellation notice','premium past due','policy lapse'];
+
+  // Build Gmail search queries
+  const commQueries = CARRIERS.map(c => `from:${c.split(' ')[0]}`).join(' OR ');
+  const queries = [
+    // Commission statements from carriers
+    `(${CARRIERS.slice(0,5).map(c=>'from:*'+c.split(' ')[0]+'*').join(' OR ')}) has:attachment`,
+    `(${CARRIERS.slice(5,10).map(c=>'from:*'+c.split(' ')[0]+'*').join(' OR ')}) has:attachment`,
+    `subject:(commission OR statement OR payment) has:attachment`,
+    // Lapse notices
+    `subject:(lapse OR lapsed OR termination OR "past due" OR cancellation) insurance`,
+    `(lapse OR lapsed) (policy OR insurance) in:inbox`,
+  ];
+
+  try {
+    let allIds = new Set();
+    let commMessages = [], lapseMessages = [];
+
+    for (let i = 0; i < queries.length; i++) {
+      try {
+        const r = await fetch(
+          `https://www.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(queries[i])}&maxResults=15`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!r.ok) continue;
+        const d = await r.json();
+        for (const msg of (d.messages || [])) {
+          if (!allIds.has(msg.id)) {
+            allIds.add(msg.id);
+            if (i < 3) commMessages.push(msg);
+            else lapseMessages.push(msg);
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Get details for commission emails
+    const commDetails = await getEmailDetails(commMessages.slice(0,10));
+    const lapseDetails = await getEmailDetails(lapseMessages.slice(0,8));
+
+    let html = '';
+
+    // LAPSE NOTICES — show first, most urgent
+    if (lapseDetails.length) {
+      html += `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-weight:700;color:var(--rust);margin-bottom:10px;display:flex;align-items:center;gap:7px">
+          <span>⚠️</span> ${lapseDetails.length} Lapse / Termination Notice${lapseDetails.length>1?'s':''}
+        </div>`;
+      lapseDetails.forEach(email => {
+        const dateStr = formatEmailDate(email.date);
+        // Try to find matching client
+        const matched = findClientFromEmail(email);
+        html += `<div style="background:#fff;border-radius:8px;padding:11px 13px;margin-bottom:7px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div>
+              <div style="font-weight:600;font-size:13px">${email.subject}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${email.from} · ${dateStr}</div>
+              <div style="font-size:12px;color:var(--ink);margin-top:5px">${email.snippet}</div>
+              ${matched ? `<div style="font-size:11px;color:var(--rust);font-weight:600;margin-top:4px">⚠️ Possible match: ${matched.fullName} · ${matched.existingCompany||''}</div>` : ''}
+            </div>
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    // COMMISSION STATEMENTS
+    html += `<div style="font-family:'DM Serif Display',serif;font-size:17px;margin-bottom:12px">
+      💰 Commission Emails <span style="font-size:13px;font-weight:400;font-family:'DM Sans',sans-serif;color:var(--muted)">${commDetails.length} found</span>
+    </div>`;
+
+    if (!commDetails.length) {
+      html += `<div style="background:var(--cream);border-radius:12px;padding:20px;text-align:center;color:var(--muted)">
+        <div style="font-size:22px;margin-bottom:8px">📭</div>
+        <div style="font-weight:600;color:var(--ink)">No commission emails found</div>
+        <div style="font-size:13px;margin-top:4px">Make sure you're signed in with michelle@seniorbenefitsofillinois.com</div>
+      </div>`;
+    } else {
+      commDetails.forEach(email => {
+        const dateStr = formatEmailDate(email.date);
+        html += `<div style="border:1.5px solid var(--border);border-radius:12px;padding:13px;margin-bottom:9px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:13px">${email.subject}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${email.from} · ${dateStr}</div>
+              <div style="font-size:12px;color:var(--ink);margin-top:5px;line-height:1.5">${email.snippet}</div>
+            </div>
+            ${email.pdfPart
+              ? `<button onclick="processCommissionEmail('${email.id}','${email.pdfPart.attachmentId}',this)"
+                   style="flex-shrink:0;padding:8px 14px;background:var(--gold);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+                   📊 Process
+                 </button>`
+              : `<span style="font-size:11px;color:var(--muted);flex-shrink:0">No PDF</span>`
+            }
+          </div>
+          <div class="comm-email-result" style="margin-top:8px"></div>
+        </div>`;
+      });
+    }
+
+    container.innerHTML = html;
+
+  } catch(err) {
+    container.innerHTML = `<div style="background:var(--rust-light);border-radius:12px;padding:16px;color:var(--rust)">
+      <div style="font-weight:600;margin-bottom:4px">Could not load emails</div>
+      <div style="font-size:13px">${err.message}</div>
+    </div>`;
+    console.error('Commission emails error:', err);
+  }
+}
+
+async function getEmailDetails(messages) {
+  const details = [];
+  for (const msg of messages) {
+    try {
+      const r = await fetch(
+        `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const detail = await r.json();
+      const headers = detail.payload?.headers || [];
+      const subject = headers.find(h=>h.name==='Subject')?.value || '(no subject)';
+      const date = headers.find(h=>h.name==='Date')?.value || '';
+      const from = headers.find(h=>h.name==='From')?.value || '';
+      const snippet = detail.snippet || '';
+      const pdfPart = findPdfAttachment(detail.payload?.parts || []);
+      details.push({ id: msg.id, subject, date, from, snippet, pdfPart });
+    } catch(e) {}
+  }
+  return details;
+}
+
+function formatEmailDate(dateStr) {
+  const d = new Date(dateStr);
+  return isNaN(d) ? dateStr : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function findClientFromEmail(email) {
+  // Try to match client name or policy number from email subject/snippet
+  const text = (email.subject + ' ' + email.snippet).toLowerCase();
+  return allClients.find(c => {
+    if (c.existingPolicy && text.includes(c.existingPolicy.toLowerCase())) return true;
+    if (c.fullName && c.fullName.split(' ').every(w => w.length > 2 && text.includes(w.toLowerCase()))) return true;
+    return false;
+  }) || null;
+}
+
+async function processCommissionEmail(messageId, attachmentId, btn) {
+  const resultDiv = btn.closest('div[style]').querySelector('.comm-email-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing…';
+
+  try {
+    const attResp = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const attData = await attResp.json();
+    const base64 = attData.data.replace(/-/g,'+').replace(/_/g,'/');
+
+    if (resultDiv) resultDiv.innerHTML = `<div style="color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px">
+      <div class="loading-spinner" style="width:14px;height:14px"></div>Reading statement…</div>`;
+
+    const aiResp = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: `This is an insurance commission statement. Extract all policy/commission line items.
+Return ONLY a JSON object with:
+- carrier: insurance company name
+- period: statement period
+- totalCommission: total as number
+- policies: array of {policyNumber, insuredName, commissionAmount, commissionType}
+Return only valid JSON, no other text.` }
+          ]
+        }]
+      })
+    });
+
+    if (!aiResp.ok) throw new Error(`Worker ${aiResp.status}`);
+    const aiData = await aiResp.json();
+    const text = aiData.content[0].text.trim().replace(/```json|```/g,'').trim();
+    const extracted = JSON.parse(text);
+
+    // Run the existing matchCommissions logic
+    matchCommissions(extracted);
+    btn.textContent = '✓ Processed';
+    btn.style.background = 'var(--sage)';
+    if (resultDiv) resultDiv.innerHTML = `<div style="font-size:12px;color:var(--green);font-weight:600">✓ ${extracted.policies?.length||0} policies found — see Commission Tracker above</div>`;
+
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = '📊 Process';
+    if (resultDiv) resultDiv.innerHTML = `<div style="font-size:12px;color:var(--rust)">Error: ${err.message}</div>`;
+    console.error('Commission email error:', err);
+  }
 }
 
 // ── SIGNAL HTML BUILDERS (used by renderSignalsPanel) ─────────────────────────
