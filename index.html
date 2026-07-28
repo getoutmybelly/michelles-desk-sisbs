@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Michelle's Desk</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <!-- Google auth handled via redirect -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
@@ -169,6 +171,51 @@
   .scanner-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
   .scanner-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
   .scanner-body{padding:20px;}
+  .import-section{display:none;margin-bottom:22px;}
+  .import-section.visible{display:block;}
+  .import-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .import-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .import-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
+  .import-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .import-body{padding:20px;}
+  .import-drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px;}
+  .import-drop:hover,.import-drop.drag{border-color:var(--sage);background:var(--sage-light);}
+  .import-drop-icon{font-size:28px;margin-bottom:8px;}
+  .import-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .import-stat{background:var(--cream);border-radius:8px;padding:8px 12px;flex:1;min-width:70px;text-align:center;}
+  .import-stat-n{font-family:'DM Serif Display',serif;font-size:20px;color:var(--ink);}
+  .import-stat-l{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .import-stat.is-lead .import-stat-n{color:var(--blue);}
+  .import-stat.is-client .import-stat-n{color:var(--green);}
+  .import-stat.is-skip .import-stat-n{color:var(--muted);}
+  .import-stat.is-err .import-stat-n{color:var(--rust);}
+  .import-progress{margin-bottom:14px;display:none;}
+  .import-progress.visible{display:block;}
+  .import-prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .import-prog-bar{height:5px;background:var(--cream);border-radius:4px;overflow:hidden;}
+  .import-prog-fill{height:100%;background:linear-gradient(90deg,var(--sage),var(--gold));border-radius:4px;transition:width .3s;width:0%;}
+  .import-log{background:var(--cream);border-radius:8px;padding:10px 12px;max-height:160px;overflow-y:auto;font-size:11px;font-family:monospace;line-height:1.7;margin-bottom:14px;display:none;}
+  .import-log.visible{display:block;}
+  .import-queue{max-height:180px;overflow-y:auto;margin-bottom:14px;display:none;}
+  .import-queue.visible{display:block;}
+  .iq-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px;}
+  .iq-item:nth-child(odd){background:var(--cream);}
+  .iq-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);}
+  .iq-status{font-size:11px;font-weight:600;white-space:nowrap;}
+  .iq-pending{color:var(--muted);}
+  .iq-processing{color:var(--gold);}
+  .iq-lead{color:var(--blue);}
+  .iq-client{color:var(--green);}
+  .iq-skip{color:var(--muted);}
+  .iq-err{color:var(--rust);}
+  .import-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  .import-action-btn{flex:1;padding:12px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .import-action-btn:disabled{opacity:.4;cursor:default;}
+  .import-results-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;}
+  .import-table-wrap{max-height:220px;overflow-y:auto;margin-bottom:12px;border:1.5px solid var(--border);border-radius:8px;}
+  .import-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .import-table th{background:var(--cream);padding:7px 10px;text-align:left;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);position:sticky;top:0;}
+  .import-table td{padding:7px 10px;border-bottom:1px solid var(--cream);color:var(--ink);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .drop-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;}
   .drop-zone:hover,.drop-zone.dragover{border-color:var(--sage);background:var(--sage-light);}
   .drop-zone-icon{font-size:32px;margin-bottom:8px;}
@@ -399,6 +446,7 @@
     <button id="commBtn" onclick="openCommTracker()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">💰 Commission</button>
     <button id="mapBtn" onclick="openNearbyMap()" style="display:none;background:rgba(42,77,160,.4);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">🗺 Nearby</button>
     <button id="fexBtn" onclick="openFexLeads()" style="display:none;background:rgba(45,122,79,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📬 FEX Leads</button>
+    <button id="importBtn" onclick="openImporter()" style="display:none;background:rgba(92,122,107,.5);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📂 Import PDFs</button>
     <button id="scanBtn" onclick="openScanner()" style="display:none;background:rgba(184,146,58,.35);border:none;color:#fff;padding:6px 13px;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">📋 New Lead</button>
     <button class="hdr-btn" id="refreshBtn" onclick="loadFromSheets()">↻ Refresh</button>
     <div class="badge" id="badge"></div>
@@ -464,6 +512,57 @@
     </div>
   </div>
 
+  <div class="import-section" id="importSection">
+    <div class="import-box">
+      <div class="import-header">
+        <div class="import-title">📂 Import Archive</div>
+        <button class="import-close" onclick="closeImporter()">✕</button>
+      </div>
+      <div class="import-body">
+        <div class="import-drop" id="importDrop"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="importHandleDrop(event)"
+          onclick="document.getElementById('importFileInput').click()">
+          <div class="import-drop-icon">📄</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Drop PDF files here</div>
+          <div style="font-size:13px;color:var(--muted)">T-2 cards, B-26 cards, intake sheets — select as many as you want</div>
+        </div>
+        <input type="file" id="importFileInput" multiple accept="application/pdf" style="display:none" onchange="importHandleFiles(this.files)">
+        <div class="import-stats" id="importStats" style="display:none">
+          <div class="import-stat"><div class="import-stat-n" id="impTotal">0</div><div class="import-stat-l">Total</div></div>
+          <div class="import-stat is-lead"><div class="import-stat-n" id="impLeads">0</div><div class="import-stat-l">Leads</div></div>
+          <div class="import-stat is-client"><div class="import-stat-n" id="impClients">0</div><div class="import-stat-l">Clients</div></div>
+          <div class="import-stat is-skip"><div class="import-stat-n" id="impSkipped">0</div><div class="import-stat-l">Skipped</div></div>
+          <div class="import-stat is-err"><div class="import-stat-n" id="impErrors">0</div><div class="import-stat-l">Errors</div></div>
+        </div>
+        <div class="import-progress" id="importProgress">
+          <div class="import-prog-label"><span id="impProgLabel">Processing…</span><span id="impProgPct">0%</span></div>
+          <div class="import-prog-bar"><div class="import-prog-fill" id="impProgFill"></div></div>
+        </div>
+        <div class="import-queue" id="importQueue"></div>
+        <div class="import-log" id="importLog"></div>
+        <div id="importResultsArea" style="display:none">
+          <div class="import-results-tabs">
+            <button class="irt active" onclick="showImportTab('leads',this)">Leads (<span id="irtLeads">0</span>)</button>
+            <button class="irt" onclick="showImportTab('clients',this)">Clients (<span id="irtClients">0</span>)</button>
+            <button class="irt" onclick="showImportTab('actions',this)">⚠ Actions (<span id="irtActions">0</span>)</button>
+            <button class="irt" onclick="showImportTab('skipped',this)">Skipped (<span id="irtSkipped">0</span>)</button>
+            <button class="irt" id="irtRejected" onclick="showImportTab('rejected',this)" style="display:none;color:var(--rust);border-color:var(--rust)">✕ Needs Splitting (0)</button>
+          </div>
+          <div class="import-table-wrap"><div id="importTableContent"></div></div>
+        </div>
+        <div class="import-actions" id="importActions" style="display:none">
+          <button class="import-action-btn iab-leads" id="pushLeadsBtn" onclick="pushToSheet('leads')" disabled>📋 Push Leads to Sheet</button>
+          <button class="import-action-btn iab-clients" id="pushClientsBtn" onclick="pushToSheet('clients')" disabled>✓ Push Clients to Sheet</button>
+          <button class="import-action-btn" id="dlRejectedBtn" onclick="downloadRejectedList()" style="display:none;background:var(--rust-light);color:var(--rust);border:1.5px solid var(--rust)">⬇ Download Split List</button>
+          <button class="import-action-btn iab-reset" onclick="resetImporter()">↺ Start Over</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <!-- LEAD CARD SCANNER -->
   <div class="scanner-section" id="scannerSection">
     <div class="scanner-box">
@@ -526,6 +625,14 @@
             <button class="map-radius-btn" onclick="setRadius(5,this)">5 mi</button>
             <button class="map-radius-btn" onclick="setRadius(10,this)">10 mi</button>
             <span id="nearbyCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+          </div>
+          <div class="map-controls" style="margin-top:6px">
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">Status:</span>
+            <button class="map-radius-btn active" onclick="setNearbyStatus('',this)">All</button>
+            <button class="map-radius-btn" onclick="setNearbyStatus('Door Knock',this)">Doorknock</button>
+            <button class="map-radius-btn" onclick="setNearbyStatus('Dial',this)">Dial</button>
+            <button class="map-radius-btn" onclick="setNearbyStatus('New Lead',this)">New Lead</button>
+            <button class="map-radius-btn" onclick="setNearbyStatus('Follow Up',this)">Follow Up</button>
           </div>
           <div class="nearby-list" id="nearbyList"></div>
           <div style="margin-top:12px;text-align:center">
@@ -761,6 +868,7 @@ async function loadFromSheets() {
     document.getElementById('badge').style.display = 'block';
     document.getElementById('refreshBtn').style.display = 'block';
     document.getElementById('scanBtn').style.display = 'block';
+    document.getElementById('importBtn').style.display = 'block';
     document.getElementById('commBtn').style.display = 'block';
     document.getElementById('mapBtn').style.display = 'block';
     document.getElementById('fexBtn').style.display = 'block';
@@ -987,6 +1095,7 @@ document.getElementById('searchInput').addEventListener('input', function() {
     const best = visits[visits.length-1];
     const qp = q.replace(/\D/g,'');
     if (best.fullName.toLowerCase().includes(q) || best.displayCompany.toLowerCase().includes(q) ||
+        best.clientStatus.toLowerCase().includes(q) ||
         best.city.toLowerCase().includes(q) || best.existingPolicy.includes(q) ||
         (qp.length>3 && best.phone.replace(/\D/g,'').includes(qp)))
       matched.push({ key, visits, best });
@@ -2005,7 +2114,8 @@ async function renderNearbyClients() {
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Finding nearby clients…</div>';
 
   // Geocode a sample of clients that have addresses
-  const withAddr = allClients.filter(c => c.address && c.city && c.state).slice(0,200);
+  const stFilter = window._nearbyStatus || '';
+  const withAddr = allClients.filter(c => c.address && c.city && c.state && (!stFilter || c.clientStatus === stFilter)).slice(0,200);
   const nearby = [];
 
   // Use zip code centroid approximation for speed (no API needed)
@@ -2428,6 +2538,7 @@ Return only the JSON array, no other text.`
     const aiData = await aiResp.json();
     const text = aiData.content[0].text.trim().replace(/```json|```/g,'').trim();
     const leads = JSON.parse(text);
+    lastFexPdfB64 = base64;   // keep so individual pages can be split & downloaded
 
     // Show preview
     renderFexLeadsPreview(leads, resultDiv, btn);
@@ -2453,6 +2564,7 @@ function renderFexLeadsPreview(leads, container, btn) {
       <div style="color:var(--muted);margin-top:2px">${lead.address}, ${lead.city}, ${lead.state} ${lead.zip}</div>
       <div style="color:var(--sage);margin-top:2px">${lead.phone}${lead.bestTimeToCall?' · '+lead.bestTimeToCall:''}</div>
       <div style="color:var(--muted);font-size:11px;margin-top:2px">Age: ${lead.ageRange} · Health: ${lead.health}${lead.interestedIn?' · '+lead.interestedIn:''}</div>
+      ${lastFexPdfB64?`<button onclick="downloadSplitLead(${i}, '${encodeURIComponent(JSON.stringify(lead))}')" style="margin-top:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:14px;border:1.5px solid var(--sage);color:var(--sage);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ PDF — ${lead.lastName?lead.lastName.toLowerCase():''},${lead.firstName?lead.firstName.toLowerCase():''}${lead.spouseName?'&'+lead.spouseName.split(' ')[0].toLowerCase():''}</button>`:''}
     </div>`;
   });
 
@@ -2467,59 +2579,1633 @@ function renderFexLeadsPreview(leads, container, btn) {
 
 async function saveFexLeads(leads, btn) {
   if (!accessToken) { toast('Sign in first'); return; }
+  if (window._fexSaveInFlight) return;          // double-tap guard
+  window._fexSaveInFlight = true;
   btn.disabled = true;
   btn.textContent = 'Saving…';
 
-  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
-  let saved = 0;
+  const report = [];
+  try {
+    // 1. Read the Leads tab so we can (a) sanity-check headers, (b) dedupe, (c) place rows deterministically
+    const getResp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A1:M`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!getResp.ok) { const e = await getResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Could not read Leads tab (HTTP ${getResp.status})`); }
+    const existing = (await getResp.json()).values || [];
 
-  for (const lead of leads) {
-    try {
-      // Column mapping (0-based): A=status, B=notes, C=empty, D=FirstName, E=Spouse,
-      // F=LastName, G=Address, H=City, I=County, J=State, K=Zip, L=LeadDate,
-      // M=Phone, N=DOB, O=Age, P=AgeRange, Q=Health, R=BestTime, S=InterestedIn
-      const row = [
-        'Door Knock',  // A - status
-        '',            // B - notes
-        '',            // C - empty
-        lead.firstName || '',      // D - First Name
-        lead.spouseName || '',     // E - Spouse
-        lead.lastName || '',       // F - Last Name
-        lead.address || '',        // G - Address
-        lead.city || '',           // H - City
-        '',                        // I - County
-        lead.state || 'IL',        // J - State
-        lead.zip || '',            // K - Zip
-        today,                     // L - Lead Date
-        lead.phone || '',          // M - Phone
-        '',                        // N - DOB
-        '',                        // O - Age
-        '',                        // P - TOB
-        '',                        // Q - SS
-        lead.ageRange || '',       // R - Age Range
-        lead.health || '',         // S - Health
-        lead.bestTimeToCall || '', // T - Best Time to Call
-        lead.interestedIn || '',   // U - Interested In
-      ];
-
-      const resp = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Clients!A:U:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: [row] })
-        }
-      );
-      if (resp.ok) saved++;
-    } catch(e) {
-      console.error('Save error for', lead.firstName, e);
+    // Header sanity check: First-name-like header expected in column B
+    if (existing.length) {
+      const hdr = (existing[0]||[]).map(h => String(h||'').toLowerCase());
+      const firstIdx = hdr.findIndex(h => h.includes('first'));
+      if (firstIdx > -1 && firstIdx !== 1) {
+        throw new Error(`Leads tab layout unexpected: "First" header found in column ${colToLetter(firstIdx)}, expected B. Nothing was saved — check the Leads tab headers.`);
+      }
     }
+
+    // Existing lead keys for dedupe (First B + Last D + digits of Phone K)
+    const existKeys = new Set(existing.slice(1).map(r =>
+      `${cl(r[1]).toLowerCase()}|${cl(r[3]).toLowerCase()}|${String(r[10]||'').replace(/\D/g,'')}`));
+
+    let nextRow = existing.length + 1;          // deterministic placement — no append() drift
+    const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+    const rowsToWrite = [];
+
+    for (const lead of leads) {
+      const first = cl(lead.firstName), last = cl(lead.lastName);
+      const phoneDigits = String(lead.phone||'').replace(/\D/g,'');
+      if (!first && !last) { report.push(`⚠ Skipped a lead with no name`); continue; }
+      if (!phoneDigits && !cl(lead.address)) { report.push(`⚠ ${first} ${last}: skipped — no phone or address`); continue; }
+      const key = `${first.toLowerCase()}|${last.toLowerCase()}|${phoneDigits}`;
+      if (existKeys.has(key)) { report.push(`↩ ${first} ${last}: already in Leads — skipped`); continue; }
+      existKeys.add(key);
+      // Leads tab: A=Status B=First C=Spouse D=Last E=Address F=City G=County H=State I=Zip J=LeadDate K=Phone L=DOB M=Age
+      rowsToWrite.push([
+        'Dial', first, cl(lead.spouseName), last,
+        cl(lead.address), cl(lead.city), cl(lead.county) || guessCounty(lead.city),
+        cl(lead.state) || 'IL', cl(lead.zip), today, cl(lead.phone), cl(lead.dob), cl(lead.age)
+      ]);
+      report.push(`✓ ${first} ${last}: saved`);
+    }
+
+    if (rowsToWrite.length) {
+      const range = `Leads!A${nextRow}:M${nextRow + rowsToWrite.length - 1}`;
+      const putResp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+        { method: 'PUT',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: rowsToWrite }) }
+      );
+      if (!putResp.ok) { const e = await putResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Write failed (HTTP ${putResp.status})`); }
+    }
+
+    const savedN = rowsToWrite.length;
+    btn.textContent = savedN ? `✓ Saved ${savedN} lead${savedN>1?'s':''} to Leads tab` : 'Nothing new to save';
+    btn.style.background = 'var(--sage)';
+    toast(savedN ? `✓ ${savedN} lead${savedN>1?'s':''} saved to Leads tab` : 'No new leads — all were duplicates or invalid');
+    const rep = document.createElement('div');
+    rep.style.cssText = 'font-size:12px;margin-top:8px;line-height:1.7;color:var(--muted)';
+    rep.innerHTML = report.join('<br>');
+    btn.parentElement.appendChild(rep);
+  } catch(e) {
+    console.error('FEX save error:', e);
+    btn.disabled = false;
+    btn.textContent = '💾 Retry Save';
+    toast('Save failed: ' + e.message);
+  } finally {
+    window._fexSaveInFlight = false;
+  }
+}
+
+
+
+// ══ RESTORED FEATURES (lost in the July 13 index.html replacement) ═══════════
+const CALENDLY_URL = 'https://calendly.com/michelle-seniorbenefitsofillinois';
+function toProperCase(str) {
+  if (!str) return '';
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+function fmtName(str) {
+  // Handles ALL CAPS names from sheet (e.g. "CATHY FRYER" -> "Cathy Fryer")
+  if (!str) return '';
+  if (str === str.toUpperCase()) return toProperCase(str);
+  return str;
+}
+const CARRIER_PDF_PASSWORDS = {
+  'lifeshield': ['1738', '9533'],
+  // 'corebridge': ['add_when_known'],
+};
+function getStoredFexLeads() {
+  try { return JSON.parse(localStorage.getItem(FEX_STORAGE_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveStoredFexLeads(arr) {
+  try { localStorage.setItem(FEX_STORAGE_KEY, JSON.stringify(arr.slice(0,200))); } catch(e) {}
+}
+
+// County lookup by IL city name (common Southern IL cities)
+const IL_COUNTY_MAP = {
+  'sesser':'Franklin','benton':'Franklin','west frankfort':'Franklin','christopher':'Franklin','zeigler':'Franklin',
+  'carbondale':'Jackson','murphysboro':'Jackson','du quoin':'Perry','sparta':'Randolph',
+  'marion':'Williamson','herrin':'Williamson','carterville':'Williamson',
+  'harrisburg':'Saline','eldorado':'Saline','carrier mills':'Saline',
+  'mount vernon':'Jefferson','belle rive':'Jefferson',
+  'flora':'Clay','louisville':'Clay','xenia':'Clay',
+  'olney':'Richland','noble':'Richland',
+  'wayne city':'Wayne','fairfield':'Wayne',
+  'mt carmel':'Wabash',
+  'albion':'Edwards',
+  'grayville':'White','carmi':'White',
+  'mcleansboro':'Hamilton','dahlgren':'Hamilton',
+  'vienna':'Johnson','goreville':'Johnson',
+  'anna':'Union','jonesboro':'Union','cobden':'Union',
+  'cairo':'Alexander','mounds':'Alexander',
+  'pulaski':'Pulaski','mound city':'Pulaski',
+  'golconda':'Pope','eddyville':'Pope',
+  'elizabethtown':'Hardin',
+  'shawneetown':'Gallatin','junction':'Gallatin',
+  'equality':'Gallatin',
+  'lawrenceville':'Lawrence','bridgeport':'Lawrence',
+  'centralia':'Marion','salem':'Marion',
+  'effingham':'Effingham','altamont':'Effingham',
+};
+
+function guessCounty(city) {
+  if (!city) return '';
+  return IL_COUNTY_MAP[city.toLowerCase().trim()] || '';
+}
+
+
+// ── HEADSHOT (preloaded so it always lands in PDFs, including print/save) ────
+let HEADSHOT_DATA = null;
+function ensureHeadshot() {
+  if (HEADSHOT_DATA) return Promise.resolve(HEADSHOT_DATA);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const cvs = document.createElement('canvas');
+        cvs.width = img.width; cvs.height = img.height;
+        cvs.getContext('2d').drawImage(img, 0, 0);
+        HEADSHOT_DATA = cvs.toDataURL('image/jpeg', 0.9);
+      } catch(e) { console.warn('headshot canvas failed', e); }
+      resolve(HEADSHOT_DATA);
+    };
+    img.onerror = () => resolve(null);
+    img.src = MICHELLE_HEADSHOT;
+  });
+}
+function addPhotoToLetter(doc, W, M) {
+  if (HEADSHOT_DATA) { try { doc.addImage(HEADSHOT_DATA, 'JPEG', W - M - 44, 8, 44, 54); } catch(e){} }
+}
+
+function addQRCodeToLetter(doc, url, x, y, size) {
+  // Generate QR code offscreen, convert to image, embed in PDF
+  try {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '-9999px';
+    document.body.appendChild(container);
+
+    new QRCode(container, {
+      text: url,
+      width: 128,
+      height: 128,
+      colorDark: '#1a1a2e',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    // Give it a moment to render then grab canvas
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+      const dataUrl = canvas.toDataURL('image/png');
+      doc.addImage(dataUrl, 'PNG', x, y, size, size);
+    }
+    document.body.removeChild(container);
+  } catch(e) {
+    console.log('QR generation error:', e);
+  }
+}
+
+function addCalendlyQR(doc, W, M, y) {
+  // Adds a QR block at the bottom of the letter before the footer
+  const qrSize = 54;
+  const boxH = 70;
+  const boxY = y;
+
+  doc.setFillColor(250, 247, 242);
+  doc.setDrawColor(220, 216, 208);
+  doc.setLineWidth(1);
+  doc.roundedRect(M, boxY, W - M*2, boxH, 4, 4, 'FD');
+
+  // QR code on the right
+  addQRCodeToLetter(doc, CALENDLY_URL, W - M - qrSize - 8, boxY + 8, qrSize);
+
+  // Text on the left
+  doc.setTextColor(122, 117, 112);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Schedule a free conversation:', M + 10, boxY + 22);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Scan the QR code or visit:', M + 10, boxY + 35);
+  doc.setTextColor(26, 26, 46);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text('calendly.com/michelle-seniorbenefitsofillinois', M + 10, boxY + 47);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(122, 117, 112);
+  doc.setFontSize(7.5);
+  doc.text('No obligation. Pick a time that works for you.', M + 10, boxY + 59);
+
+  return boxY + boxH + 10;
+}
+
+// ── PHOTO HELPER FOR LETTERS ──────────────────────────────────────────────────
+async function calFromAppt(key){
+  try {
+    const group=clientGroups[key]; if(!group){toast('Group not found');return;}
+    const c=group[group.length-1];
+    
+    if(!c.apptDate){toast('No appointment date set');return;}
+    if(!accessToken){toast('Not signed in — please refresh');return;}
+    
+    // Parse date
+    const d = new Date(c.apptDate);
+    if(isNaN(d)){toast('Bad date: ' + c.apptDate);return;}
+    const isoDate = d.toISOString().split('T')[0];
+    
+    const title = 'Appointment — ' + c.fullName;
+    const desc = (c.apptTime?'Time: '+c.apptTime+'\n':'') + 'Phone: '+c.phone+'\nAddress: '+c.fullAddress;
+    
+    const body = {
+      summary: title,
+      description: desc,
+      start: {date: isoDate},
+      end: {date: isoDate}
+    };
+    
+    const resp = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + accessToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    
+    const respText = await resp.text();
+    console.log('Calendar response:', resp.status, respText);
+    
+    if(!resp.ok){
+      toast('Cal error ' + resp.status + ': ' + respText.substring(0,80));
+      return;
+    }
+    toast('✓ ' + c.fullName + ' added to Calendar');
+  } catch(e) {
+    console.error('Calendar exception:', e);
+    toast('Exception: ' + e.message);
+  }
+}
+
+
+// ── LEAD CARD SCANNER ────────────────────────────────────────────────────────
+function openScanner() {
+  document.getElementById('scannerSection').classList.add('visible');
+  document.getElementById('scannerSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeScanner() {
+  document.getElementById('scannerSection').classList.remove('visible');
+  resetScanner();
+}
+function resetScanner() {
+  document.getElementById('dropZone').style.display='block';
+  document.getElementById('scannerPreview').style.display='none';
+  document.getElementById('scannerReading').style.display='none';
+  document.getElementById('leadForm').style.display='none';
+  document.getElementById('cardInput').value='';
+  document.getElementById('previewImg').src='';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processCardFile(file);
+}
+function handleCardUpload(input) {
+  if (input.files[0]) processCardFile(input.files[0]);
+}
+async function processCardFile(file) {
+  document.getElementById('dropZone').style.display='none';
+  document.getElementById('scannerReading').style.display='block';
+
+  // Show preview if image
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('previewImg').src = e.target.result;
+      document.getElementById('scannerPreview').style.display='block';
+    };
+    reader.readAsDataURL(file);
   }
 
-  btn.textContent = `✓ Saved ${saved} leads!`;
-  btn.style.background = 'var(--sage)';
-  toast(`✓ ${saved} FEX leads saved to sheet`);
+  try {
+    // Convert file to base64
+    const base64 = await fileToBase64(file);
+    const isPDF = file.type === 'application/pdf';
+    const mediaType = isPDF ? 'application/pdf' : file.type;
+
+    // Call Claude API to read the card
+    const block = isPDF
+      ? { type:'document', source:{ type:'base64', media_type:'application/pdf', data: base64 } }
+      : { type:'image', source:{ type:'base64', media_type: mediaType, data: base64 } };
+    const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens: 1200, messages: [{ role:'user', content: [ block,
+        { type:'text', text:`This is a handwritten insurance lead card. Extract the information. Return ONLY a JSON object with fields: firstName, lastName, spouseName, spouseAge, address, city, state, zip, county, phone, age, dob. Use empty strings for anything not present. No other text.` } ] }] })
+    });
+    if (!response.ok) throw new Error('AI error ' + response.status);
+    const aiRaw = await response.json();
+    const extracted = JSON.parse(aiRaw.content[0].text.trim().replace(/```json|```/g,'').trim());
+
+    // Fill form
+    document.getElementById('lf_first').value = extracted.firstName || '';
+    document.getElementById('lf_last').value = extracted.lastName || '';
+    document.getElementById('lf_spouse').value = extracted.spouseName || '';
+    document.getElementById('lf_spouseage').value = extracted.spouseAge || '';
+    document.getElementById('lf_address').value = extracted.address || '';
+    document.getElementById('lf_city').value = extracted.city || '';
+    document.getElementById('lf_state').value = extracted.state || 'IL';
+    document.getElementById('lf_zip').value = extracted.zip || '';
+    document.getElementById('lf_phone').value = extracted.phone || '';
+    document.getElementById('lf_age').value = extracted.age || '';
+    document.getElementById('lf_dob').value = extracted.dob || '';
+
+    document.getElementById('scannerReading').style.display='none';
+    document.getElementById('leadForm').style.display='block';
+
+  } catch(err) {
+    document.getElementById('scannerReading').style.display='none';
+    document.getElementById('dropZone').style.display='block';
+    toast('Could not read card — try a clearer photo');
+    console.error(err);
+  }
 }
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveLeadToSheet() {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const btn = document.getElementById('leadSaveBtn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const g = id => document.getElementById(id).value.trim();
+  const lead = { firstName:g('lf_first'), lastName:g('lf_last'), spouseName:g('lf_spouse'),
+    address:g('lf_address'), city:g('lf_city'), county:g('lf_county'), state:g('lf_state'),
+    zip:g('lf_zip'), phone:g('lf_phone'), dob:g('lf_dob'), age:g('lf_age') };
+  if (!lead.firstName && !lead.lastName) { toast('Enter at least a name'); btn.disabled=false; btn.textContent='💾 Save to Leads Tab'; return; }
+  const fake = { disabled:false, textContent:'', style:{}, parentElement: btn.parentElement };
+  await saveFexLeads([lead], fake);
+  if (fake.textContent.startsWith('✓')) {
+    btn.textContent = '✓ Saved!';
+    setTimeout(() => { resetScanner(); }, 1400);
+  } else {
+    btn.disabled = false; btn.textContent = '💾 Save to Leads Tab';
+  }
+}
+
+// ── COMMISSION TRACKER ───────────────────────────────────────────────────────
+function openCommTracker() {
+  document.getElementById('commSection').classList.add('visible');
+  document.getElementById('commSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeCommTracker() {
+  document.getElementById('commSection').classList.remove('visible');
+  resetCommTracker();
+}
+function resetCommTracker() {
+  document.getElementById('commDrop').style.display='block';
+  document.getElementById('commReading').style.display='none';
+  document.getElementById('commResults').style.display='none';
+  document.getElementById('commResults').innerHTML='';
+  document.getElementById('commInput').value='';
+}
+
+async function handleCommUpload(input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+  document.getElementById('commDrop').style.display='none';
+  document.getElementById('commReading').style.display='block';
+
+  try {
+    // Check if this is a known password-protected carrier
+    const fileName = file.name.toLowerCase();
+    let carrierKey = null;
+    for (const key of Object.keys(CARRIER_PDF_PASSWORDS)) {
+      if (fileName.includes(key)) { carrierKey = key; break; }
+    }
+
+    if (carrierKey) {
+      const passwords = CARRIER_PDF_PASSWORDS[carrierKey];
+      document.getElementById('commReading').innerHTML = `
+        <div class="comm-spinner"></div>
+        <div>Password-protected PDF detected (${carrierKey.charAt(0).toUpperCase()+carrierKey.slice(1)})</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Trying known passwords...</div>`;
+      // We can't decrypt in the browser — instruct user or try sending with password hint
+      // For now: show password prompt so user can manually enter if needed
+      const enteredPwd = prompt(
+        `${carrierKey.charAt(0).toUpperCase()+carrierKey.slice(1)} statement detected.
+
+Known passwords: ${passwords.join(', ')}
+
+Enter password to unlock (or press OK to try automatically):`
+        , passwords[0]
+      );
+      if (enteredPwd === null) {
+        // User cancelled
+        document.getElementById('commReading').style.display='none';
+        document.getElementById('commDrop').style.display='block';
+        return;
+      }
+      // Note: browser can't decrypt PDFs — we pass the password as a hint to Claude
+      // Claude will note it's password protected and provide what it can read
+    }
+
+    document.getElementById('commReading').innerHTML = '<div class="comm-spinner"></div><div>Reading statement...</div>';
+
+    const base64 = await fileToBase64(file);
+
+    const response = await fetch('https://michelles-desk-api.michelle-cb4.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: `This is an insurance commission statement. Extract all policy/commission line items.
+Return ONLY a JSON object with these fields:
+- carrier: insurance company name
+- period: statement period dates
+- agentName: agent name if shown
+- totalCommission: total commission amount as number
+- policies: array of objects, each with:
+  - policyNumber: the policy/certificate number
+  - insuredName: insured person last name or full name
+  - commissionAmount: commission amount as number
+  - commissionType: "First Year" or "Renewal" or "Override"
+Return only valid JSON, no other text.` }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) throw new Error('Worker error');
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const clean = text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+    const extracted = JSON.parse(clean);
+
+    // Match against client sheet
+    matchCommissions(extracted);
+
+  } catch(err) {
+    document.getElementById('commReading').style.display='none';
+    document.getElementById('commDrop').style.display='block';
+    toast('Could not read statement — try again');
+    console.error(err);
+  }
+}
+
+function matchCommissions(data) {
+  document.getElementById('commReading').style.display='none';
+
+  const policies = data.policies || [];
+  const matched = [], unmatched = [], missing = [];
+
+  // Build lookup of all policy numbers in sheet
+  const sheetPolicies = {};
+  allClients.forEach(c => {
+    if (c.existingPolicy) {
+      const key = c.existingPolicy.toString().trim().toUpperCase();
+      sheetPolicies[key] = c;
+    }
+  });
+
+  // Check each statement policy against sheet
+  policies.forEach(p => {
+    const key = p.policyNumber.toString().trim().toUpperCase();
+    if (sheetPolicies[key]) {
+      matched.push({ ...p, client: sheetPolicies[key] });
+    } else {
+      unmatched.push(p);
+    }
+  });
+
+  // Check sheet clients with matching carrier for missing policies
+  const carrier = (data.carrier || '').toLowerCase();
+  if (carrier) {
+    allClients.forEach(c => {
+      const clientCarrier = (c.existingCompany || c.displayCompany || '').toLowerCase();
+      if (clientCarrier && carrier.includes(clientCarrier.split(' ')[0]) || clientCarrier.includes(carrier.split(' ')[0])) {
+        const key = (c.existingPolicy || '').toString().trim().toUpperCase();
+        if (key && !policies.find(p => p.policyNumber.toString().trim().toUpperCase() === key)) {
+          missing.push(c);
+        }
+      }
+    });
+  }
+
+  const totalComm = policies.reduce((s,p) => s + (parseFloat(p.commissionAmount)||0), 0);
+
+  let html = `<div class="comm-summary">
+    <div class="comm-stat"><div class="comm-stat-num">${policies.length}</div><div class="comm-stat-label">Policies</div></div>
+    <div class="comm-stat good"><div class="comm-stat-num">$${totalComm.toFixed(2)}</div><div class="comm-stat-label">Total Commission</div></div>
+    <div class="comm-stat${unmatched.length?' warn':''}"><div class="comm-stat-num">${unmatched.length}</div><div class="comm-stat-label">Unmatched</div></div>
+    <div class="comm-stat${missing.length?' warn':''}"><div class="comm-stat-num">${missing.length}</div><div class="comm-stat-label">Missing</div></div>
+  </div>`;
+
+  html += `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">${data.carrier||'Carrier'} · ${data.period||''} ${data.agentName?'· '+data.agentName:''}</div>`;
+
+  // Results table
+  html += `<table class="comm-table">
+    <tr><th>Policy #</th><th>Insured</th><th>Commission</th><th>Type</th><th>Status</th></tr>`;
+
+  matched.forEach(p => {
+    html += `<tr>
+      <td>${p.policyNumber}</td>
+      <td>${p.insuredName} <span style="font-size:11px;color:var(--muted)">(${p.client.fullName})</span></td>
+      <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
+      <td><span class="status-matched">✓ Matched</span></td>
+    </tr>`;
+  });
+
+  unmatched.forEach(p => {
+    html += `<tr>
+      <td>${p.policyNumber}</td>
+      <td>${p.insuredName}</td>
+      <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
+      <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
+      <td><span class="status-unmatched">⚠ Not in sheet</span></td>
+    </tr>`;
+  });
+
+  html += '</table>';
+
+  if (missing.length) {
+    html += `<div style="background:var(--rust-light);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-weight:600;color:var(--rust);margin-bottom:8px">🔴 ${missing.length} client${missing.length>1?'s':''} with ${data.carrier||'this carrier'} not on statement</div>`;
+    missing.forEach(c => {
+      html += `<div style="font-size:13px;padding:4px 0;border-bottom:1px solid rgba(196,80,26,.1)">${c.fullName} · Policy #${c.existingPolicy} · ${c.city}</div>`;
+    });
+    html += '</div>';
+  }
+
+  // Save to storage
+  saveCommissionHistory(data, totalComm, policies.length);
+
+  // Show history
+  const history = getCommissionHistory();
+  if (history.length) {
+    const ytd = history.reduce((s,h) => s + h.total, 0);
+    html += `<div class="comm-history">
+      <div class="comm-ytd">
+        <div><div class="comm-ytd-label">Year-to-Date Commission</div><div class="comm-ytd-amount">$${ytd.toFixed(2)}</div></div>
+        <div style="text-align:right"><div class="comm-ytd-label">Statements uploaded</div><div style="font-size:20px;font-weight:700;color:#fff">${history.length}</div></div>
+      </div>
+      <div class="comm-history-title">Statement History</div>`;
+    history.slice().reverse().forEach(h => {
+      html += `<div class="comm-history-row">
+        <div><div class="comm-history-carrier">${h.carrier}</div><div class="comm-history-meta">${h.period} · ${h.policies} policies</div></div>
+        <div class="comm-history-amount">$${h.total.toFixed(2)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<button class="comm-scan-new" onclick="resetCommTracker()">Upload another statement</button>`;
+
+  const resultsEl = document.getElementById('commResults');
+  resultsEl.innerHTML = html;
+  resultsEl.style.display = 'block';
+}
+
+async function genBirthdayLetter(key, age) {
+  await ensureHeadshot();
+  try {
+  // Try direct key, then case-insensitive search
+  let group = clientGroups[key];
+  if (!group) {
+    const lkey = key.toLowerCase().trim();
+    const found = Object.keys(clientGroups).find(k => k.toLowerCase().trim() === lkey);
+    if (found) group = clientGroups[found];
+  }
+  if (!group) { toast('Client not found: ' + key); return; }
+  const c = group[group.length-1];
+  const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=72,contentW=W-M*2; let y=M;
+
+  doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
+  addPhotoToLetter(doc, W, M);
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(184,146,58);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 57);
+  doc.setDrawColor(184,146,58); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
+
+  y=106; doc.setTextColor(26,26,46);
+  const letterDateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(letterDateStr, M, y); y+=24;
+
+  y+=10;
+  doc.setFont('helvetica','bold'); doc.text(fmtName(c.firstName) + ' ' + fmtName(c.lastName), M, y); y+=16;
+  doc.setFont('helvetica','normal');
+  if (c.address) { doc.text(toProperCase(c.address), M, y); y+=16; }
+  const cityLine = [toProperCase(c.city||''), c.state||'', c.zip||''].filter(Boolean).join(', ');
+  if (cityLine) { doc.text(cityLine, M, y); } y+=32;
+
+  doc.text(`Dear ${fmtName(c.firstName)},`, M, y); y+=22;
+
+  const paras = [
+    `I wanted to reach out a little ahead of your ${age}th birthday to wish you well — and to check in as your benefit coordinator.`,
+    `Birthdays are a natural time to take stock. Whether you're expecting any changes to your income, thinking about retirement, or simply wondering if your current coverage still makes sense, I'd love to spend a few minutes with you to make sure everything lines up.`,
+    `I work with many folks in your area and I know how much can shift around this time of life. My job is to make sure you're fully protected and not paying for more — or less — than you need.`,
+    `There's no cost to meet, no pressure, and no obligation. Just a friendly visit from someone who genuinely cares about your peace of mind.`,
+  ];
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length*15+14;
+  });
+
+  y+=6;
+  doc.setFillColor(253,246,232); doc.setDrawColor(184,146,58); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 58, 4, 4, 'FD');
+  doc.setTextColor(122,117,112); doc.setFontSize(10);
+  doc.text("Give me a call or text -- I'd love to connect before your birthday:", W/2, y+20, {align:"center"});
+  doc.setTextColor(184,146,58); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+42, {align:'center'});
+  y+=78;
+
+  doc.setTextColor(26,26,46); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text('With warm wishes,', M, y); y+=32;
+  doc.setFont('helvetica','bold'); doc.text('Michelle Scott', M, y); y+=16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(122,117,112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y+=14;
+  doc.text('Illinois Senior Benefit Services', M, y); y+=14;
+  doc.setTextColor(184,146,58); doc.setFont('helvetica','bold');
+  doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
+
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Birthday_Letter_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Birthday letter ready');
+  } catch(err) { console.error('Birthday letter error:', err); toast('Letter error: ' + err.message); }
+}
+
+// ── MEDICARE LETTER ───────────────────────────────────────────────────────────
+async function genMedicareLetter(key) {
+  await ensureHeadshot();
+  try {
+  let group = clientGroups[key];
+  if (!group) {
+    const lkey = key.toLowerCase().trim();
+    const found = Object.keys(clientGroups).find(k => k.toLowerCase().trim() === lkey);
+    if (found) group = clientGroups[found];
+  }
+  if (!group) { toast('Client not found: ' + key); return; }
+  const c = group[group.length-1];
+
+  // Determine if existing client (has policy) or cold T65 contact
+  const isExistingClient = !!(c.existingPolicy || c.newCompany || c.existingCompany);
+  buildMedicareLetter(c, isExistingClient);
+  } catch(err) { console.error('Medicare letter error:', err); toast('Letter error: ' + err.message); }
+}
+
+function buildMedicareLetter(c, isExistingClient) {
+  try {
+  const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
+  const W=612,M=72,contentW=W-M*2; let y=M;
+
+  // Proper case names — fixes ALL CAPS from sheet
+  const firstName = fmtName(c.firstName);
+  const lastName  = fmtName(c.lastName);
+  const fullName  = [firstName, lastName].filter(Boolean).join(' ');
+  const address   = c.address ? toProperCase(c.address) : '';
+  const city      = c.city    ? toProperCase(c.city)    : '';
+
+  // Header
+  doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
+  addPhotoToLetter(doc, W, M);
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(184,146,58);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 57);
+  doc.setDrawColor(184,146,58); doc.setLineWidth(1.5); doc.line(M,82,W-M,82);
+
+  y=106; doc.setTextColor(26,26,46);
+  const dateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(dateStr, M, y); y+=24;
+
+  y+=10;
+  doc.setFont('helvetica','bold'); doc.text(fullName, M, y); y+=16;
+  doc.setFont('helvetica','normal');
+  if (address) { doc.text(address, M, y); y+=16; }
+  if (city || c.state || c.zip) {
+    doc.text([city, c.state, c.zip].filter(Boolean).join(', '), M, y); y+=32;
+  } else { y+=16; }
+
+  doc.text(`Dear ${firstName},`, M, y); y+=22;
+
+  // Two versions of body copy
+  let paras;
+  if (isExistingClient) {
+    const carrier = fmtName(c.existingCompany || c.newCompany || c.displayCompany || 'your life insurance');
+    paras = [
+      `You already trust me with your ${carrier} coverage, and I want to make sure your Medicare transition goes just as smoothly.`,
+      `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. Medicare has a 7-month Special Enrollment Period that begins 3 months before your birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage that are permanent.`,
+      `There are Parts A, B, C, and D to sort through — plus Supplement plans, Advantage plans, drug coverage, and more. I've helped a lot of your neighbors navigate this same decision, and my job is to make sure you end up in the right plan at the right price, with no pressure and no obligation.`,
+      `Because we already have a relationship, I'd love to get ahead of this together before your birthday arrives. A short visit is all it takes — I'll walk you through everything and answer every question you have.`,
+    ];
+  } else {
+    paras = [
+      `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. You are about to become eligible for Medicare.`,
+      `Here's what you need to know: Medicare has a 7-month Special Enrollment Period that begins 3 months before your 65th birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage. These penalties are permanent — they follow you for life.`,
+      `I'm a licensed benefit coordinator here in Southern Illinois. I've helped hundreds of people in this area navigate Medicare without the confusion, the pressure, or the fine print. My service costs you nothing, and there is no obligation to change anything.`,
+      `I'd love to sit down with you before your birthday and walk through everything together — what Medicare covers, what it doesn't, and what makes sense for your specific situation.`,
+    ];
+  }
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length*15+14;
+  });
+
+  // CTA box
+  y+=4;
+  doc.setFillColor(232,245,238); doc.setDrawColor(45,122,79); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 68, 4, 4, 'FD');
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+  doc.text('Dont miss your Medicare enrollment window.', W/2, y+18, {align:'center'});
+  doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80); doc.setFontSize(10);
+  var ctaTxt = isExistingClient ? 'Call or text me - lets take care of this together:' : 'Call or text me today - lets get you prepared:';
+  doc.text(ctaTxt, W/2, y+33, {align:'center'});
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+52, {align:'center'});
+  y+=82;
+
+  // Closing
+  doc.setTextColor(26,26,46); doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.text(isExistingClient ? 'Looking forward to seeing you,' : 'Here for you,', M, y); y+=32;
+  doc.setFont('helvetica','bold'); doc.text('Michelle Scott', M, y); y+=16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(122,117,112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y+=14;
+  doc.text('Illinois Senior Benefit Services', M, y); y+=14;
+  doc.setTextColor(45,122,79); doc.setFont('helvetica','bold');
+  doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
+
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Medicare_Letter_${(c.lastName||c.firstName||'client').replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Medicare letter ready');
+  } catch(err) { console.error('buildMedicareLetter error:', err); toast('Letter error: ' + err.message); }
+}
+
+function openBriefing(key) {
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1]; // most recent visit
+  const visitCount = group.length;
+
+  // Build one-line briefing summary using AI-style logic
+  const agePart = c.age ? `${c.age}-year-old` : '';
+  const tobPart = c.tobacco === 'x' || c.tobacco?.toLowerCase() === 'yes' ? 'tobacco user' : '';
+  const ssPart = c.ssType ? `receives ${c.ssType}` : '';
+  const policyPart = c.existingPolicy ? `Has ${c.existingCompany||'existing'} policy #${c.existingPolicy}` : '';
+  const newPart = c.newCompany ? `You placed ${c.newCompany} coverage` : '';
+  const benPart = c.beneficiary ? `Beneficiary: ${c.beneficiary}` : '';
+
+  const summaryParts = [agePart, tobPart, ssPart].filter(Boolean).join(', ');
+  const coverageParts = [policyPart, newPart].filter(Boolean).join('. ');
+
+  let modal = `<div class="briefing-header">
+    <div>
+      <div class="briefing-badge">📋 Pre-Visit Briefing</div>
+      <div class="briefing-name">${c.fullName}</div>
+      <div class="briefing-sub">${c.fullAddress}</div>
+    </div>
+    <button class="briefing-close" onclick="closeBriefing()">✕</button>
+  </div>
+  <div class="briefing-body">`;
+
+  // Walk-in briefing highlight
+  modal += `<div class="briefing-highlight">
+    <strong>💡 Walk-in brief:</strong> You've visited ${visitCount > 1 ? `<strong>${c.firstName}</strong> <strong>${visitCount} times</strong> before` : `<strong>${c.firstName}</strong> before`}. Say <em>"Good seeing you again!"</em><br>
+    ${summaryParts ? `<strong>${c.firstName}</strong> is a ${summaryParts}.` : ''}
+    ${coverageParts ? `${coverageParts}.` : ''}
+    ${benPart ? `${benPart}.` : ''}
+  </div>`;
+
+  // Quick facts
+  modal += `<div class="briefing-section"><div class="briefing-section-title">Quick Facts</div>
+  <div class="briefing-grid">
+    <div class="briefing-item"><label>Phone</label><span>${c.phone||'—'}</span></div>
+    <div class="briefing-item"><label>Date of Birth</label><span>${c.dob||'—'}</span></div>
+    <div class="briefing-item"><label>Age</label><span>${c.age||'—'}</span></div>
+    <div class="briefing-item"><label>SS / Disability</label><span>${c.ssType||'—'}</span></div>
+    <div class="briefing-item"><label>Bank</label><span>${c.bank||'—'}</span></div>
+    <div class="briefing-item"><label>Pay Week</label><span>${c.checkDate||'—'}</span></div>
+    ${c.beneficiary?`<div class="briefing-item" style="grid-column:1/-1"><label>Beneficiary</label><span>${c.beneficiary}</span></div>`:''}
+  </div></div>`;
+
+  // Coverage
+  if (c.existingCompany || c.newCompany) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Coverage</div>`;
+    if (c.existingCompany) modal += `<div class="briefing-item" style="margin-bottom:6px"><label>Current Policy</label><span>${c.existingCompany} #${c.existingPolicy||'—'} · $${c.existingFace||'—'} face · $${c.existingPremium||'—'}/mo</span></div>`;
+    if (c.newCompany) modal += `<div class="briefing-item"><label>Placed With You</label><span>${c.newCompany} · $${c.newFace||'—'} face · $${c.newPremium||'—'}/mo</span></div>`;
+    modal += `</div>`;
+  }
+
+  // Visit history
+  if (visitCount > 1) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Visit History (${visitCount} visits)</div>`;
+    group.slice().reverse().forEach((v, i) => {
+      const vDate = v.leadDate || v.apptDate || `Visit ${visitCount - i}`;
+      const vNote = v.notes || '';
+      const vCompany = v.displayCompany || '';
+      modal += `<div class="briefing-visit">
+        <div class="briefing-visit-date">${i===0?'Most Recent: ':''}${vDate}${vCompany?' · '+vCompany:''}</div>
+        ${vNote?`<div class="briefing-visit-detail">${vNote}</div>`:''}
+      </div>`;
+    });
+    modal += `</div>`;
+  }
+
+  // Notes
+  if (c.notes) {
+    modal += `<div class="briefing-section"><div class="briefing-section-title">Notes</div>
+    <div style="font-size:13px;color:var(--ink);line-height:1.6">${c.notes}</div></div>`;
+  }
+
+  modal += `<button class="briefing-print-btn" onclick="genBriefingPDF('${esc(key)}')">🖨️ Print Briefing Card</button>`;
+  modal += `</div>`;
+
+  document.getElementById('briefingModal').innerHTML = modal;
+  document.getElementById('briefingOverlay').classList.add('visible');
+}
+
+function closeBriefing() {
+  document.getElementById('briefingOverlay').classList.remove('visible');
+}
+
+async function genBriefingPDF(key) {
+  await ensureHeadshot();
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1];
+  const visitCount = group.length;
+
+  const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
+  const W=612, M=54, contentW=W-M*2;
+  let y = M;
+
+  // Header
+  doc.setFillColor(26,26,46); doc.rect(0,0,W,64,'F');
+  addPhotoToLetter(doc, W, M);
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('PRE-VISIT BRIEFING', M, 20);
+  doc.setFontSize(20); doc.text(c.fullName, M, 40);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(184,146,58);
+  doc.text(c.fullAddress, M, 55);
+
+  // Repeat visit badge
+  if (visitCount > 1) {
+    doc.setFillColor(184,146,58); doc.roundedRect(W-M-110, 18, 110, 28, 4, 4, 'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(10);
+    doc.text(`${visitCount} VISITS ON FILE`, W-M-55, 36, {align:'center'});
+  }
+
+  y = 84;
+  doc.setTextColor(26,26,46);
+
+  // Walk-in brief box
+  doc.setFillColor(253,246,232); doc.setDrawColor(184,146,58); doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 52, 4, 4, 'FD');
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(184,146,58);
+  doc.text('💡 SAY: "Good seeing you again, ' + c.firstName + '!"', M+10, y+16);
+  doc.setFont('helvetica','normal'); doc.setTextColor(26,26,46); doc.setFontSize(9.5);
+  const briefLine = [c.age?`Age ${c.age}`:'', c.ssType||'', c.bank?`Bank: ${c.bank}`:''].filter(Boolean).join(' · ');
+  const bl = doc.splitTextToSize(briefLine, contentW-20);
+  doc.text(bl, M+10, y+30);
+  y += 66;
+
+  // Two column layout
+  const col1 = M, col2 = M + contentW/2 + 10, colW = contentW/2 - 10;
+
+  function field(label, value, x, yPos, w) {
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(122,117,112);
+    doc.text(label.toUpperCase(), x, yPos);
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(26,26,46);
+    const lines = doc.splitTextToSize(value||'—', w);
+    doc.text(lines, x, yPos+12);
+    return yPos + 12 + lines.length*12 + 6;
+  }
+
+  const fields1 = [['Phone',c.phone],['Date of Birth',c.dob],['SS/Disability',c.ssType],['Bank',c.bank]];
+  const fields2 = [['Age',c.age],['Pay Week',c.checkDate],['Tobacco',c.tobacco],['Beneficiary',c.beneficiary]];
+
+  let y1 = y, y2 = y;
+  fields1.forEach(([l,v]) => { y1 = field(l,v,col1,y1,colW); });
+  fields2.forEach(([l,v]) => { y2 = field(l,v,col2,y2,colW); });
+  y = Math.max(y1, y2) + 10;
+
+  // Coverage
+  doc.setDrawColor(220,216,208); doc.setLineWidth(1); doc.line(M, y, W-M, y); y += 14;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+  doc.text('COVERAGE', M, y); y += 14;
+  if (c.existingCompany) {
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(26,26,46);
+    doc.text(`Current: ${c.existingCompany} #${c.existingPolicy||'—'} · Face: $${c.existingFace||'—'} · Premium: $${c.existingPremium||'—'}/mo`, M, y); y += 15;
+  }
+  if (c.newCompany) {
+    doc.text(`Placed: ${c.newCompany} · Face: $${c.newFace||'—'} · Premium: $${c.newPremium||'—'}/mo`, M, y); y += 15;
+  }
+  y += 6;
+
+  // Visit history
+  if (visitCount > 1) {
+    doc.line(M, y, W-M, y); y += 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+    doc.text(`VISIT HISTORY (${visitCount} VISITS)`, M, y); y += 14;
+    group.slice().reverse().forEach((v, i) => {
+      const vDate = v.leadDate || v.apptDate || `Visit ${visitCount-i}`;
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
+      doc.text(`${i===0?'* ':''}${vDate}${v.displayCompany?' · '+v.displayCompany:''}`, M, y); y += 12;
+      if (v.notes) {
+        doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+        const nl = doc.splitTextToSize(v.notes, contentW-10);
+        doc.text(nl, M+8, y); y += nl.length*11+4;
+      }
+    });
+  }
+
+  // Notes
+  if (c.notes) {
+    doc.line(M, y, W-M, y); y += 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(122,117,112);
+    doc.text('NOTES', M, y); y += 12;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(26,26,46);
+    const nl = doc.splitTextToSize(c.notes, contentW);
+    doc.text(nl, M, y);
+  }
+
+  // Footer
+  doc.setTextColor(180,180,180); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+  doc.text(`Briefing generated ${new Date().toLocaleString()} · Michelle Scott · 618-510-9143`, W/2, 748, {align:'center'});
+
+  doc.save(`Briefing_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`);
+  toast('✓ Briefing card ready to print');
+}
+
+async function genAnniversaryLetter(key, yearsOld) {
+  await ensureHeadshot();
+  const group = clientGroups[key];
+  if (!group) return;
+  const c = group[group.length-1];
+
+  toast('Generating letter…');
+
+  // Build letter as HTML then convert to printable PDF via jsPDF
+  const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
+  addPhotoToLetter(doc, doc.internal.pageSize.getWidth(), 18);
+  const W = 612, M = 72, contentW = W - M*2;
+  let y = M;
+
+  // Gold header bar
+  doc.setFillColor(26, 26, 46);
+  doc.rect(0, 0, W, 70, 'F');
+
+  // Agent name
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Michelle Scott', M, 28);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(184, 146, 58);
+  doc.text('Licensed Insurance Benefit Coordinator  |  Illinois Senior Benefit Services', M, 43);
+  doc.text('618-510-9143  |  michelle@seniorbenefitsofillinois.com', M, 56);
+
+  // Gold divider
+  doc.setDrawColor(184, 146, 58);
+  doc.setLineWidth(1.5);
+  doc.line(M, 82, W-M, 82);
+
+  y = 106;
+  doc.setTextColor(26, 26, 46);
+
+  // Date
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  const letterDateStr = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  doc.text(letterDateStr, M, y); y += 24;
+
+  // Client address block
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.text(c.fullName, M, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (c.address) { doc.text(c.address, M, y); y += 16; }
+  doc.text(`${c.city}, ${c.state} ${c.zip}`, M, y); y += 32;
+
+  // Salutation
+  doc.setFontSize(11);
+  doc.text(`Dear ${fmtName(c.firstName)},`, M, y); y += 22;
+
+  // Body paragraphs
+  const yearStr = yearsOld === 1 ? 'one year' : `${yearsOld} years`;
+  const policyRef = c.existingPolicy ? ` (#${c.existingPolicy})` : '';
+  const carrier = c.displayCompany || 'your policy';
+
+  const paras = [
+    `I wanted to take a moment to personally reach out and thank you for the trust you've placed in me as your benefit coordinator. It's hard to believe it's already been ${yearStr} since we put your ${carrier} policy${policyRef} in place — time truly flies.`,
+    `Your policy anniversary is always a good time to make sure your coverage still fits your life. Things change — family situations, health needs, financial goals — and I want to make sure you're protected the way you deserve to be.`,
+    `I'd love to schedule a quick visit — no pressure, no obligation — just to check in, review your current coverage, and make sure everything is still working in your favor. I'm in your area regularly and can work around your schedule.`,
+  ];
+
+  doc.setFontSize(11);
+  paras.forEach(para => {
+    const lines = doc.splitTextToSize(para, contentW);
+    doc.text(lines, M, y);
+    y += lines.length * 15 + 14;
+  });
+
+  // Gold CTA box
+  y += 6;
+  doc.setFillColor(253, 246, 232);
+  doc.setDrawColor(184, 146, 58);
+  doc.setLineWidth(1.5);
+  doc.roundedRect(M, y, contentW, 58, 4, 4, 'FD');
+  doc.setTextColor(122, 117, 112);
+  doc.setFontSize(10);
+  doc.text('Ready to connect? Give me a call or text:', W/2, y+20, {align:'center'});
+  doc.setTextColor(184, 146, 58);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('618-510-9143', W/2, y+42, {align:'center'});
+  y += 78;
+
+  // Closing
+  doc.setTextColor(26, 26, 46);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text('With gratitude,', M, y); y += 32;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Michelle Scott', M, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(122, 117, 112);
+  doc.text('Licensed Insurance Benefit Coordinator', M, y); y += 14;
+  doc.text('Illinois Senior Benefit Services', M, y); y += 14;
+  doc.setTextColor(184, 146, 58);
+  doc.setFont('helvetica', 'bold');
+  doc.text('618-510-9143', M, y);
+  y+=28;
+
+  addCalendlyQR(doc, W, M, y);
+
+  // Footer
+  doc.setTextColor(180, 180, 180);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.text('Not affiliated with or endorsed by any government agency.  Life Insurance • Burial Insurance • Medicare', W/2, 748, {align:'center'});
+
+  doc.save(`Anniversary_Letter_${c.lastName||c.firstName}_${new Date().getFullYear()}.pdf`);
+  toast('✓ Letter ready — open to print or mail');
+}
+
+// ── COMMISSION HISTORY STORAGE ───────────────────────────────────────────────
+// ── IMPORT ARCHIVE ────────────────────────────────────────────────────────────
+const WORKER_URL = 'https://michelles-desk-api.michelle-cb4.workers.dev';
+
+// Column map for Clients tab (row 2 = headers, data starts row 3)
+// Columns A-BK (1-63), 0-indexed for array building
+// A=status(blank), B=firstName, C=lastName, D=lastName(dup-blank), E=address,
+// F=city, G=county, H=state, I=zip, J=leadDate, K=phone, L=dob, M=age,
+// N=tobacco, O=ssType, P=bank, Q=checkDate, R=existingCompany, S=existingFace,
+// T=existingPremium, U=existingPolicy, V=wholeterm, W=gradedlevel, X=tnt,
+// Y=cashValue, Z=rpuAmt, AA=policyLoan, AB=effectiveDateOld, AC=cancer,
+// AD=heartAttack, AE=stroke, AF=copd, AG=diabetes, AH=mental, AI=ssn,
+// AJ=height, AK=weight, AL=newCompany, AM=newFace, AN=newPremium,
+// AO=apptDate, AP=apptTime, AQ=apptNotes, AR=effectiveDate, AS=payDate,
+// AT=payAmt, AU=tyCard, AV=stopPacDue, AW=stopPacSent, AX=cxDue,
+// AY=cxSent, AZ=surrDue, BA=surrSent, BB=other, BC=benName, BD=benRel,
+// BE=benDOB, BF=benAddress, BG=benPhone, BH=carrierFax, BI=carrierEmail,
+// BJ=paymentInfo, BK=notes — wait, sheet goes to BK so that's 63 cols
+
+function buildClientRow(d) {
+  // 63 columns, A through BK
+  return [
+    '',               // A  status
+    d.firstName||'',  // B  First Name
+    d.lastName||'',   // C  Last Name
+    '',               // D  Last Name (duplicate col in sheet — leave blank)
+    d.address||'',    // E  Address
+    d.city||'',       // F  City
+    d.county||'',     // G  County
+    d.state||'IL',    // H  State
+    d.zip||'',        // I  Zip
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}), // J Lead Date
+    d.phone||'',      // K  Phone Number
+    d.dob||'',        // L  DOB
+    d.age||'',        // M  AGE
+    d.tobacco||'',    // N  TOB
+    d.ssType||'',     // O  SS
+    d.bank||'',       // P  Bank
+    d.checkDate||'',  // Q  CHECK DATE
+    d.existingCompany||'', // R Current COMPANY NAME
+    d.existingFace||'',    // S Face Amount
+    d.existingPremium||'', // T Premium
+    d.existingPolicy||'',  // U Policy Number
+    '',               // V  Whole/Term
+    '',               // W  Graded/Level
+    '',               // X  T/NT
+    d.cashValue||'',  // Y  Cash Value
+    '',               // Z  RPU Amt
+    '',               // AA Policy Loan
+    '',               // AB Eff. Date (old coverage)
+    d.cancer||'',     // AC Cancer
+    d.heartAttack||'',// AD Heart Attack
+    d.stroke||'',     // AE Stroke
+    d.copd||'',       // AF COPD
+    d.diabetes||'',   // AG Diabetes
+    d.mental||'',     // AH Mental
+    '',               // AI SSN (never import SSN)
+    d.height||'',     // AJ Height
+    d.weight||'',     // AK Weight
+    d.newCompany||'', // AL Qualifier (new company)
+    d.newFace||'',    // AM Face Amount (new)
+    d.newPremium||'', // AN Premium (new)
+    d.apptDate||'',   // AO Appt Date
+    '',               // AP Appt Time
+    '',               // AQ Appt Notes
+    d.effectiveDate||'', // AR Effective Date
+    '',               // AS Pay Date
+    '',               // AT Pay Amt
+    '',               // AU TY Card
+    '',               // AV Stop PAC Due
+    '',               // AW Stop PAC Sent
+    '',               // AX CX Due
+    '',               // AY CX Sent
+    '',               // AZ Surrender Due
+    '',               // BA Surrender Sent
+    '',               // BB Other
+    d.beneficiary||'',// BC Beneficiary Name
+    '',               // BD Beneficiary Relationship
+    '',               // BE Beneficiary DOB
+    '',               // BF Beneficiary Address
+    '',               // BG Beneficiary Phone
+    '',               // BH Carrier Fax
+    '',               // BI Carrier Email
+    '',               // BJ Payment Info
+    d.notes||([d.healthHistory,d.medications].filter(Boolean).join(' | '))||'', // BK Notes
+  ];
+}
+
+function buildLeadRow(d) {
+  // Leads tab: Status, First, Last, Spouse, Spouse Age, Address, City, State, Zip, County, Lead Date, Phone, DOB, Age
+  return [
+    '',
+    d.firstName||'',
+    d.spouseName||'',
+    d.lastName||'',
+    d.address||'',
+    d.city||'',
+    d.county||'',
+    d.state||'IL',
+    d.zip||'',
+    new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}),
+    d.phone||'',
+    d.dob||'',
+    d.age||'',
+  ];
+}
+
+let impLeadsArr = [], impClientsArr = [], impSkippedArr = [], impRejectedArr = [], impAllResults = [];
+let impProcessing = false;
+const IMP_MAX_SIZE = 4 * 1024 * 1024; // 4MB
+
+function openImporter() {
+  document.getElementById('importSection').classList.add('visible');
+  document.getElementById('importSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeImporter() {
+  document.getElementById('importSection').classList.remove('visible');
+  resetImporter();
+}
+function resetImporter() {
+  impLeadsArr=[]; impClientsArr=[]; impSkippedArr=[]; impRejectedArr=[]; impAllResults=[];
+  impProcessing = false;
+  document.getElementById('importStats').style.display='none';
+  document.getElementById('importProgress').classList.remove('visible');
+  document.getElementById('importQueue').classList.remove('visible');
+  document.getElementById('importLog').classList.remove('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+  document.getElementById('importQueue').innerHTML='';
+  document.getElementById('importLog').innerHTML='';
+  document.getElementById('importFileInput').value='';
+}
+
+function importHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('importDrop').classList.remove('drag');
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+function importHandleFiles(fl) {
+  const files = Array.from(fl).filter(f=>f.type==='application/pdf');
+  if (files.length) importProcessFiles(files);
+}
+
+async function importProcessFiles(files) {
+  if (impProcessing) return;
+  impProcessing = true;
+
+  // Pre-sort: flag oversized files immediately
+  const toProcess = [], oversized = [];
+  files.forEach(f => {
+    if (f.size > IMP_MAX_SIZE) oversized.push(f);
+    else toProcess.push(f);
+  });
+
+  // Add oversized to rejected list right away
+  oversized.forEach(f => {
+    const mb = (f.size/1024/1024).toFixed(1);
+    impRejectedArr.push({fileName:f.name, fileSize:mb+'MB', reason:`File too large (${mb}MB) — split in PDF Expert into smaller chunks`});
+  });
+
+  document.getElementById('importStats').style.display='flex';
+  document.getElementById('importProgress').classList.add('visible');
+  document.getElementById('importQueue').classList.add('visible');
+  document.getElementById('importLog').classList.add('visible');
+  document.getElementById('importResultsArea').style.display='none';
+  document.getElementById('importActions').style.display='none';
+
+  // Build queue — show oversized as pre-rejected
+  const allForDisplay = [...oversized.map(f=>({...f,_oversize:true})), ...toProcess];
+  document.getElementById('importQueue').innerHTML = files.map((f,i)=>{
+    const over = f.size > IMP_MAX_SIZE;
+    const mb = (f.size/1024/1024).toFixed(1);
+    return `<div class="iq-item"><span class="iq-name">📄 ${f.name} <span style="color:var(--muted);font-size:10px">${mb}MB</span></span><span class="iq-status ${over?'iq-err':'iq-pending'}" id="iq_${i}">${over?'✕ Too large — needs splitting':'Pending'}</span></div>`;
+  }).join('');
+
+  if (oversized.length) impLog(`⚠ ${oversized.length} file(s) too large (>4MB) — added to rejected list`, 'err');
+  impUpdateStats();
+  impLog(`Batch started: ${toProcess.length} files to process`, 'ok');
+
+  // Map original index to toProcess index for queue display
+  let qIdx = 0;
+  for (let i=0; i<files.length; i++) {
+    if (files[i].size > IMP_MAX_SIZE) continue;
+    const file = files[i];
+    impUpdateProgress(qIdx, toProcess.length, file.name);
+    setIQStatus(i,'processing','⏳ Reading…');
+    try {
+      const result = await impProcessOnePDF(file);
+      impAllResults.push(result);
+      if (result.type==='lead') {
+        impLeadsArr.push(result);
+        setIQStatus(i,'lead',`📋 Lead — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`LEAD: ${result.data.firstName} ${result.data.lastName} · ${result.data.city}`, 'lead');
+      } else if (result.type==='client') {
+        impClientsArr.push(result);
+        setIQStatus(i,'client',`✓ Client — ${result.data.firstName} ${result.data.lastName}`);
+        impLog(`CLIENT: ${result.data.firstName} ${result.data.lastName} · ${result.data.city} · ${result.data.newCompany||result.data.existingCompany||''}`, 'client');
+      } else if (result.type==='action') {
+        // Stop PAC / CX / Surrender — captured as pending action flag
+        impSkippedArr.push(result);
+        setIQStatus(i,'skip',`📋 Action — ${result.data.firstName} ${result.data.lastName} (${result.actionType})`);
+        impLog(`ACTION: ${result.data.firstName} ${result.data.lastName} · ${result.actionType}`, 'skip');
+      } else {
+        impSkippedArr.push(result);
+        setIQStatus(i,'skip',`— ${result.reason||'Skipped'}`);
+        impLog(`SKIP: ${file.name} — ${result.reason||''}`, 'skip');
+      }
+    } catch(err) {
+      const errMsg = err.message||'Unknown error';
+      const isSize = errMsg.includes('400') || errMsg.includes('413') || errMsg.includes('429');
+      const mb = (file.size/1024/1024).toFixed(1);
+      impRejectedArr.push({fileName:file.name, fileSize:mb+'MB', reason: isSize?`API error (${errMsg}) — try splitting this file`:`Error: ${errMsg}`});
+      setIQStatus(i,'err',`✕ ${isSize?'API error — needs splitting':'Error'}`);
+      impLog(`ERROR: ${file.name} — ${errMsg}`, 'err');
+      impAllResults.push({type:'error',file:file.name,reason:errMsg});
+    }
+    qIdx++;
+    impUpdateStats();
+    if (qIdx < toProcess.length) await new Promise(r=>setTimeout(r,500));
+  }
+
+  impUpdateProgress(toProcess.length, toProcess.length, 'Complete');
+  impLog(`Done — ${impLeadsArr.length} leads, ${impClientsArr.length} clients, ${impSkippedArr.length} skipped, ${impRejectedArr.length} need splitting`, 'ok');
+  impProcessing = false;
+
+  document.getElementById('importResultsArea').style.display='block';
+  document.getElementById('importActions').style.display='flex';
+  document.getElementById('irtLeads').textContent = impLeadsArr.length;
+  document.getElementById('irtClients').textContent = impClientsArr.length;
+  document.getElementById('irtSkipped').textContent = impSkippedArr.length;
+  document.getElementById('pushLeadsBtn').disabled = impLeadsArr.length === 0;
+  document.getElementById('pushClientsBtn').disabled = impClientsArr.length === 0;
+  // Actions tab count
+  const actionCount = impSkippedArr.filter(r=>r.type==='action').length;
+  const actTab = document.getElementById('irtActions');
+  if (actTab) actTab.textContent = actionCount;
+  // Rejected tab + download button
+  const rejTab = document.getElementById('irtRejected');
+  if (rejTab && impRejectedArr.length) {
+    rejTab.style.display='';
+    rejTab.textContent = `✕ Needs Splitting (${impRejectedArr.length})`;
+  }
+  const dlBtn = document.getElementById('dlRejectedBtn');
+  if (dlBtn) dlBtn.style.display = impRejectedArr.length ? '' : 'none';
+  showImportTab(impLeadsArr.length ? 'leads' : impClientsArr.length ? 'clients' : 'actions', document.querySelector('.irt'));
+}
+
+async function impProcessOnePDF(file) {
+  const base64 = await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+
+  const prompt = `You are reading an insurance document for Illinois Senior Benefit Services (ISBS).
+Analyze ALL pages carefully. Return ONLY valid JSON, no markdown, no explanation.
+
+CRITICAL RULE: If ANY page contains a filled-in T-2 card, B-26 card, or handwritten intake sheet with prospect data — ALWAYS extract that data, even if other pages contain Stop PAC or cancellation forms. Never skip a file just because it also has admin forms.
+
+DOCUMENT TYPE RULES:
+- "T2_lead" = T-2 or B-26 mailer card with prospect handwriting → type: "lead"
+- "intake_client" = Handwritten agent notepad worksheet (has DOB, bank, SSN area, health history, medications, quotes, coverage placed) → type: "client"
+- "combo" = Has BOTH a lead/intake card AND Stop PAC or admin forms → type: "client" or "lead" based on richest data present. EXTRACT the prospect data, note the admin forms in actionType.
+- "stop_pac_only" = ONLY contains Stop PAC / CX / Surrender / Cancel forms with NO lead card or intake sheet → type: "action"
+- "beneficiary" = ONLY beneficiary change forms, no lead data → type: "skip"
+- "medicare_soa" = Medicare Scope of Appointment forms → type: "skip"
+- "drivers_license" = ID scan only, no lead data → type: "skip"
+- "blank" = Blank templates with zero prospect data filled in → type: "skip"
+- "unrelated" = Tax forms, STAX-1, notes, etc. → type: "skip"
+
+FOR "action" TYPE (stop_pac_only):
+- Extract the client name and policy info from the form
+- Set actionType to: "Stop PAC" or "CX Policy" or "Surrender" or "Cash-In"
+- This lets us flag the client as having a pending action
+
+IMPORTANT RULES:
+- "Assigned To: Scott, Wayne" and "Assigned To: Scott, Michelle" = same agency, always import
+- County is in the T-2 header line e.g. "Williamson, IL" = Williamson County
+- For health history extract Cancer/Heart Attack/Stroke/COPD/Diabetes/Mental as yes/no
+- NEVER extract full SSN
+- Driver license pages: use to confirm DOB/name, contributes to combo type
+- For combo files: intake sheet data wins over T-2 card data
+
+Return ONLY this exact JSON:
+{
+  "docType": "T2_lead|intake_client|combo|stop_pac_only|beneficiary|medicare_soa|drivers_license|blank|unrelated",
+  "type": "lead|client|action|skip",
+  "actionType": "",
+  "reason": "",
+  "data": {
+    "firstName": "", "lastName": "", "spouseName": "", "spouseAge": "",
+    "address": "", "city": "", "state": "IL", "zip": "", "county": "",
+    "phone": "", "age": "", "dob": "", "email": "",
+    "tobacco": "", "ssType": "", "bank": "", "checkDate": "",
+    "height": "", "weight": "",
+    "existingCompany": "", "existingPolicy": "", "existingFace": "", "existingPremium": "",
+    "cashValue": "",
+    "newCompany": "", "newFace": "", "newPremium": "", "effectiveDate": "",
+    "apptDate": "", "beneficiary": "",
+    "cancer": "", "heartAttack": "", "stroke": "", "copd": "", "diabetes": "", "mental": "",
+    "healthHistory": "", "medications": "", "notes": ""
+  }
+}`;
+
+  const resp = await fetch(WORKER_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1500,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:prompt}
+      ]}]
+    })
+  });
+  if (!resp.ok) throw new Error(`API ${resp.status}`);
+  const apiData = await resp.json();
+  const raw = apiData.content[0].text.trim().replace(/```json|```/g,'').trim();
+  const parsed = JSON.parse(raw);
+
+  // Normalize types
+  if (['beneficiary','medicare_soa','drivers_license','blank','unrelated'].includes(parsed.docType)) {
+    parsed.type='skip'; parsed.reason=parsed.reason||parsed.docType;
+  }
+  if (parsed.docType==='stop_pac_only') parsed.type='action';
+  if (parsed.docType==='combo'||parsed.docType==='intake_client') parsed.type='client';
+  if (parsed.docType==='T2_lead') parsed.type='lead';
+  parsed.fileName = file.name;
+  return parsed;
+}
+
+// Push to Google Sheet
+async function pushToSheet(type) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  const arr = type==='leads' ? impLeadsArr : impClientsArr;
+  if (!arr.length) { toast('Nothing to push'); return; }
+
+  const btn = document.getElementById(type==='leads'?'pushLeadsBtn':'pushClientsBtn');
+  btn.disabled=true; btn.textContent='Pushing…';
+
+  const tab = type==='leads' ? 'Leads' : SHEET_TAB;
+  const rows = arr.map(r => type==='leads' ? buildLeadRow(r.data) : buildClientRow(r.data));
+
+  // Append in chunks of 50 to avoid request size limits
+  const chunkSize = 50;
+  let pushed = 0;
+  try {
+    for (let i=0; i<rows.length; i+=chunkSize) {
+      const chunk = rows.slice(i, i+chunkSize);
+      const range = `${tab}!A:BK`;
+      const resp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method:'POST',
+          headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},
+          body:JSON.stringify({values:chunk})
+        }
+      );
+      if (resp.status===401){accessToken=null;sessionStorage.removeItem('m_token');sessionStorage.removeItem('m_token_exp');toast('Session expired — please sign in again');return;}
+      if (!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`HTTP ${resp.status}`);}
+      pushed += chunk.length;
+      btn.textContent = `Pushing… ${pushed}/${rows.length}`;
+      if (i+chunkSize < rows.length) await new Promise(r=>setTimeout(r,300));
+    }
+    btn.textContent = `✓ ${pushed} ${type} pushed!`;
+    btn.style.background = 'var(--green)';
+    toast(`✓ ${pushed} ${type} added to Google Sheet`);
+    // Reload data to reflect new entries
+    setTimeout(()=>loadFromSheets(), 1500);
+  } catch(err) {
+    btn.disabled=false;
+    btn.textContent = type==='leads'?'📋 Push Leads to Sheet':'✓ Push Clients to Sheet';
+    toast(`Could not push — ${err.message}`);
+    console.error(err);
+  }
+}
+
+function showImportTab(tab, btn) {
+  document.querySelectorAll('.irt').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const el = document.getElementById('importTableContent');
+
+  if (tab==='rejected') {
+    if (!impRejectedArr.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No rejected files</div>';return;}
+    el.innerHTML=`<table class="import-table">
+      <tr><th>File</th><th>Size</th><th>Reason</th></tr>
+      ${impRejectedArr.map(r=>`<tr>
+        <td style="color:var(--rust);font-weight:600">${r.fileName||''}</td>
+        <td>${r.fileSize||'—'}</td>
+        <td style="color:var(--muted)">${r.reason||''}</td>
+      </tr>`).join('')}
+    </table>`;
+    return;
+  }
+
+  if (tab==='actions') {
+    const actions = impSkippedArr.filter(r=>r.type==='action');
+    if (!actions.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No action forms found</div>';return;}
+    el.innerHTML=`<table class="import-table">
+      <tr><th>Name</th><th>Action Type</th><th>Company</th><th>Policy</th><th>File</th></tr>
+      ${actions.map(r=>{
+        const d=r.data||{};
+        return `<tr>
+          <td style="font-weight:600">${[d.firstName,d.lastName].filter(Boolean).join(' ')||'—'}</td>
+          <td><span style="background:var(--rust-light);color:var(--rust);padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">${r.actionType||'Stop PAC'}</span></td>
+          <td>${d.existingCompany||'—'}</td>
+          <td>${d.existingPolicy||'—'}</td>
+          <td style="color:var(--muted);font-size:11px">${(r.fileName||'').replace('.pdf','')}</td>
+        </tr>`;
+      }).join('')}
+    </table>`;
+    return;
+  }
+
+  const data = tab==='leads'?impLeadsArr:tab==='clients'?impClientsArr:impSkippedArr.filter(r=>r.type!=='action');
+  if (!data.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Nothing here</div>';return;}
+  if (tab==='skipped'){
+    el.innerHTML=`<table class="import-table"><tr><th>File</th><th>Reason</th></tr>${data.map(r=>`<tr><td>${(r.fileName||r.file||'').replace('.pdf','')}</td><td>${r.reason||r.docType||''}</td></tr>`).join('')}</table>`;
+    return;
+  }
+  const cols = tab==='leads'?['Name','City','County','Phone','Age']:['Name','City','County','Phone','DOB','Company'];
+  el.innerHTML=`<table class="import-table"><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${data.map(r=>{
+    const d=r.data||{};
+    const name=[d.firstName,d.lastName].filter(Boolean).join(' ')||'—';
+    if(tab==='leads') return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.age||'—'}</td></tr>`;
+    return `<tr><td>${name}</td><td>${d.city||'—'}</td><td>${d.county||'—'}</td><td>${d.phone||'—'}</td><td>${d.dob||'—'}</td><td>${d.newCompany||d.existingCompany||'—'}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+function impUpdateStats(){
+  document.getElementById('impTotal').textContent=impAllResults.length;
+  document.getElementById('impLeads').textContent=impLeadsArr.length;
+  document.getElementById('impClients').textContent=impClientsArr.length;
+  document.getElementById('impSkipped').textContent=impSkippedArr.length;
+  document.getElementById('impErrors').textContent=impRejectedArr.length;
+}
+
+function downloadRejectedList() {
+  if (!impRejectedArr.length) { alert('No rejected files to export.'); return; }
+  const lines = [
+    'ISBS Archive Import — Files Needing Attention',
+    `Generated: ${new Date().toLocaleString()}`,
+    `Total: ${impRejectedArr.length} files`,
+    '',
+    'FILE NAME | SIZE | REASON',
+    '--------------------------------------------------------------',
+    ...impRejectedArr.map(r => `${r.fileName} | ${r.fileSize||'?'} | ${r.reason}`)
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`ISBS_needs_splitting_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click(); URL.revokeObjectURL(url);
+}
+function impUpdateProgress(done,total,label){
+  const pct=Math.round((done/total)*100);
+  document.getElementById('impProgFill').style.width=pct+'%';
+  document.getElementById('impProgPct').textContent=pct+'%';
+  document.getElementById('impProgLabel').textContent=done>=total?`✓ Complete — ${total} files`:(`Processing ${done+1} of ${total}: ${label}`);
+}
+function setIQStatus(idx,cls,text){
+  const el=document.getElementById(`iq_${idx}`);
+  if(!el)return;
+  el.className=`iq-status iq-${cls}`;
+  el.textContent=text;
+}
+function impLog(msg,cls=''){
+  const log=document.getElementById('importLog');
+  const line=document.createElement('div');
+  line.style.color=cls==='ok'?'var(--green)':cls==='lead'?'var(--blue)':cls==='client'?'var(--gold)':cls==='err'?'var(--rust)':'var(--muted)';
+  line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
+}
+
+
+// ── SPLIT & DOWNLOAD INDIVIDUAL LEAD PDFs (pdf-lib) ──────────────────────────
+let lastFexPdfB64 = null;   // set by processFexPDF / importer so pages can be split out
+function leadFileName(lead) {
+  const last = cl(lead.lastName).toLowerCase().replace(/[^a-z-]/g,'');
+  const first = cl(lead.firstName).toLowerCase().replace(/[^a-z-]/g,'');
+  const spouse = cl(lead.spouseName).split(' ')[0].toLowerCase().replace(/[^a-z-]/g,'');
+  return `${last},${first}${spouse ? '&' + spouse : ''}.pdf`;
+}
+async function downloadSplitLead(pageIdx, leadJson) {
+  try {
+    const lead = JSON.parse(decodeURIComponent(leadJson));
+    if (!lastFexPdfB64) { toast('Source PDF no longer in memory — re-import first'); return; }
+    const bytes = Uint8Array.from(atob(lastFexPdfB64), ch => ch.charCodeAt(0));
+    const src = await PDFLib.PDFDocument.load(bytes);
+    if (pageIdx >= src.getPageCount()) { toast('Page not found in PDF'); return; }
+    const out = await PDFLib.PDFDocument.create();
+    const [pg] = await out.copyPages(src, [pageIdx]);
+    out.addPage(pg);
+    const blob = new Blob([await out.save()], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = leadFileName(lead);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch(e) { console.error(e); toast('Could not split PDF: ' + e.message); }
+}
+function setNearbyStatus(status, btn) {
+  window._nearbyStatus = status;
+  [...btn.parentElement.querySelectorAll('.map-radius-btn')].forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderNearbyClients();
+}
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCase()==='nan')?'':s;}
