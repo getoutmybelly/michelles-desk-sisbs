@@ -627,12 +627,17 @@
             <span id="nearbyCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
           </div>
           <div class="map-controls" style="margin-top:6px">
-            <span style="font-size:12px;font-weight:600;color:var(--muted)">Status:</span>
-            <button class="map-radius-btn active" onclick="setNearbyStatus('',this)">All</button>
-            <button class="map-radius-btn" onclick="setNearbyStatus('Door Knock',this)">Doorknock</button>
-            <button class="map-radius-btn" onclick="setNearbyStatus('Dial',this)">Dial</button>
-            <button class="map-radius-btn" onclick="setNearbyStatus('New Lead',this)">New Lead</button>
-            <button class="map-radius-btn" onclick="setNearbyStatus('Follow Up',this)">Follow Up</button>
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">Show:</span>
+            <button class="map-radius-btn active" onclick="setNearbyGroup('',this)">All</button>
+            <button class="map-radius-btn" onclick="setNearbyGroup('leads',this)">Leads (Doorknock/Dial/New Lead)</button>
+            <button class="map-radius-btn" onclick="setNearbyGroup('clients',this)">Current Clients</button>
+            <button class="map-radius-btn" onclick="setNearbyGroup('followup',this)">Follow Up</button>
+          </div>
+          <div class="map-controls" style="margin-top:6px">
+            <span style="font-size:12px;font-weight:600;color:var(--muted)">Policy Type:</span>
+            <button class="map-radius-btn active" onclick="setNearbyPolicyType('',this)">All</button>
+            <button class="map-radius-btn" onclick="setNearbyPolicyType('medicare',this)">Medicare</button>
+            <button class="map-radius-btn" onclick="setNearbyPolicyType('life',this)">Life / Final Expense</button>
           </div>
           <div class="nearby-list" id="nearbyList"></div>
           <div style="margin-top:12px;text-align:center">
@@ -914,6 +919,7 @@ function parseRows(rows) {
       cashValue:       cl(r[25]),
       ssn:             cl(r[35]),
       newCompany:      cl(r[38]),
+      qualifier:       cl(r[38]), // same column — sheet's own header names it "Qualifier"; used for the Medicare-letter trust line instead of the client's pre-Michelle existingCompany
       newFace:         cl(r[39]),
       newPremium:      cl(r[40]),
       apptDate:        fmtDate(r[41]),
@@ -1130,6 +1136,32 @@ function openGroup(key) {
   setTimeout(()=>document.getElementById('detailPanel').scrollIntoView({behavior:'smooth',block:'start'}),50);
 }
 
+// Multiple sheet rows can share the same lead/appt date (data-entry duplicates,
+// e.g. the same visit logged more than once). Merge same-date rows into one
+// entry for display — combining distinct carrier/company names — everywhere
+// visit history is shown, without touching the underlying row data.
+function dedupeVisitsByDate(group) {
+  const byDate = new Map();
+  const order = [];
+  group.forEach(v => {
+    const dateKey = v.leadDate || v.apptDate || '';
+    const mapKey = dateKey || `__nodate_${order.length}`; // rows with no date never merge
+    if (!byDate.has(mapKey)) { byDate.set(mapKey, { ...v, _companies: new Set(), _notesSet: new Set() }); order.push(mapKey); }
+    const merged = byDate.get(mapKey);
+    if (v.displayCompany) merged._companies.add(v.displayCompany);
+    if (v.notes) merged._notesSet.add(v.notes);
+    // keep the most complete field values across merged rows
+    Object.keys(v).forEach(k => { if (!merged[k] && v[k]) merged[k] = v[k]; });
+  });
+  return order.map(k => {
+    const m = byDate.get(k);
+    m.displayCompany = [...m._companies].join(' + ') || m.displayCompany;
+    m.notes = [...m._notesSet].join(' | ') || m.notes;
+    delete m._companies; delete m._notesSet;
+    return m;
+  });
+}
+
 function renderDetail() {
   const c = selectedGroup[activeVisitIdx];
   document.getElementById('detailName').textContent = c.fullName;
@@ -1139,24 +1171,34 @@ function renderDetail() {
 
   let h = '';
 
+  // Distinct visit dates — collapses duplicate same-date sheet rows into one count/tab
+  const seenDates = new Set();
+  const distinctVisitIdx = [];
+  selectedGroup.forEach((v,i) => {
+    const dk = v.leadDate || v.apptDate || `__nodate_${i}`;
+    if (!seenDates.has(dk)) { seenDates.add(dk); distinctVisitIdx.push(i); }
+  });
+  const distinctCount = distinctVisitIdx.length;
+
   // Repeat client alert
-  if (selectedGroup.length > 1) {
-    const lastVisit = selectedGroup[selectedGroup.length-2];
+  if (distinctCount > 1) {
+    const lastVisit = selectedGroup[distinctVisitIdx[distinctVisitIdx.length-2]];
     const lastDate = lastVisit.leadDate || lastVisit.apptDate || 'a previous visit';
     h += `<div class="repeat-alert">
       <div class="repeat-alert-icon">⚠️</div>
       <div class="repeat-alert-text">
-        <div class="repeat-alert-title">Repeat Client — ${selectedGroup.length} visits on file</div>
+        <div class="repeat-alert-title">Repeat Client — ${distinctCount} visits on file</div>
         <div class="repeat-alert-sub">Last seen: ${lastDate} · Say "Good seeing you again!"</div>
       </div>
       <button class="repeat-alert-btn" onclick="openBriefing('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')">Full Briefing</button>
     </div>`;
   }
 
-  if (selectedGroup.length > 1) {
+  if (distinctCount > 1) {
     h += '<div class="visit-label">Client Visits</div><div class="visit-tabs">';
-    selectedGroup.forEach((v,i)=>{
-      const lbl = v.leadDate||v.apptDate||`Visit ${i+1}`;
+    distinctVisitIdx.forEach((i,n)=>{
+      const v = selectedGroup[i];
+      const lbl = v.leadDate||v.apptDate||`Visit ${n+1}`;
       h += `<button class="visit-tab${i===activeVisitIdx?' active':''}" onclick="switchVisit(${i})">${lbl}</button>`;
     });
     h += '</div>';
@@ -1297,7 +1339,7 @@ function genStopPAC(){
   const c=selectedGroup[activeVisitIdx];
   const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72;let y=M;
-  doc.setFillColor(26,26,46);doc.rect(0,0,W,78,'F');
+  doc.setFillColor(52,58,86);doc.rect(0,0,W,78,'F');
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(20);
   doc.text('Stop PAC – Send a Bill',M,36);
   doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(184,146,58);
@@ -1339,7 +1381,7 @@ function genSurrender(){
   const c=selectedGroup[activeVisitIdx];
   const doc=new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=60;let y=M;
-  doc.setFillColor(26,26,46);doc.rect(0,0,W,78,'F');
+  doc.setFillColor(52,58,86);doc.rect(0,0,W,78,'F');
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(17);
   doc.text('Policy Cancellation Request',M,34);
   doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(184,146,58);
@@ -1671,6 +1713,22 @@ async function loadCommissionEmailsInline() {
   const container = document.getElementById('commEmailsInline');
   if (!container || !accessToken) return;
 
+  // Verified agent-portal login pages for carriers Michelle actually uses.
+  // Anything not in this list falls back to a search link rather than a guess.
+  const CARRIER_PORTALS = {
+    'gerber':          'https://www.gerberlifeagency.com',
+    'illinois mutual': 'https://www.illinoismutual.com',
+    'trinity':         'https://trinitylifeinsurance.com',
+  };
+  function carrierPortalLink(email) {
+    const text = (email.from + ' ' + email.subject + ' ' + email.snippet).toLowerCase();
+    const found = Object.keys(CARRIER_PORTALS).find(k => text.includes(k));
+    const url = found ? CARRIER_PORTALS[found] : `https://www.google.com/search?q=${encodeURIComponent((found||'carrier')+' agent portal login')}`;
+    const label = found ? `🏢 ${found[0].toUpperCase()+found.slice(1)} Portal` : '🔎 Find carrier portal';
+    return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--rust);font-weight:600;text-decoration:none;white-space:nowrap">${label}</a>`;
+  }
+  window.carrierPortalLink = carrierPortalLink;
+
   const CARRIERS = ['trinity life','illinois mutual','american general','polish falcons',
     'corebridge','gerber life','foresters','transamerica','sons of norway','lifeshield',
     'kskj','accendo','sbli','amam','pfa','seniorlife','american amicable','aetna'];
@@ -1728,14 +1786,19 @@ async function loadCommissionEmailsInline() {
         const dateStr = formatEmailDate(email.date);
         // Try to find matching client
         const matched = findClientFromEmail(email);
-        html += `<div style="background:#fff;border-radius:8px;padding:11px 13px;margin-bottom:7px">
+        const matchedKey = matched ? matched.fullName.toLowerCase().replace(/\s+/g,' ').trim() : '';
+        html += `<div style="background:#fff;border-radius:8px;padding:11px 13px;margin-bottom:7px${matched?';cursor:pointer':''}"${matched?` onclick="openGroup('${esc(matchedKey)}')"`:''}>
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
             <div>
               <div style="font-weight:600;font-size:13px">${email.subject}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">${email.from} · ${dateStr}</div>
               <div style="font-size:12px;color:var(--ink);margin-top:5px">${email.snippet}</div>
-              ${matched ? `<div style="font-size:11px;color:var(--rust);font-weight:600;margin-top:4px">⚠️ Possible match: ${matched.fullName} · ${matched.existingCompany||''}</div>` : ''}
+              ${matched ? `<div style="font-size:11px;color:var(--rust);font-weight:600;margin-top:4px">⚠️ Possible match: ${matched.fullName} · ${matched.existingCompany||''} — tap to open profile →</div>` : ''}
             </div>
+            ${matched ? `<div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+              <a href="${sheetRowUrl(matched)}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue);font-weight:600;text-decoration:none;white-space:nowrap">📊 Open in Sheet</a>
+              ${carrierPortalLink(email)}
+            </div>` : ''}
           </div>
         </div>`;
       });
@@ -2114,8 +2177,25 @@ async function renderNearbyClients() {
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Finding nearby clients…</div>';
 
   // Geocode a sample of clients that have addresses
-  const stFilter = window._nearbyStatus || '';
-  const withAddr = allClients.filter(c => c.address && c.city && c.state && (!stFilter || c.clientStatus === stFilter)).slice(0,200);
+  const group = window._nearbyGroup || '';
+  const policyType = window._nearbyPolicyType || '';
+  const withAddr = allClients.filter(c => {
+    if (!(c.address && c.city && c.state)) return false;
+    const status = (c.clientStatus||'').toLowerCase();
+    const sold = statusLooksStale(c); // has a placed policy even if the dropdown wasn't updated
+    if (group === 'leads') {
+      // Doorknock/Dial/New Lead are merged into one bucket, and anyone who
+      // clearly already has a placed policy is treated as a client instead —
+      // even if their status dropdown was never updated (e.g. Patricia).
+      if (!LEAD_STAGE_STATUSES.includes(status) || sold) return false;
+    } else if (group === 'clients') {
+      if (!(sold || (!LEAD_STAGE_STATUSES.includes(status) && status !== 'follow up'))) return false;
+    } else if (group === 'followup') {
+      if (status !== 'follow up') return false;
+    }
+    if (policyType && clientPolicyType(c) !== policyType) return false;
+    return true;
+  }).slice(0,200);
   const nearby = [];
 
   // Use zip code centroid approximation for speed (no API needed)
@@ -2149,6 +2229,7 @@ async function renderNearbyClients() {
         <div class="nearby-name">${c.fullName}</div>
         <div class="nearby-addr">${addr}</div>
         ${c.phone ? `<div style="font-size:12px;color:var(--sage);margin-top:2px">${c.phone}</div>` : ''}
+        ${statusLooksStale(c) ? `<div style="font-size:11px;color:var(--rust);font-weight:600;margin-top:3px">⚠️ Has a placed policy but status still says "${c.clientStatus}" — <a href="${sheetRowUrl(c)}" target="_blank" onclick="event.stopPropagation()" style="color:var(--rust);text-decoration:underline">fix in Sheet</a></div>` : ''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
         ${dist !== null ? `<span class="nearby-dist">${dist.toFixed(1)} mi</span>` : ''}
@@ -2555,20 +2636,38 @@ function renderFexLeadsPreview(leads, container, btn) {
   btn.textContent = `✓ ${leads.length} leads found`;
   btn.style.background = 'var(--sage)';
 
+  // Keep an editable, live copy — AI extraction (handwriting/OCR) can misread a name,
+  // so review-and-correct beats blind trust. Fields are corrected in place before saving.
+  if (!container.id) container.id = 'fex_result_' + Math.random().toString(36).slice(2);
+  window._fexLeadsState = window._fexLeadsState || {};
+  window._fexLeadsState[container.id] = leads.map(l => ({ ...l }));
+
+  const fields = [
+    ['firstName','First'], ['lastName','Last'], ['spouseName','Spouse'],
+    ['address','Address'], ['city','City'], ['state','State'], ['zip','Zip'],
+    ['phone','Phone'], ['ageRange','Age Range'], ['health','Health']
+  ];
+
   let html = `<div style="background:var(--green-light);border-radius:10px;padding:12px;margin-bottom:10px">
-    <div style="font-weight:600;color:var(--green);margin-bottom:8px">✓ ${leads.length} lead${leads.length>1?'s':''} extracted — review and save</div>`;
+    <div style="font-weight:600;color:var(--green);margin-bottom:4px">✓ ${leads.length} lead${leads.length>1?'s':''} extracted — review and correct before saving</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">AI reads handwriting — double-check names against the card before saving.</div>`;
 
   leads.forEach((lead, i) => {
     html += `<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:13px">
-      <div style="font-weight:600">${lead.firstName} ${lead.lastName}</div>
-      <div style="color:var(--muted);margin-top:2px">${lead.address}, ${lead.city}, ${lead.state} ${lead.zip}</div>
-      <div style="color:var(--sage);margin-top:2px">${lead.phone}${lead.bestTimeToCall?' · '+lead.bestTimeToCall:''}</div>
-      <div style="color:var(--muted);font-size:11px;margin-top:2px">Age: ${lead.ageRange} · Health: ${lead.health}${lead.interestedIn?' · '+lead.interestedIn:''}</div>
-      ${lastFexPdfB64?`<button onclick="downloadSplitLead(${i}, '${encodeURIComponent(JSON.stringify(lead))}')" style="margin-top:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:14px;border:1.5px solid var(--sage);color:var(--sage);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ PDF — ${lead.lastName?lead.lastName.toLowerCase():''},${lead.firstName?lead.firstName.toLowerCase():''}${lead.spouseName?'&'+lead.spouseName.split(' ')[0].toLowerCase():''}</button>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-bottom:6px">
+        ${fields.map(([key,label]) => `
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:1px">${label}</label>
+            <input type="text" value="${(lead[key]||'').toString().replace(/"/g,'&quot;')}"
+              oninput="window._fexLeadsState['${container.id}'][${i}]['${key}']=this.value"
+              style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'DM Sans',sans-serif">
+          </div>`).join('')}
+      </div>
+      ${lastFexPdfB64?`<button onclick="downloadSplitLead(${i}, '${container.id}')" style="margin-top:2px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:14px;border:1.5px solid var(--sage);color:var(--sage);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Download this lead's PDF page</button>`:''}
     </div>`;
   });
 
-  html += `<button onclick="saveFexLeads(${JSON.stringify(leads).replace(/"/g,'&quot;')}, this)"
+  html += `<button onclick="saveFexLeads('${container.id}', this)"
     style="width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px">
     💾 Save All ${leads.length} Leads to Sheet
   </button>`;
@@ -2577,35 +2676,41 @@ function renderFexLeadsPreview(leads, container, btn) {
   container.innerHTML = html;
 }
 
-async function saveFexLeads(leads, btn) {
+async function saveFexLeads(containerId, btn) {
   if (!accessToken) { toast('Sign in first'); return; }
   if (window._fexSaveInFlight) return;          // double-tap guard
   window._fexSaveInFlight = true;
   btn.disabled = true;
   btn.textContent = 'Saving…';
 
+  // Pull the CURRENT (possibly hand-corrected) values, not a frozen snapshot from extraction time —
+  // this is what lets a corrected name (e.g. an AI misread) actually get saved.
+  const leads = window._fexLeadsState?.[containerId] || [];
   const report = [];
   try {
-    // 1. Read the Leads tab so we can (a) sanity-check headers, (b) dedupe, (c) place rows deterministically
+    // 1. Read the Leads tab so we can (a) confirm the real header layout, (b) dedupe, (c) place rows deterministically
     const getResp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A1:M`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Leads!A1:O`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (!getResp.ok) { const e = await getResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Could not read Leads tab (HTTP ${getResp.status})`); }
     const existing = (await getResp.json()).values || [];
 
-    // Header sanity check: First-name-like header expected in column B
+    // Header sanity check: First-name-like header expected in column D (confirmed against the live sheet —
+    // matches the brief's original Clients-style layout: A=Status B/C=blank D=First E=Spouse F=Last ...)
+    let firstCol = 3; // 0-based index for column D, the confirmed default
     if (existing.length) {
       const hdr = (existing[0]||[]).map(h => String(h||'').toLowerCase());
       const firstIdx = hdr.findIndex(h => h.includes('first'));
-      if (firstIdx > -1 && firstIdx !== 1) {
-        throw new Error(`Leads tab layout unexpected: "First" header found in column ${colToLetter(firstIdx)}, expected B. Nothing was saved — check the Leads tab headers.`);
-      }
+      if (firstIdx > -1) firstCol = firstIdx;
     }
+    const lastCol = firstCol + 2;   // Last sits 2 columns after First (D..F pattern)
+    const spouseCol = firstCol + 1;
+    const phoneCol = firstCol + 9;  // Phone sits 9 columns after First, per confirmed layout
 
-    // Existing lead keys for dedupe (First B + Last D + digits of Phone K)
+    // Existing lead keys for dedupe
     const existKeys = new Set(existing.slice(1).map(r =>
-      `${cl(r[1]).toLowerCase()}|${cl(r[3]).toLowerCase()}|${String(r[10]||'').replace(/\D/g,'')}`));
+      `${cl(r[firstCol]).toLowerCase()}|${cl(r[lastCol]).toLowerCase()}|${String(r[phoneCol]||'').replace(/\D/g,'')}`));
 
     let nextRow = existing.length + 1;          // deterministic placement — no append() drift
     const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
@@ -2619,9 +2724,10 @@ async function saveFexLeads(leads, btn) {
       const key = `${first.toLowerCase()}|${last.toLowerCase()}|${phoneDigits}`;
       if (existKeys.has(key)) { report.push(`↩ ${first} ${last}: already in Leads — skipped`); continue; }
       existKeys.add(key);
-      // Leads tab: A=Status B=First C=Spouse D=Last E=Address F=City G=County H=State I=Zip J=LeadDate K=Phone L=DOB M=Age
+      // Confirmed layout: A=Status, then blank(s), D=First, E=Spouse, F=Last, G=Address, H=City,
+      // I=County, J=State, K=Zip, L=LeadDate, M=Phone, N=DOB, O=Age
       rowsToWrite.push([
-        'Dial', first, cl(lead.spouseName), last,
+        'Dial', '', '', first, cl(lead.spouseName), last,
         cl(lead.address), cl(lead.city), cl(lead.county) || guessCounty(lead.city),
         cl(lead.state) || 'IL', cl(lead.zip), today, cl(lead.phone), cl(lead.dob), cl(lead.age)
       ]);
@@ -2629,7 +2735,7 @@ async function saveFexLeads(leads, btn) {
     }
 
     if (rowsToWrite.length) {
-      const range = `Leads!A${nextRow}:M${nextRow + rowsToWrite.length - 1}`;
+      const range = `Leads!A${nextRow}:O${nextRow + rowsToWrite.length - 1}`;
       const putResp = await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
         { method: 'PUT',
@@ -2716,7 +2822,10 @@ function guessCounty(city) {
 
 
 // ── HEADSHOT (preloaded so it always lands in PDFs, including print/save) ────
+// Rendered as a circular, transparent-background badge so no white box shows
+// against colored headers, regardless of the source photo's background.
 let HEADSHOT_DATA = null;
+const HEADSHOT_SIZE = 60; // pt — used everywhere the photo is placed in a letter
 function ensureHeadshot() {
   if (HEADSHOT_DATA) return Promise.resolve(HEADSHOT_DATA);
   return new Promise(resolve => {
@@ -2724,10 +2833,21 @@ function ensureHeadshot() {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
+        const D = 300; // render large, place small — stays crisp
         const cvs = document.createElement('canvas');
-        cvs.width = img.width; cvs.height = img.height;
-        cvs.getContext('2d').drawImage(img, 0, 0);
-        HEADSHOT_DATA = cvs.toDataURL('image/jpeg', 0.9);
+        cvs.width = D; cvs.height = D;
+        const ctx = cvs.getContext('2d');
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(D/2, D/2, D/2, 0, Math.PI*2);
+        ctx.closePath();
+        ctx.clip();
+        // cover-fit the source image into the circle (crop to square first)
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, D, D);
+        ctx.restore();
+        HEADSHOT_DATA = cvs.toDataURL('image/png'); // PNG preserves the transparent corners
       } catch(e) { console.warn('headshot canvas failed', e); }
       resolve(HEADSHOT_DATA);
     };
@@ -2735,8 +2855,11 @@ function ensureHeadshot() {
     img.src = MICHELLE_HEADSHOT;
   });
 }
-function addPhotoToLetter(doc, W, M) {
-  if (HEADSHOT_DATA) { try { doc.addImage(HEADSHOT_DATA, 'JPEG', W - M - 44, 8, 44, 54); } catch(e){} }
+function addPhotoToLetter(doc, W, M, headerH) {
+  if (!HEADSHOT_DATA) return;
+  const size = HEADSHOT_SIZE;
+  const top = headerH ? (headerH - size) / 2 : 6;
+  try { doc.addImage(HEADSHOT_DATA, 'PNG', W - M - size, top, size, size); } catch(e){}
 }
 
 function addQRCodeToLetter(doc, url, x, y, size) {
@@ -2954,8 +3077,11 @@ async function saveLeadToSheet() {
     address:g('lf_address'), city:g('lf_city'), county:g('lf_county'), state:g('lf_state'),
     zip:g('lf_zip'), phone:g('lf_phone'), dob:g('lf_dob'), age:g('lf_age') };
   if (!lead.firstName && !lead.lastName) { toast('Enter at least a name'); btn.disabled=false; btn.textContent='💾 Save to Leads Tab'; return; }
+  const cid = 'manual_' + Date.now();
+  window._fexLeadsState = window._fexLeadsState || {};
+  window._fexLeadsState[cid] = [lead];
   const fake = { disabled:false, textContent:'', style:{}, parentElement: btn.parentElement };
-  await saveFexLeads([lead], fake);
+  await saveFexLeads(cid, fake);
   if (fake.textContent.startsWith('✓')) {
     btn.textContent = '✓ Saved!';
     setTimeout(() => { resetScanner(); }, 1400);
@@ -3198,8 +3324,8 @@ async function genBirthdayLetter(key, age) {
   const doc = new jsPDF({orientation:'portrait',unit:'pt',format:'letter'});
   const W=612,M=72,contentW=W-M*2; let y=M;
 
-  doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
-  addPhotoToLetter(doc, W, M);
+  doc.setFillColor(52,58,86); doc.rect(0,0,W,70,'F');
+  addPhotoToLetter(doc, W, M, 70);
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text('Michelle Scott', M, 28);
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(184,146,58);
@@ -3223,7 +3349,7 @@ async function genBirthdayLetter(key, age) {
 
   const paras = [
     `I wanted to reach out a little ahead of your ${age}th birthday to wish you well — and to check in as your benefit coordinator.`,
-    `Birthdays are a natural time to take stock. Whether you're expecting any changes to your income, thinking about retirement, or simply wondering if your current coverage still makes sense, I'd love to spend a few minutes with you to make sure everything lines up.`,
+    `A birthday is a good time to pause and check in. If your income is changing, if retirement is coming up, or if you're just wondering whether your current coverage still fits — I'd love to spend a few minutes making sure everything still lines up for you.`,
     `I work with many folks in your area and I know how much can shift around this time of life. My job is to make sure you're fully protected and not paying for more — or less — than you need.`,
     `There's no cost to meet, no pressure, and no obligation. Just a friendly visit from someone who genuinely cares about your peace of mind.`,
   ];
@@ -3296,8 +3422,8 @@ function buildMedicareLetter(c, isExistingClient) {
   const city      = c.city    ? toProperCase(c.city)    : '';
 
   // Header
-  doc.setFillColor(26,26,46); doc.rect(0,0,W,70,'F');
-  addPhotoToLetter(doc, W, M);
+  doc.setFillColor(52,58,86); doc.rect(0,0,W,70,'F');
+  addPhotoToLetter(doc, W, M, 70);
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text('Michelle Scott', M, 28);
   doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(184,146,58);
@@ -3323,7 +3449,7 @@ function buildMedicareLetter(c, isExistingClient) {
   // Two versions of body copy
   let paras;
   if (isExistingClient) {
-    const carrier = fmtName(c.existingCompany || c.newCompany || c.displayCompany || 'your life insurance');
+    const carrier = fmtName(c.qualifier || c.displayCompany || 'your life insurance');
     paras = [
       `You already trust me with your ${carrier} coverage, and I want to make sure your Medicare transition goes just as smoothly.`,
       `Your 65th birthday is approaching — and with it comes one of the most important decisions you'll make about your health coverage. Medicare has a 7-month Special Enrollment Period that begins 3 months before your birthday. If you miss this window, you could face lifetime premium penalties and gaps in coverage that are permanent.`,
@@ -3381,8 +3507,9 @@ function buildMedicareLetter(c, isExistingClient) {
 }
 
 function openBriefing(key) {
-  const group = clientGroups[key];
-  if (!group) return;
+  const rawGroup = clientGroups[key];
+  if (!rawGroup) return;
+  const group = dedupeVisitsByDate(rawGroup);
   const c = group[group.length-1]; // most recent visit
   const visitCount = group.length;
 
@@ -3469,8 +3596,9 @@ function closeBriefing() {
 
 async function genBriefingPDF(key) {
   await ensureHeadshot();
-  const group = clientGroups[key];
-  if (!group) return;
+  const rawGroup = clientGroups[key];
+  if (!rawGroup) return;
+  const group = dedupeVisitsByDate(rawGroup);
   const c = group[group.length-1];
   const visitCount = group.length;
 
@@ -3479,8 +3607,8 @@ async function genBriefingPDF(key) {
   let y = M;
 
   // Header
-  doc.setFillColor(26,26,46); doc.rect(0,0,W,64,'F');
-  addPhotoToLetter(doc, W, M);
+  doc.setFillColor(52,58,86); doc.rect(0,0,W,64,'F');
+  addPhotoToLetter(doc, W, M, 64);
   doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
   doc.text('PRE-VISIT BRIEFING', M, 20);
   doc.setFontSize(20); doc.text(c.fullName, M, 40);
@@ -3586,13 +3714,13 @@ async function genAnniversaryLetter(key, yearsOld) {
 
   // Build letter as HTML then convert to printable PDF via jsPDF
   const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'letter'});
-  addPhotoToLetter(doc, doc.internal.pageSize.getWidth(), 18);
   const W = 612, M = 72, contentW = W - M*2;
   let y = M;
 
   // Gold header bar
-  doc.setFillColor(26, 26, 46);
+  doc.setFillColor(52, 58, 86);
   doc.rect(0, 0, W, 70, 'F');
+  addPhotoToLetter(doc, W, M, 70);
 
   // Agent name
   doc.setTextColor(255, 255, 255);
@@ -4181,9 +4309,10 @@ function leadFileName(lead) {
   const spouse = cl(lead.spouseName).split(' ')[0].toLowerCase().replace(/[^a-z-]/g,'');
   return `${last},${first}${spouse ? '&' + spouse : ''}.pdf`;
 }
-async function downloadSplitLead(pageIdx, leadJson) {
+async function downloadSplitLead(pageIdx, containerId) {
   try {
-    const lead = JSON.parse(decodeURIComponent(leadJson));
+    const lead = (window._fexLeadsState?.[containerId]||[])[pageIdx];
+    if (!lead) { toast('Could not find that lead'); return; }
     if (!lastFexPdfB64) { toast('Source PDF no longer in memory — re-import first'); return; }
     const bytes = Uint8Array.from(atob(lastFexPdfB64), ch => ch.charCodeAt(0));
     const src = await PDFLib.PDFDocument.load(bytes);
@@ -4199,11 +4328,28 @@ async function downloadSplitLead(pageIdx, leadJson) {
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   } catch(e) { console.error(e); toast('Could not split PDF: ' + e.message); }
 }
-function setNearbyStatus(status, btn) {
-  window._nearbyStatus = status;
+function setNearbyGroup(group, btn) {
+  window._nearbyGroup = group;
   [...btn.parentElement.querySelectorAll('.map-radius-btn')].forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderNearbyClients();
+}
+function setNearbyPolicyType(type, btn) {
+  window._nearbyPolicyType = type;
+  [...btn.parentElement.querySelectorAll('.map-radius-btn')].forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderNearbyClients();
+}
+// Best-effort policy-type guess from whatever fields are actually populated —
+// FEX leads have interestedIn text; older clients only have coverage/age fields.
+function clientPolicyType(c) {
+  const interested = (c.interestedIn||'').toLowerCase();
+  if (interested.includes('medicare')) return 'medicare';
+  if (interested.includes('final expense')||interested.includes('term life')||interested.includes('critical illness')) return 'life';
+  if (c.medicareInfo) return 'medicare';
+  if (c.age && parseInt(c.age) >= 64) return 'medicare';
+  if (c.existingCompany || c.newCompany || c.existingFace || c.newFace) return 'life';
+  return '';
 }
 
 
@@ -4212,6 +4358,20 @@ function cl(v){const s=(v==null)?'':String(v).trim();return(s===''||s.toLowerCas
 function fmtPhone(v){const s=cl(v);if(!s)return'';const d=s.replace(/\D/g,'');if(d.length===10)return`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;if(d.length===11&&d[0]==='1')return`(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;return s;}
 function fmtDate(v){if(!v)return'';const s=String(v).trim();if(!s||s.toLowerCase()==='nan')return'';if(/^\d{5,6}$/.test(s)){const d=new Date(Math.round((parseFloat(s)-25569)*86400*1000));if(!isNaN(d))return`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;}const d=new Date(s);if(!isNaN(d.getTime())){const yr=d.getFullYear();if(yr>1900&&yr<2100)return`${d.getMonth()+1}/${d.getDate()}/${yr}`;}return s;}
 function colToLetter(col){let l='',n=col;while(n>=0){l=String.fromCharCode((n%26)+65)+l;n=Math.floor(n/26)-1;}return l;}
+// Opens the exact row for a client in the live Google Sheet (Clients tab).
+// NOTE: assumes the Clients tab is the first tab in the spreadsheet (gid=0) —
+// if it isn't, tell me the tab's gid and I'll fix this one constant.
+function sheetRowUrl(c) {
+  const row = c?.sheetRow || 1;
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=0&range=A${row}`;
+}
+// A client shows clear signs of a placed/sold policy (new coverage on file) but
+// the status dropdown still says a lead-stage value — the dropdown is stale.
+const LEAD_STAGE_STATUSES = ['door knock','dial','new lead'];
+function statusLooksStale(c) {
+  const hasPlacedPolicy = !!(c.newCompany && c.newPremium);
+  return hasPlacedPolicy && LEAD_STAGE_STATUSES.includes((c.clientStatus||'').toLowerCase());
+}
 function esc(k){return k.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 function todayStr(){const d=new Date();return`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;}
 function showLoading(show){document.getElementById('loadingState').style.display=show?'block':'none';}
