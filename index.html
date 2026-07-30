@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Google auth handled via redirect -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
@@ -709,6 +710,10 @@
   <div class="briefing-modal" id="outcomeModal"></div>
 </div>
 
+<div class="briefing-overlay" id="carrierReportOverlay" onclick="if(event.target===this)closeCarrierReportModal()">
+  <div class="briefing-modal" id="carrierReportModal" style="max-width:960px"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -791,6 +796,10 @@ const C = {
   APPT_DATE:             41, // AO
   FOLLOWUP_DATE:         70, // BS
   FOLLOWUP_REASON:       71, // BT
+  CARRIER_ISSUE_DATE:    83, // CF — from carrier report, distinct from Michelle's own Effective Date
+  CARRIER_PAID_TO_DATE:  84, // CG
+  CARRIER_PRODUCT:       85, // CH
+  CARRIER_REPORT_PREMIUM:86, // CI — carrier's own stated premium, kept separate from newPremium (what Michelle entered)
 };
 
 // Standardized status model (color + carrier-side meanings it maps from).
@@ -1032,6 +1041,10 @@ function parseRows(rows, dateOverrides) {
       portalFailureReason: cl(r[C.PORTAL_FAILURE_REASON]),
       newPolicyNumber:     cl(r[C.POLICY_NUMBER]),
       statusLog:           cl(r[C.STATUS_LOG]),
+      carrierIssueDate:    fmtDate(r[C.CARRIER_ISSUE_DATE]),
+      carrierPaidToDate:   fmtDate(r[C.CARRIER_PAID_TO_DATE]),
+      carrierProduct:      cl(r[C.CARRIER_PRODUCT]),
+      carrierReportPremium:cl(r[C.CARRIER_REPORT_PREMIUM]),
       // New due/sent columns
       stopDueRaw:      cl(r[C.STOP_DUE]),
       stopDue:         fmtDate(r[C.STOP_DUE]),
@@ -2830,13 +2843,304 @@ function copyTopReplacedCompanies() {
     .catch(() => toast('Could not copy — select and copy manually'));
 }
 
+// ── CARRIER REPORT IMPORT ─────────────────────────────────────────────────────
+// Stage 1: manual upload, starting with LifeShield. Everything from here down to
+// writeCarrierReportRecord is deliberately independent of the upload UI — parse, match,
+// and stats functions take plain data in and return plain data out. A future private
+// browser agent can call parseCarrierReportWorkbook / matchCarrierRecords /
+// computeCarrierReportStats directly after downloading the same report; it never needs
+// the file input or the modal. No carrier credentials or login logic lives in this file —
+// that stays entirely with whatever fetches the report in the first place.
+
+const CARRIER_REPORT_CONFIGS = {
+  lifeshield: {
+    label: 'LifeShield',
+    // Multiple header spellings accepted — normalizeHeader() strips down to uppercase
+    // letters/digits before matching, so "Policy Number", "POLICY_NUMBER", "Policy #" all resolve.
+    headerAliases: {
+      policyNumber: ['POLICYNUMBER', 'POLICYNO', 'POLICY'],
+      status:       ['STATUS'],
+      insuredName:  ['INSUREDNAME', 'INSURED', 'NAME'],
+      issueDate:    ['ISSUEDATE'],
+      premium:      ['PREMIUM', 'MONTHLYPREMIUM'],
+      paidToDate:   ['PAIDTODATE', 'PAIDTO'],
+      product:      ['PRODUCTNAME', 'PRODUCT'],
+      faceAmount:   ['BASEFACEAMOUNT', 'FACEAMOUNT', 'FACE'],
+    },
+    // Exact carrier wording is preserved separately (carrierStatusText) — this only sets
+    // the four-color standardized status plus an internal subtype for the adverse cases.
+    statusMap: (rawStatus) => {
+      const s = (rawStatus || '').trim().toLowerCase();
+      if (s === 'active') return { standardizedStatus: 'issued_paid_in_force', subtype: null };
+      if (s === 'inactive') return { standardizedStatus: 'adverse', subtype: 'lapsed_or_inactive' };
+      if (['nottkn','not tkn','not taken'].includes(s)) return { standardizedStatus: 'adverse', subtype: 'not_taken' };
+      return { standardizedStatus: 'pending_verification', subtype: 'unrecognized_status' };
+    },
+    // NotTkn affects placement rate only — it never counts as a post-issue lapse.
+    isIssued:   (rawStatus) => ['active','inactive'].includes((rawStatus||'').trim().toLowerCase()),
+    isActive:   (rawStatus) => (rawStatus||'').trim().toLowerCase() === 'active',
+    isNotTaken: (rawStatus) => ['nottkn','not tkn','not taken'].includes((rawStatus||'').trim().toLowerCase()),
+  },
+};
+
+function normalizeHeader(h) {
+  return String(h || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeInsuredName(name) {
+  let s = String(name || '').trim();
+  if (!s) return '';
+  if (s.includes(',')) { // carrier reports often use "Last, First" — flip to match Desk's "First Last"
+    const [last, first] = s.split(',').map(p => p.trim());
+    s = `${first} ${last}`;
+  }
+  return s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Pure parse: workbook bytes in, plain array of normalized records out.
+function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
+  const config = CARRIER_REPORT_CONFIGS[carrierKey];
+  if (!config) throw new Error(`No report config for carrier: ${carrierKey}`);
+
+  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  if (!rows.length) return [];
+
+  const actualHeaders = Object.keys(rows[0]);
+  const headerLookup = {};
+  Object.entries(config.headerAliases).forEach(([field, aliases]) => {
+    const found = actualHeaders.find(h => aliases.includes(normalizeHeader(h)));
+    if (found) headerLookup[field] = found;
+  });
+
+  const fmtCellDate = (v) => {
+    if (!v) return '';
+    if (v instanceof Date) return `${v.getMonth()+1}/${v.getDate()}/${v.getFullYear()}`;
+    return String(v).trim();
+  };
+
+  return rows.map(row => ({
+    policyNumber: String(row[headerLookup.policyNumber] ?? '').trim(),
+    status:       String(row[headerLookup.status] ?? '').trim(),
+    insuredName:  String(row[headerLookup.insuredName] ?? '').trim(),
+    issueDate:    fmtCellDate(row[headerLookup.issueDate]),
+    premium:      parseFloat(String(row[headerLookup.premium] ?? '0').replace(/[^0-9.\-]/g,'')) || 0,
+    paidToDate:   fmtCellDate(row[headerLookup.paidToDate]),
+    product:      String(row[headerLookup.product] ?? '').trim(),
+    faceAmount:   parseFloat(String(row[headerLookup.faceAmount] ?? '0').replace(/[^0-9.\-]/g,'')) || 0,
+  })).filter(r => r.policyNumber || r.insuredName);
+}
+
+// Pure match: report records + Desk's client list in, categorized result out.
+// Policy number match first, exact normalized name second — never a partial/fuzzy match.
+function matchCarrierRecords(carrierKey, records, clients) {
+  const carrierLabel = CARRIER_REPORT_CONFIGS[carrierKey].label;
+  const isThisCarrier = c => (c.newCompany||'').toLowerCase().includes(carrierKey) || (c.existingCompany||'').toLowerCase().includes(carrierKey);
+  const deskCarrierClients = clients.filter(isThisCarrier);
+
+  const exact = [], nameOnly = [], unmatchedPortal = [];
+  const matchedSheetRows = new Set();
+
+  records.forEach(rec => {
+    let match = deskCarrierClients.find(c =>
+      rec.policyNumber && ((c.newPolicyNumber && c.newPolicyNumber === rec.policyNumber) ||
+                            (c.existingPolicy && c.existingPolicy === rec.policyNumber)));
+    if (match) { exact.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
+
+    const normRecName = normalizeInsuredName(rec.insuredName);
+    match = normRecName ? deskCarrierClients.find(c => normalizeInsuredName(c.fullName) === normRecName) : null;
+    if (match) { nameOnly.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
+
+    unmatchedPortal.push(rec);
+  });
+
+  const deskNotFound = deskCarrierClients.filter(c => !matchedSheetRows.has(c.sheetRow));
+
+  return { carrierLabel, exact, nameOnly, unmatchedPortal, deskNotFound };
+}
+
+// Pure stats: straight off the carrier's own report, independent of match results.
+function computeCarrierReportStats(carrierKey, records) {
+  const config = CARRIER_REPORT_CONFIGS[carrierKey];
+  const total = records.length;
+  const active = records.filter(r => config.isActive(r.status));
+  const inactive = records.filter(r => !config.isActive(r.status) && config.isIssued(r.status));
+  const notTaken = records.filter(r => config.isNotTaken(r.status));
+  const issued = active.length + inactive.length;
+  const ap = arr => arr.reduce((s,r) => s + r.premium*12, 0);
+  const activeAP = ap(active), inactiveAP = ap(inactive), notTakenAP = ap(notTaken);
+
+  return {
+    total, activeCount: active.length, inactiveCount: inactive.length, notTakenCount: notTaken.length, issuedCount: issued,
+    placementRate: total ? issued/total : 0,
+    policyPersistency: issued ? active.length/issued : 0,
+    activeAP, inactiveAP, notTakenAP,
+    premiumPersistency: (activeAP+inactiveAP) ? activeAP/(activeAP+inactiveAP) : 0,
+  };
+}
+
+// ── UI layer (everything above this line is reusable by a future automated importer) ──
+let carrierReportPreviewData = null;
+
+async function handleCarrierReportFile(carrierKey, file) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const records = parseCarrierReportWorkbook(carrierKey, buf);
+    const match = matchCarrierRecords(carrierKey, records, allClients);
+    const stats = computeCarrierReportStats(carrierKey, records);
+    carrierReportPreviewData = { carrierKey, records, match, stats };
+    renderCarrierReportModal();
+    document.getElementById('carrierReportOverlay').classList.add('visible');
+  } catch (err) {
+    console.error(err);
+    toast("Could not read that file — check it's the right carrier export");
+  }
+  const input = document.getElementById('carrierReportFileInput');
+  if (input) input.value = '';
+}
+
+function closeCarrierReportModal() {
+  document.getElementById('carrierReportOverlay').classList.remove('visible');
+}
+
+function renderCarrierReportModal() {
+  const { match, stats, carrierKey } = carrierReportPreviewData;
+  const fmt$ = v => '$' + Math.round(v).toLocaleString('en-US');
+  const pct = n => (n*100).toFixed(1) + '%';
+  const statCard = (label, value) => `<div style="background:var(--cream);border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${label}</div><div style="font-size:16px;font-weight:700">${value}</div></div>`;
+
+  let html = `<div style="padding:22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">📥 ${match.carrierLabel} Carrier Report</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Nothing has been written to the Sheet yet — review below, then approve.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      ${statCard('Total Records', stats.total)}${statCard('Active', stats.activeCount)}${statCard('Inactive', stats.inactiveCount)}${statCard('Not Taken', stats.notTakenCount)}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+      ${statCard('Placement Rate', pct(stats.placementRate))}${statCard('Policy Persistency', pct(stats.policyPersistency))}${statCard('Premium Persistency', pct(stats.premiumPersistency))}${statCard('Not-Taken AP', fmt$(stats.notTakenAP))}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+      ${statCard('Active AP', fmt$(stats.activeAP))}${statCard('Inactive AP', fmt$(stats.inactiveAP))}
+    </div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:6px">✅ ${match.exact.length} exact match${match.exact.length===1?'':'es'} (by policy number) — will update on approval</div>
+    <div style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cream)">
+        <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Client</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Policy #</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Carrier Status</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">→ Standardized</th>
+      </tr></thead><tbody>
+      ${match.exact.map(({record,client}) => { const mapped = CARRIER_REPORT_CONFIGS[carrierKey].statusMap(record.status); return `<tr style="border-bottom:1px solid var(--cream)">
+          <td style="padding:6px 8px;font-size:12px">${client.fullName}</td><td style="padding:6px 8px;font-size:12px">${record.policyNumber}</td><td style="padding:6px 8px;font-size:12px">${record.status}</td><td style="padding:6px 8px;font-size:12px">${statusBadge(mapped.standardizedStatus)}</td>
+        </tr>`; }).join('') || `<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--muted);font-size:12px">None</td></tr>`}
+      </tbody></table>
+    </div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:6px">🔎 ${match.nameOnly.length} name-only match${match.nameOnly.length===1?'':'es'} — confirm each individually</div>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cream)">
+        <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Client</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Report Name</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Policy #</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Status</th><th></th>
+      </tr></thead><tbody>
+      ${match.nameOnly.map((m,i) => `<tr style="border-bottom:1px solid var(--cream)">
+          <td style="padding:6px 8px;font-size:12px">${m.client.fullName}</td><td style="padding:6px 8px;font-size:12px">${m.record.insuredName}</td><td style="padding:6px 8px;font-size:12px">${m.record.policyNumber||'—'}</td><td style="padding:6px 8px;font-size:12px">${m.record.status}</td>
+          <td style="padding:6px 8px"><button onclick="confirmCarrierReportNameMatch(${i})" style="padding:5px 10px;background:var(--gold);color:#fff;border:none;border-radius:12px;font-size:11px;font-weight:600;cursor:pointer">Confirm</button></td>
+        </tr>`).join('') || `<tr><td colspan="5" style="padding:12px;text-align:center;color:var(--muted);font-size:12px">None</td></tr>`}
+      </tbody></table>
+    </div>
+
+    <div style="font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">📄 ${match.unmatchedPortal.length} report record${match.unmatchedPortal.length===1?'':'s'} not found in Michelle's Desk</div>
+    <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px">
+      ${match.unmatchedPortal.map(r => `<div style="padding:6px 8px;border-bottom:1px solid var(--cream)">${r.insuredName || '(no name)'} — ${r.policyNumber||'no policy #'} — ${r.status}</div>`).join('') || `<div style="padding:12px;text-align:center;color:var(--muted)">None</div>`}
+    </div>
+
+    <div style="font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">🕳️ ${match.deskNotFound.length} Desk record${match.deskNotFound.length===1?'':'s'} for this carrier not found in the report</div>
+    <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:20px;font-size:12px">
+      ${match.deskNotFound.map(c => `<div style="padding:6px 8px;border-bottom:1px solid var(--cream)">${c.fullName} — ${c.newPolicyNumber||c.existingPolicy||'no policy # on file'}</div>`).join('') || `<div style="padding:12px;text-align:center;color:var(--muted)">None</div>`}
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeCarrierReportModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Close</button>
+      <button id="carrierReportApproveBtn" onclick="approveCarrierReportExactMatches()" ${match.exact.length?'':'disabled'} style="padding:11px 20px;background:${match.exact.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${match.exact.length?'pointer':'not-allowed'}">✓ Approve & Update ${match.exact.length} Exact Match${match.exact.length===1?'':'es'}</button>
+    </div>
+  </div>`;
+
+  document.getElementById('carrierReportModal').innerHTML = html;
+}
+
+async function writeCarrierReportRecord(client, record, carrierKey) {
+  const config = CARRIER_REPORT_CONFIGS[carrierKey];
+  const mapped = config.statusMap(record.status);
+  const now = new Date();
+  const nowStr = now.toLocaleString('en-US', { month:'numeric', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+  const statusLabel = (Object.values(POLICY_STATUS).find(s => s.key === mapped.standardizedStatus) || {}).label || mapped.standardizedStatus;
+  const logEntry = `[${nowStr}] ${statusLabel}${mapped.subtype?` (${mapped.subtype})`:''} — carrier said: "${record.status}" — via Carrier Report, Manual Import`;
+  const newLog = [logEntry, ...(client.statusLog ? client.statusLog.split('\n').filter(Boolean) : [])].join('\n');
+
+  const updates = [
+    { row: client.sheetRow, col: C.STATUS, value: mapped.standardizedStatus },
+    { row: client.sheetRow, col: C.CARRIER_STATUS_TEXT, value: record.status },
+    { row: client.sheetRow, col: C.CARRIER_REASON, value: mapped.subtype || '' },
+    { row: client.sheetRow, col: C.VERIFICATION_SOURCE, value: 'Carrier Report' },
+    { row: client.sheetRow, col: C.LAST_CHECKED, value: nowStr },
+    { row: client.sheetRow, col: C.CHECK_METHOD, value: 'Manual Import' },
+    { row: client.sheetRow, col: C.STATUS_LOG, value: newLog },
+    { row: client.sheetRow, col: C.CARRIER_ISSUE_DATE, value: record.issueDate },
+    { row: client.sheetRow, col: C.CARRIER_PAID_TO_DATE, value: record.paidToDate },
+    { row: client.sheetRow, col: C.CARRIER_PRODUCT, value: record.product },
+    { row: client.sheetRow, col: C.CARRIER_REPORT_PREMIUM, value: record.premium },
+  ];
+  if (record.policyNumber && !client.newPolicyNumber) updates.push({ row: client.sheetRow, col: C.POLICY_NUMBER, value: record.policyNumber });
+
+  await writeCellsBatch(updates);
+
+  client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
+  client.verificationSource = 'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import'; client.statusLog = newLog;
+  client.carrierIssueDate = record.issueDate; client.carrierPaidToDate = record.paidToDate; client.carrierProduct = record.product; client.carrierReportPremium = record.premium;
+  if (record.policyNumber && !client.newPolicyNumber) client.newPolicyNumber = record.policyNumber;
+}
+
+async function approveCarrierReportExactMatches() {
+  const { exact, carrierLabel } = carrierReportPreviewData.match;
+  const carrierKey = carrierReportPreviewData.carrierKey;
+  if (!exact.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  if (!confirm(`Update status for ${exact.length} exact-matched polic${exact.length===1?'y':'ies'} from the ${carrierLabel} report?`)) return;
+
+  const btn = document.getElementById('carrierReportApproveBtn');
+  btn.disabled = true; btn.textContent = 'Updating…';
+  let done = 0, failed = 0;
+  for (const { record, client } of exact) {
+    try { await writeCarrierReportRecord(client, record, carrierKey); done++; } catch (e) { failed++; }
+  }
+  toast(`✓ Updated ${done} polic${done===1?'y':'ies'}${failed?` — ${failed} failed`:''}`);
+  closeCarrierReportModal();
+  if (document.getElementById('panel_numbers')) renderNumbersPanel();
+}
+
+async function confirmCarrierReportNameMatch(index) {
+  const m = carrierReportPreviewData.match.nameOnly[index];
+  if (!m) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  if (!confirm(`Confirm this is the same policy?\n\nDesk: ${m.client.fullName}\nReport: ${m.record.insuredName} (${m.record.policyNumber||'no policy #'})`)) return;
+  try {
+    await writeCarrierReportRecord(m.client, m.record, carrierReportPreviewData.carrierKey);
+    toast('✓ Confirmed and updated');
+    carrierReportPreviewData.match.nameOnly.splice(index, 1);
+    renderCarrierReportModal();
+  } catch (e) {
+    toast('Could not save — check connection');
+  }
+}
+
 function renderCommissionPanel() {
   const panel = document.getElementById('panel_commission');
   panel.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button onclick="openCommTracker()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--gold);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--gold);cursor:pointer">📄 Upload Statement</button>
+      <button onclick="document.getElementById('carrierReportFileInput').click()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--sage);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--sage);cursor:pointer">📥 Import Carrier Report</button>
       <button onclick="renderCommissionPanel()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--border);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">↻ Refresh</button>
     </div>
+    <input type="file" id="carrierReportFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleCarrierReportFile('lifeshield', this.files[0])">
     <div id="commEmailsInline">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <div style="font-family:'DM Serif Display',serif;font-size:17px">💰 Commission & Lapse Emails</div>
