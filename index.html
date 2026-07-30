@@ -907,7 +907,8 @@ async function loadFromSheets() {
     if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); return; }
     if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
     const data = await resp.json();
-    parseRows(data.values || []);
+    const dateOverrides = await fetchUnformattedDateColumns().catch(() => null);
+    parseRows(data.values || [], dateOverrides);
     showLoading(false);
     document.getElementById('searchSection').classList.add('visible');
     document.getElementById('dashboardSection').classList.add('visible');
@@ -930,7 +931,44 @@ async function loadFromSheets() {
   }
 }
 
-function parseRows(rows) {
+// The default Sheets read returns each cell's FORMATTED display string. Some Appt Date
+// rows are formatted "M/d" with no year shown — a value like "3/2" then gets misread by
+// `new Date("3/2")` as year 2001 (a real JS quirk), even though the true underlying date
+// (visible in the edit bar, e.g. "3/2/2026") has the correct year. Fetching these specific
+// columns as raw serial numbers instead sidesteps display formatting entirely and always
+// yields the true year. Applied to every date column that feeds Written Date logic.
+async function fetchUnformattedDateColumns() {
+  if (!accessToken) return null;
+  const cols = { apptDate: 'AO', effectiveDate: 'AR', payDate: 'AS', writtenDate: 'BU' };
+  const keys = Object.keys(cols);
+  const rangesQS = keys.map(k => `ranges=${encodeURIComponent(`${SHEET_TAB}!${cols[k]}1:${cols[k]}5000`)}`).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${rangesQS}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const out = {};
+  keys.forEach((key, idx) => {
+    const vr = (data.valueRanges || [])[idx];
+    out[key] = (vr && vr.values || []).map(row => (row && row[0] !== undefined) ? row[0] : '');
+  });
+  return out;
+}
+function serialToMDY(serial) {
+  const n = parseFloat(serial);
+  if (isNaN(n) || n <= 0) return '';
+  const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+  if (isNaN(d.getTime())) return '';
+  return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+function parseRows(rows, dateOverrides) {
+  const ov = dateOverrides || {};
+  const overrideDate = (key, i, fallback) => {
+    const raw = ov[key] && ov[key][i];
+    if (raw === undefined || raw === '' || raw === null) return fallback;
+    const converted = serialToMDY(raw);
+    return converted || fallback; // if it wasn't actually a serial number, keep the original parse
+  };
   const clients = [], groups = {};
   for (let i = 2; i < rows.length; i++) {
     const r = rows[i];
@@ -964,12 +1002,12 @@ function parseRows(rows) {
       qualifier:       cl(r[38]), // same column — sheet's own header names it "Qualifier"; used for the Medicare-letter trust line instead of the client's pre-Michelle existingCompany
       newFace:         cl(r[39]),
       newPremium:      cl(r[40]),
-      apptDate:        fmtDate(r[41]),
+      apptDate:        overrideDate('apptDate', i, fmtDate(r[41])),
       apptTime:        cl(r[42]),
       apptNotes:       cl(r[43]),
-      effectiveDate:   fmtDate(r[44]),
-      payDate:         cl(r[45]),
-      writtenDate:     fmtDate(r[C.WRITTEN_DATE]),
+      effectiveDate:   overrideDate('effectiveDate', i, fmtDate(r[44])),
+      payDate:         overrideDate('payDate', i, cl(r[45])),
+      writtenDate:     overrideDate('writtenDate', i, fmtDate(r[C.WRITTEN_DATE])),
       status:              cl(r[C.STATUS]) || (parseMoney(cl(r[40]))>0 && cl(r[38]) ? POLICY_STATUS.PENDING_VERIFICATION.key : ''),
       carrierStatusText:   cl(r[C.CARRIER_STATUS_TEXT]),
       carrierReason:       cl(r[C.CARRIER_REASON]),
@@ -1044,6 +1082,26 @@ async function writeCell(row, colIdx, value) {
       method: 'PUT',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [[value]] }),
+    }
+  );
+  if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); throw new Error('auth'); }
+  if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
+}
+
+// Write many cells in one API call instead of one request per cell — needed for bulk
+// operations (hundreds of rows) where sequential writeCell() calls would be slow and
+// risk hitting Sheets API rate limits.
+async function writeCellsBatch(updates) {
+  if (!updates.length) return;
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: updates.map(u => ({ range: `${SHEET_TAB}!${colToLetter(u.col)}${u.row}`, values: [[u.value]] })),
+      }),
     }
   );
   if (resp.status === 401) { accessToken = null; window.location.href = buildAuthUrl(); throw new Error('auth'); }
@@ -1882,6 +1940,8 @@ function computeProductionNumbers() {
 const BACKFILL_CUTOFF = new Date(2026, 6, 20); // July 20, 2026 (month is 0-indexed)
 let backfillPreviewData = null; // cached so the approve step doesn't have to recompute
 
+const APPT_DATE_SANITY_FLOOR_YEAR = 2021; // no real appointment predates this — catches any remaining bad-year parses
+
 function computeWrittenDateBackfillPreview() {
   const clean = [], review = [];
 
@@ -1901,6 +1961,7 @@ function computeWrittenDateBackfillPreview() {
 
     const apptDate = c.apptDate ? new Date(c.apptDate) : null;
     const apptValid = apptDate && !isNaN(apptDate);
+    const apptYearSane = apptValid && apptDate.getFullYear() >= APPT_DATE_SANITY_FLOOR_YEAR;
 
     // Duplicate policy row: same client, same carrier, same premium, different row.
     const group = clientGroups[c.fullName.toLowerCase().replace(/\s+/g,' ').trim()] || [c];
@@ -1912,6 +1973,8 @@ function computeWrittenDateBackfillPreview() {
 
     if (!apptValid) {
       review.push({ ...base, warning: 'Appointment Date missing on this row' });
+    } else if (!apptYearSane) {
+      review.push({ ...base, warning: `Appointment Date year looks wrong (${apptDate.getFullYear()}, before ${APPT_DATE_SANITY_FLOOR_YEAR}) — check the Sheet` });
     } else if (apptDate > effDate) {
       review.push({ ...base, warning: 'Appointment Date is after Effective Date' });
     } else if (dupes.length) {
@@ -1926,6 +1989,28 @@ function computeWrittenDateBackfillPreview() {
   return { clean, review, cutoff: BACKFILL_CUTOFF };
 }
 
+let apptEstimateOffsetDays = 5; // default; editable in the modal before approval
+
+function computeApptDateEstimatePreview(offsetDays) {
+  const rows = [];
+  allClients.forEach(c => {
+    const isPlacedPolicy = !!(c.newCompany && parseMoney(c.newPremium) > 0);
+    if (!isPlacedPolicy || c.writtenDate || c.apptDate) return; // only rows truly missing an Appt Date, with no Written Date yet
+
+    const effDate = c.effectiveDate ? new Date(c.effectiveDate) : null;
+    const effValid = effDate && !isNaN(effDate);
+    if (!effValid || effDate >= BACKFILL_CUTOFF) return; // same historical scope as the main backfill
+
+    const estDate = new Date(effDate); estDate.setDate(estDate.getDate() - offsetDays);
+    const estStr = `${estDate.getMonth()+1}/${estDate.getDate()}/${estDate.getFullYear()}`;
+    rows.push({
+      client: c.fullName, carrier: c.newCompany, premium: c.newPremium,
+      effectiveDate: c.effectiveDate, estimatedApptDate: estStr, sheetRow: c.sheetRow,
+    });
+  });
+  return rows;
+}
+
 function openBackfillModal() {
   backfillPreviewData = computeWrittenDateBackfillPreview();
   renderBackfillModal();
@@ -1933,6 +2018,12 @@ function openBackfillModal() {
 }
 function closeBackfillModal() {
   document.getElementById('backfillOverlay').classList.remove('visible');
+}
+
+function updateApptEstimateOffset(val) {
+  const n = parseInt(val, 10);
+  apptEstimateOffsetDays = isNaN(n) ? 0 : n;
+  renderBackfillModal();
 }
 
 function renderBackfillModal() {
@@ -1945,6 +2036,15 @@ function renderBackfillModal() {
     <td style="padding:7px 8px;font-size:12px">${r.apptDate||'—'}</td>
     <td style="padding:7px 8px;font-size:12px">${r.effectiveDate}</td>
     <td style="padding:7px 8px;font-size:12px;font-weight:600;color:${warn?'var(--rust)':'var(--sage)'}">${warn ? r.warning : r.proposedWrittenDate}</td>
+  </tr>`;
+
+  const estimateRows = computeApptDateEstimatePreview(apptEstimateOffsetDays);
+  const estRowHtml = r => `<tr style="border-bottom:1px solid var(--cream)">
+    <td style="padding:7px 8px;font-size:12px">${r.client}</td>
+    <td style="padding:7px 8px;font-size:12px">${r.carrier}</td>
+    <td style="padding:7px 8px;font-size:12px">$${r.premium}/mo</td>
+    <td style="padding:7px 8px;font-size:12px">${r.effectiveDate}</td>
+    <td style="padding:7px 8px;font-size:12px;font-weight:600;color:var(--gold)">${r.estimatedApptDate}</td>
   </tr>`;
 
   let html = `<div style="padding:20px 22px">
@@ -1984,13 +2084,74 @@ function renderBackfillModal() {
       </table>
     </div>
 
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+    <div style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px">
+      <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px">🔧 ${estimateRows.length} missing Appt Date entirely — estimate from Effective Date</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        These have no real Appt Date on file at all. Rather than leave them stuck in review, this estimates one as
+        <b>Effective Date minus</b> the offset below, writes it into the Appt Date column, and adds a note flagging it as
+        system-estimated (not the real appointment date) so it's never confused with a verified one later.
+        Once written, these become eligible for the normal Written Date backfill above on your next preview.
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <label style="font-size:12px;color:var(--ink)">Offset (days before Effective Date):</label>
+        <input type="number" min="0" value="${apptEstimateOffsetDays}" onchange="updateApptEstimateOffset(this.value)" style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px">
+      </div>
+      <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--cream);position:sticky;top:0">
+            <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Client</th>
+            <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Carrier</th>
+            <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Premium</th>
+            <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Effective Date</th>
+            <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Estimated Appt Date</th>
+          </tr></thead>
+          <tbody>${estimateRows.length ? estimateRows.map(estRowHtml).join('') : `<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--muted);font-size:12px">None missing an Appt Date entirely</td></tr>`}</tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button id="apptEstimateApproveBtn" onclick="approveApptDateEstimates()" ${estimateRows.length?'':'disabled'} style="padding:11px 20px;background:${estimateRows.length?'var(--gold)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${estimateRows.length?'pointer':'not-allowed'}">✓ Approve & Write ${estimateRows.length} Estimated Appt Date${estimateRows.length===1?'':'s'}</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
       <button onclick="closeBackfillModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
       <button id="backfillApproveBtn" onclick="approveBackfill()" ${clean.length?'':'disabled'} style="padding:11px 20px;background:${clean.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${clean.length?'pointer':'not-allowed'}">✓ Approve & Write ${clean.length} Record${clean.length===1?'':'s'}</button>
     </div>
   </div>`;
 
   document.getElementById('backfillModal').innerHTML = html;
+}
+
+async function approveApptDateEstimates() {
+  const estimateRows = computeApptDateEstimatePreview(apptEstimateOffsetDays);
+  if (!estimateRows.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  const confirmed = confirm(`Write an ESTIMATED Appt Date (Effective Date − ${apptEstimateOffsetDays} days) for ${estimateRows.length} policies? These are placeholders, not real appointment dates — they'll be clearly noted as estimated.`);
+  if (!confirmed) return;
+
+  const btn = document.getElementById('apptEstimateApproveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
+
+  const noteText = `(Appt Date auto-estimated: Effective Date − ${apptEstimateOffsetDays} days — not a real appointment date)`;
+  const updates = [];
+  estimateRows.forEach(r => {
+    updates.push({ row: r.sheetRow, col: 41, value: r.estimatedApptDate }); // AO — Appt Date
+    updates.push({ row: r.sheetRow, col: 43, value: noteText });           // AQ — Appt Notes
+  });
+
+  try {
+    await writeCellsBatch(updates);
+    estimateRows.forEach(r => {
+      const c = allClients.find(x => x.sheetRow === r.sheetRow);
+      if (c) { c.apptDate = r.estimatedApptDate; c.apptNotes = noteText; }
+    });
+    toast(`✓ Estimated Appt Date written for ${estimateRows.length} polic${estimateRows.length===1?'y':'ies'}`);
+    backfillPreviewData = computeWrittenDateBackfillPreview(); // these now qualify for the Written Date step above
+    renderBackfillModal();
+  } catch (e) {
+    toast('Could not save — check connection');
+    if (btn) { btn.disabled = false; btn.textContent = `✓ Approve & Write ${estimateRows.length} Estimated Appt Dates`; }
+  }
 }
 
 async function approveBackfill() {
