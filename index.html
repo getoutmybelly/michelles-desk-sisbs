@@ -701,6 +701,10 @@
   <div class="briefing-modal" id="briefingModal"></div>
 </div>
 
+<div class="briefing-overlay" id="backfillOverlay" onclick="if(event.target===this)closeBackfillModal()">
+  <div class="briefing-modal" id="backfillModal" style="max-width:900px"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -764,7 +768,44 @@ const C = {
   BENEFICIARY: 51,
   PAYMENT:   52,
   NOTES:     53,
+  WRITTEN_DATE: 72, // BU — new col, added for written-sales reporting (next free col after followUpReason at 71)
+
+  // ── Standardized policy-status schema (BV–CD) ────────────────────────────
+  // Reserved now so the backfill work, the status UI, and the future browser-agent
+  // integration all write to the same stable columns.
+  STATUS:                73, // BV — 'pending_verification' | 'issued' | 'issued_paid_in_force' | 'adverse'
+  CARRIER_STATUS_TEXT:   74, // BW — exact, unmodified carrier status wording
+  CARRIER_REASON:        75, // BX — exact, unmodified carrier reason wording
+  VERIFICATION_SOURCE:   76, // BY — 'portal' | 'email' | 'manual'
+  LAST_CHECKED:          77, // BZ — timestamp of last status check
+  NEXT_CHECK:            78, // CA — date the next automated/manual check is due
+  CHECK_METHOD:          79, // CB — 'manual' | 'automated'
+  PORTAL_FAILURE_REASON: 80, // CC — e.g. 'MFA required', 'CAPTCHA', 'login expired', 'not found'
+  POLICY_NUMBER:         81, // CD — new policy's carrier-assigned policy number
 };
+
+// Standardized status model (color + carrier-side meanings it maps from).
+// The exact carrier status/reason text is always stored alongside this — never replaced by it.
+const POLICY_STATUS = {
+  PENDING_VERIFICATION: { key: 'pending_verification', label: 'Pending Verification', color: '#f9c6d9' /* pink */ },
+  ISSUED:               { key: 'issued',               label: 'Issued',               color: '#a8e6c1' /* mint */ },
+  ISSUED_PAID_IN_FORCE: { key: 'issued_paid_in_force',  label: 'Issued, Paid & In Force', color: '#4caf6b' /* green */ },
+  ADVERSE:              { key: 'adverse',               label: 'Adverse / Attention Needed', color: '#e05a5a' /* red */ },
+};
+
+// Carriers grouped by how their sale/payment status can actually be verified.
+// Per Michelle: Corebridge & Trinity email when premium is past due or a payment fails
+// (that email typically shows up within ~5 days of Pay Date if it's going to).
+// Polish Falcons & Trinity also email if the client contacts the carrier directly to cancel.
+// Every other carrier gives no email signal — she has to log into the carrier portal to check.
+const CARRIER_STATUS_SOURCE = {
+  paymentDeclineEmail: ['corebridge', 'trinity'],
+  clientCancelEmail:   ['polish falcons', 'trinity'],
+  portalOnly: ['gerber', 'illinois mutual', 'american general', 'foresters', 'transamerica',
+    'sons of norway', 'lifeshield', 'kskj', 'accendo', 'sbli', 'amam', 'pfa', 'seniorlife',
+    'american amicable', 'aetna'],
+};
+const PAYMENT_DECLINE_WINDOW_DAYS = 5; // Michelle's observed window for decline emails to surface
 
 const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
 
@@ -928,6 +969,16 @@ function parseRows(rows) {
       apptNotes:       cl(r[43]),
       effectiveDate:   fmtDate(r[44]),
       payDate:         cl(r[45]),
+      writtenDate:     fmtDate(r[C.WRITTEN_DATE]),
+      status:              cl(r[C.STATUS]) || (parseMoney(cl(r[40]))>0 && cl(r[38]) ? POLICY_STATUS.PENDING_VERIFICATION.key : ''),
+      carrierStatusText:   cl(r[C.CARRIER_STATUS_TEXT]),
+      carrierReason:       cl(r[C.CARRIER_REASON]),
+      verificationSource:  cl(r[C.VERIFICATION_SOURCE]),
+      lastChecked:         cl(r[C.LAST_CHECKED]),
+      nextCheck:           fmtDate(r[C.NEXT_CHECK]),
+      checkMethod:         cl(r[C.CHECK_METHOD]),
+      portalFailureReason: cl(r[C.PORTAL_FAILURE_REASON]),
+      newPolicyNumber:     cl(r[C.POLICY_NUMBER]),
       // New due/sent columns
       stopDueRaw:      cl(r[C.STOP_DUE]),
       stopDue:         fmtDate(r[C.STOP_DUE]),
@@ -1017,6 +1068,23 @@ async function markSent(type, btnId) {
     toast('✓ Marked sent in Google Sheets');
   } catch(err) {
     if (btn) { btn.classList.remove('loading'); btn.textContent = 'Try Again'; }
+    toast('Could not save — check connection');
+  }
+}
+
+async function markWrittenToday(btn) {
+  const c = selectedGroup[activeVisitIdx];
+  if (!accessToken) { toast('Sign in first'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+  try {
+    await writeCell(c.sheetRow, C.WRITTEN_DATE, today);
+    c.writtenDate = today;
+    toast('✓ Written Date saved — ' + today);
+    renderDetail();
+    if (document.getElementById('panel_numbers')) renderNumbersPanel();
+  } catch(err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Try Again'; }
     toast('Could not save — check connection');
   }
 }
@@ -1246,7 +1314,14 @@ function renderDetail() {
       ${c.newPremium?`<div class="cov-line">Premium: <b>${c.newPremium}/mo</b></div>`:''}
       ${c.apptDate?`<div class="cov-line">Appt: <b>${c.apptDate}${c.apptTime?' @ '+c.apptTime:''}</b></div>`:''}
       ${c.apptNotes?`<div class="cov-line" style="color:var(--muted);font-size:12px">${c.apptNotes}</div>`:''}
-      ${c.effectiveDate?`<div class="cov-line">Effective: ${c.effectiveDate}</div>`:''}</div>`;
+      ${c.effectiveDate?`<div class="cov-line">Effective: ${c.effectiveDate}</div>`:''}
+      ${c.writtenDate
+        ? `<div class="cov-line">Written: <b>${c.writtenDate}</b></div>`
+        : (c.newCompany && parseMoney(c.newPremium) > 0
+            ? `<div class="cov-line" style="color:var(--rust);font-weight:600">⚠️ No Written Date on file
+                 <button onclick="markWrittenToday(this)" style="margin-left:6px;padding:4px 10px;background:var(--rust);color:#fff;border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;cursor:pointer">Mark Written Today</button>
+               </div>`
+            : '')}</div>`;
     h += '</div>';
   }
 
@@ -1757,21 +1832,35 @@ const TRIP_PROGRAMS = [
 function computeProductionNumbers() {
   // A "sale" = a placed policy: New Company + a real premium figure.
   const sold = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
+
+  // Written-sales reporting uses ONLY the Written Date — no fallback to Lead/Effective/Pay Date.
+  // Those are different business events (lead intake, coverage start, carrier draft) and
+  // silently substituting them misattributes a sale to the wrong week/month.
   const withDate = sold.map(c => {
-    const dateStr = c.effectiveDate || c.payDate || c.leadDate || '';
-    const d = new Date(dateStr);
-    return { c, date: isNaN(d) ? null : d, annualized: parseMoney(c.newPremium) * 12 };
-  }).filter(x => x.date); // only count sales we can actually date
+    const d = c.writtenDate ? new Date(c.writtenDate) : null;
+    return { c, date: (d && !isNaN(d)) ? d : null, annualized: parseMoney(c.newPremium) * 12 };
+  }).filter(x => x.date);
+
+  // Placed policies that have no Written Date yet — these are invisible to every number
+  // below until Michelle (or the "Mark Written Today" button) logs one. Surface them
+  // rather than hide them.
+  const missingWrittenDate = sold.filter(c => !c.writtenDate);
 
   const now = new Date(); now.setHours(0,0,0,0);
-  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay()); // Sunday-start week
+  const dow = now.getDay(); // 0 = Sunday
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - dow);
+  const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6); weekEnd.setHours(23,59,59,999);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0); monthEnd.setHours(23,59,59,999);
   const yearStart = new Date(now.getFullYear(), 0, 1);
-  const inRange = (d, start, end) => d >= start && (!end || d <= end);
+  const yearEnd   = new Date(now.getFullYear(), 11, 31); yearEnd.setHours(23,59,59,999);
+  // Explicit lower AND upper bound — a Written Date next week or next year no longer
+  // leaks into this week's / this year's count.
+  const inRange = (d, start, end) => d >= start && d <= end;
 
-  const thisWeek  = withDate.filter(x => inRange(x.date, weekStart));
-  const thisMonth = withDate.filter(x => inRange(x.date, monthStart));
-  const thisYear  = withDate.filter(x => inRange(x.date, yearStart));
+  const thisWeek  = withDate.filter(x => inRange(x.date, weekStart, weekEnd));
+  const thisMonth = withDate.filter(x => inRange(x.date, monthStart, monthEnd));
+  const thisYear  = withDate.filter(x => inRange(x.date, yearStart, yearEnd));
   const sum = arr => arr.reduce((s,x) => s + x.annualized, 0);
   const avg = arr => arr.length ? sum(arr) / arr.length : 0;
 
@@ -1783,7 +1872,150 @@ function computeProductionNumbers() {
     byCompany[key].total += x.annualized;
   });
 
-  return { withDate, thisWeek, thisMonth, thisYear, byCompany, sum, avg };
+  return { withDate, thisWeek, thisMonth, thisYear, byCompany, sum, avg, missingWrittenDate };
+}
+
+// ── HISTORICAL WRITTEN DATE BACKFILL ─────────────────────────────────────────
+// Backfills Written Date from Appointment Date for OLD policies only (Effective Date
+// before the cutoff below), per Michelle's exact rules. Preview-only until approved —
+// nothing is written to the Sheet until approveBackfill() runs.
+const BACKFILL_CUTOFF = new Date(2026, 6, 20); // July 20, 2026 (month is 0-indexed)
+let backfillPreviewData = null; // cached so the approve step doesn't have to recompute
+
+function computeWrittenDateBackfillPreview() {
+  const clean = [], review = [];
+
+  allClients.forEach(c => {
+    // Base eligibility — must be a placed policy with no Written Date yet.
+    const isPlacedPolicy = !!(c.newCompany && parseMoney(c.newPremium) > 0);
+    if (!isPlacedPolicy || c.writtenDate) return; // never touch a row that already has one
+
+    const effDate = c.effectiveDate ? new Date(c.effectiveDate) : null;
+    const effValid = effDate && !isNaN(effDate);
+    if (!effValid || effDate >= BACKFILL_CUTOFF) return; // not part of this historical batch
+
+    const base = {
+      client: c.fullName, carrier: c.newCompany, premium: c.newPremium,
+      apptDate: c.apptDate || '', effectiveDate: c.effectiveDate, sheetRow: c.sheetRow,
+    };
+
+    const apptDate = c.apptDate ? new Date(c.apptDate) : null;
+    const apptValid = apptDate && !isNaN(apptDate);
+
+    // Duplicate policy row: same client, same carrier, same premium, different row.
+    const group = clientGroups[c.fullName.toLowerCase().replace(/\s+/g,' ').trim()] || [c];
+    const dupes = group.filter(g => g !== c && g.newCompany === c.newCompany && parseMoney(g.newPremium) === parseMoney(c.newPremium));
+    // Multiple distinct appointment dates on file for this client, across other candidate policy rows —
+    // flagged even though this row carries its own Appt Date, since the visit history itself is ambiguous.
+    const otherPolicyRows = group.filter(g => g !== c && g.newCompany && parseMoney(g.newPremium) > 0);
+    const distinctApptDates = new Set(group.map(g => g.apptDate).filter(Boolean));
+
+    if (!apptValid) {
+      review.push({ ...base, warning: 'Appointment Date missing on this row' });
+    } else if (apptDate > effDate) {
+      review.push({ ...base, warning: 'Appointment Date is after Effective Date' });
+    } else if (dupes.length) {
+      review.push({ ...base, warning: `Duplicate policy row detected (same carrier & premium appears ${dupes.length + 1}x for this client)` });
+    } else if (otherPolicyRows.length && distinctApptDates.size > 1) {
+      review.push({ ...base, warning: 'Multiple appointment dates on file for this client — confirm which visit this policy belongs to' });
+    } else {
+      clean.push({ ...base, proposedWrittenDate: c.apptDate });
+    }
+  });
+
+  return { clean, review, cutoff: BACKFILL_CUTOFF };
+}
+
+function openBackfillModal() {
+  backfillPreviewData = computeWrittenDateBackfillPreview();
+  renderBackfillModal();
+  document.getElementById('backfillOverlay').classList.add('visible');
+}
+function closeBackfillModal() {
+  document.getElementById('backfillOverlay').classList.remove('visible');
+}
+
+function renderBackfillModal() {
+  const { clean, review, cutoff } = backfillPreviewData;
+  const cutoffStr = cutoff.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const rowHtml = (r, warn) => `<tr style="border-bottom:1px solid var(--cream)">
+    <td style="padding:7px 8px;font-size:12px">${r.client}</td>
+    <td style="padding:7px 8px;font-size:12px">${r.carrier}</td>
+    <td style="padding:7px 8px;font-size:12px">$${r.premium}/mo</td>
+    <td style="padding:7px 8px;font-size:12px">${r.apptDate||'—'}</td>
+    <td style="padding:7px 8px;font-size:12px">${r.effectiveDate}</td>
+    <td style="padding:7px 8px;font-size:12px;font-weight:600;color:${warn?'var(--rust)':'var(--sage)'}">${warn ? r.warning : r.proposedWrittenDate}</td>
+  </tr>`;
+
+  let html = `<div style="padding:20px 22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">🗓️ Written Date Backfill Preview</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      Applies only to placed policies with an Effective Date before <b>${cutoffStr}</b> and no Written Date yet.
+      Proposed Written Date = that policy's own Appointment Date. Nothing has been written to the Sheet — review below, then approve.
+    </div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:6px">✅ ${clean.length} clean match${clean.length===1?'':'es'} — will be written on approval</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:18px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--cream);position:sticky;top:0">
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Client</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Carrier</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Premium</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Appt Date</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Effective Date</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Proposed Written Date</th>
+        </tr></thead>
+        <tbody>${clean.length ? clean.map(r=>rowHtml(r,false)).join('') : `<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted);font-size:12px">No clean matches found</td></tr>`}</tbody>
+      </table>
+    </div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--rust);margin-bottom:6px">⚠️ ${review.length} need${review.length===1?'s':''} manual review — will NOT be written</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:18px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--cream);position:sticky;top:0">
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Client</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Carrier</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Premium</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Appt Date</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Effective Date</th>
+          <th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">Warning</th>
+        </tr></thead>
+        <tbody>${review.length ? review.map(r=>rowHtml(r,true)).join('') : `<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--muted);font-size:12px">Nothing needs review</td></tr>`}</tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeBackfillModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+      <button id="backfillApproveBtn" onclick="approveBackfill()" ${clean.length?'':'disabled'} style="padding:11px 20px;background:${clean.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${clean.length?'pointer':'not-allowed'}">✓ Approve & Write ${clean.length} Record${clean.length===1?'':'s'}</button>
+    </div>
+  </div>`;
+
+  document.getElementById('backfillModal').innerHTML = html;
+}
+
+async function approveBackfill() {
+  if (!backfillPreviewData || !backfillPreviewData.clean.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  const confirmed = confirm(`Write Written Date for ${backfillPreviewData.clean.length} policies? This cannot be bulk-undone — double check the preview first.`);
+  if (!confirmed) return;
+
+  const btn = document.getElementById('backfillApproveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
+
+  let written = 0, failed = 0;
+  for (const r of backfillPreviewData.clean) {
+    try {
+      await writeCell(r.sheetRow, C.WRITTEN_DATE, r.proposedWrittenDate);
+      const c = allClients.find(x => x.sheetRow === r.sheetRow);
+      if (c) c.writtenDate = r.proposedWrittenDate;
+      written++;
+    } catch (e) { failed++; }
+  }
+
+  toast(`✓ Backfilled ${written} Written Date${written===1?'':'s'}${failed?` — ${failed} failed`:''}`);
+  closeBackfillModal();
+  backfillPreviewData = null;
+  if (document.getElementById('panel_numbers')) renderNumbersPanel();
 }
 
 function buildTripProgramHtml(program, withDate) {
@@ -1841,7 +2073,16 @@ function renderNumbersPanel() {
   const fmt$ = v => '$' + Math.round(v).toLocaleString('en-US');
 
   let html = `<div style="font-family:'DM Serif Display',serif;font-size:17px;margin-bottom:4px">📊 The Numbers</div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Based on placed policies (New Company + Premium) with a usable date (Effective Date, Pay Date, or Lead Date). Raw annualized premium — not yet netted for lapses or chargebacks.</div>`;
+  <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Written sales: placed policies (New Company + Premium) dated by <b>Written Date only</b> — Sunday through Saturday for the week, calendar month, Jan 1–today for the year. Raw annualized premium — not yet netted for lapses or chargebacks.</div>`;
+
+  if (n.missingWrittenDate.length) {
+    html += `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-weight:700;color:var(--rust);font-size:13px;margin-bottom:4px">⚠️ ${n.missingWrittenDate.length} placed ${n.missingWrittenDate.length===1?'policy has':'policies have'} no Written Date</div>
+      <div style="font-size:12px;color:var(--rust)">These aren't counted in any number below until a Written Date is logged — open the client and tap "Mark Written Today," or run the historical backfill below for older policies.</div>
+      <div style="margin-top:8px">${n.missingWrittenDate.slice(0,8).map(c => `<span onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')" style="display:inline-block;background:#fff;border:1px solid var(--rust);color:var(--rust);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;margin:0 6px 6px 0;cursor:pointer">${c.fullName}</span>`).join('')}${n.missingWrittenDate.length>8?`<span style="font-size:11px;color:var(--rust)">+${n.missingWrittenDate.length-8} more</span>`:''}</div>
+      <button onclick="openBackfillModal()" style="margin-top:10px;padding:9px 15px;background:var(--ink);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🗓️ Preview Historical Written Date Backfill</button>
+    </div>`;
+  }
 
   html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
     <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:12px;text-align:center">
@@ -1926,7 +2167,8 @@ async function loadCommissionEmailsInline() {
     'kskj','accendo','sbli','amam','pfa','seniorlife','american amicable','aetna'];
 
   const LAPSE_TERMS = ['lapse','lapsed','termination notice','policy terminated',
-    'cancellation notice','premium past due','policy lapse'];
+    'cancellation notice','premium past due','policy lapse','payment declined',
+    'insufficient funds','nsf','draft failed','in force alert'];
 
   // Build Gmail search queries
   const commQueries = CARRIERS.map(c => `from:${c.split(' ')[0]}`).join(' OR ');
@@ -1938,6 +2180,10 @@ async function loadCommissionEmailsInline() {
     // Lapse notices
     `subject:(lapse OR lapsed OR termination OR "past due" OR cancellation) insurance`,
     `(lapse OR lapsed) (policy OR insurance) in:inbox`,
+    // Payment decline / in-force alerts specifically from Corebridge & Trinity
+    `(from:*corebridge* OR from:*trinity*) (declined OR "insufficient funds" OR nsf OR "in force" OR "payment fail")`,
+    // Voluntary client-initiated cancellation notices from Polish Falcons & Trinity
+    `(from:*polishfalcons* OR from:*trinity*) (cancel OR cancellation OR "decided to cancel")`,
   ];
 
   try {
@@ -1964,9 +2210,93 @@ async function loadCommissionEmailsInline() {
 
     // Get details for commission emails
     const commDetails = await getEmailDetails(commMessages.slice(0,10));
-    const lapseDetails = await getEmailDetails(lapseMessages.slice(0,8));
+    const lapseDetails = await getEmailDetails(lapseMessages.slice(0,15));
+
+    // ── PAYMENT STATUS CLASSIFICATION ──────────────────────────────────────
+    // Not every carrier tells us the same way whether a policy is paid/in force.
+    // Corebridge & Trinity email on payment decline/past due (and their decline emails
+    // reliably show up within ~5 days of Pay Date if they're going to show up at all).
+    // Polish Falcons & Trinity also email if the client cancels directly with the carrier.
+    // Every other carrier gives no email signal at all — the portal is the only source of truth.
+    function carrierGroupFor(companyName) {
+      const name = (companyName || '').toLowerCase();
+      const inList = list => list.some(k => name.includes(k));
+      return {
+        declineEmail: inList(CARRIER_STATUS_SOURCE.paymentDeclineEmail),
+        cancelEmail:  inList(CARRIER_STATUS_SOURCE.clientCancelEmail),
+        hasEmailSignal: inList(CARRIER_STATUS_SOURCE.paymentDeclineEmail) || inList(CARRIER_STATUS_SOURCE.clientCancelEmail),
+      };
+    }
+    function clientPortalLink(c) {
+      const name = (c.newCompany || '').toLowerCase();
+      const found = Object.keys(CARRIER_PORTALS).find(k => name.includes(k));
+      const url = found ? CARRIER_PORTALS[found] : `https://www.google.com/search?q=${encodeURIComponent((c.newCompany||'carrier')+' agent portal login')}`;
+      const label = found ? `🏢 ${c.newCompany} Portal` : `🔎 Find ${c.newCompany||'carrier'} portal`;
+      return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--gold);font-weight:600;text-decoration:none;white-space:nowrap">${label}</a>`;
+    }
+
+    const soldClients = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
+    const confirmedIssues = [], likelyPaid = [], needsPortalCheck = [];
+
+    soldClients.forEach(c => {
+      const group = carrierGroupFor(c.newCompany);
+      const matchedEmail = group.hasEmailSignal ? lapseDetails.find(email => findClientFromEmail(email) === c) : null;
+
+      if (matchedEmail) { confirmedIssues.push({ c, email: matchedEmail }); return; }
+      if (!group.hasEmailSignal) { needsPortalCheck.push(c); return; } // carrier never emails status — portal is the only source
+
+      // Carrier does email declines/cancellations and none matched this client.
+      const payDateObj = c.payDate ? new Date(c.payDate) : null;
+      const daysSincePay = (payDateObj && !isNaN(payDateObj)) ? Math.floor((Date.now() - payDateObj) / 86400000) : null;
+      if (daysSincePay !== null && daysSincePay >= PAYMENT_DECLINE_WINDOW_DAYS) {
+        likelyPaid.push(c); // inferred, not confirmed — labeled as such below
+      } else {
+        needsPortalCheck.push(c); // still inside the decline-notice window, or no Pay Date yet
+      }
+    });
 
     let html = '';
+
+    if (confirmedIssues.length || needsPortalCheck.length || likelyPaid.length) {
+      html += `<div style="border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:2px">💳 Payment Status Check</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Based on which carriers actually email a status vs. which require a portal login. Sold policies only.</div>`;
+
+      if (confirmedIssues.length) {
+        html += `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:12px;color:var(--rust);margin-bottom:5px">⚠️ ${confirmedIssues.length} confirmed by email — declined, past due, or cancelled</div>`;
+        confirmedIssues.forEach(({c,email}) => {
+          const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+          html += `<div onclick="openGroup('${esc(key)}')" style="background:var(--rust-light);border-radius:8px;padding:8px 11px;margin-bottom:5px;cursor:pointer">
+            <div style="font-size:12px;font-weight:600">${c.fullName} · ${c.newCompany}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${email.subject} — ${formatEmailDate(email.date)}</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      if (needsPortalCheck.length) {
+        html += `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:12px;color:var(--gold);margin-bottom:5px">🔎 ${needsPortalCheck.length} need a portal check</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">No email signal exists for these yet (either the carrier never emails status, or it's still inside the decline-notice window).</div>`;
+        needsPortalCheck.slice(0,12).forEach(c => {
+          const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--cream);border-radius:8px;padding:7px 11px;margin-bottom:5px">
+            <span onclick="openGroup('${esc(key)}')" style="font-size:12px;cursor:pointer">${c.fullName} · ${c.newCompany}</span>
+            ${clientPortalLink(c)}
+          </div>`;
+        });
+        if (needsPortalCheck.length > 12) html += `<div style="font-size:11px;color:var(--muted)">+${needsPortalCheck.length-12} more</div>`;
+        html += `</div>`;
+      }
+
+      if (likelyPaid.length) {
+        html += `<div><div style="font-weight:600;font-size:12px;color:var(--sage);margin-bottom:5px">✅ ${likelyPaid.length} likely paid & in force <span style="font-weight:400;color:var(--muted)">(inferred — no decline email within ${PAYMENT_DECLINE_WINDOW_DAYS} days of Pay Date, not carrier-confirmed)</span></div>
+          <div>${likelyPaid.map(c => `<span onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')" style="display:inline-block;background:var(--green-light,#eaf5ec);color:var(--sage);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;margin:0 6px 6px 0;cursor:pointer">${c.fullName}</span>`).join('')}</div>
+        </div>`;
+      }
+
+      html += `</div>`;
+    }
+
 
     // LAPSE NOTICES — show first, most urgent
     if (lapseDetails.length) {
