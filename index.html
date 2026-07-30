@@ -705,6 +705,10 @@
   <div class="briefing-modal" id="backfillModal" style="max-width:900px"></div>
 </div>
 
+<div class="briefing-overlay" id="outcomeOverlay" onclick="if(event.target===this)closeOutcomeModal()">
+  <div class="briefing-modal" id="outcomeModal"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -783,6 +787,10 @@ const C = {
   PORTAL_FAILURE_REASON: 80, // CC — e.g. 'MFA required', 'CAPTCHA', 'login expired', 'not found'
   POLICY_NUMBER:         81, // CD — new policy's carrier-assigned policy number
   STATUS_LOG:            82, // CE — append-only history: every status change, newest first, never overwritten
+  CLIENT_STATUS:         0,  // A — lead-stage dropdown (Door Knock/Dial/APPT/Follow Up/Dead Lead/etc.)
+  APPT_DATE:             41, // AO
+  FOLLOWUP_DATE:         70, // BS
+  FOLLOWUP_REASON:       71, // BT
 };
 
 // Standardized status model (color + carrier-side meanings it maps from).
@@ -1071,6 +1079,11 @@ function parseRows(rows, dateOverrides) {
     // Follow-up visit pending
     const isRealDateFU = s => { if(!s) return false; const d=new Date(s); return !isNaN(d)&&d.getFullYear()>=2020; };
     c.followUpPending = isRealDateFU(c.followUpDate) && !c.followUpDone;
+    // An APPT client whose Appt Date has already passed means the presentation happened
+    // but nobody logged what came of it — that's backlog, not a real upcoming appointment.
+    const apptD = c.apptDate ? new Date(c.apptDate) : null;
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    c.apptNeedsOutcome = c.clientStatus === 'APPT' && apptD && !isNaN(apptD) && apptD < today0;
     clients.push(c);
     const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     if (!groups[key]) groups[key] = [];
@@ -1657,17 +1670,143 @@ const CARRIER_SURRENDER_INFO = {
     fullName: 'CMFG Life Insurance Company (TruStage)',
     footer: 'CMFG Life Insurance Company · PO Box 61, Waverly, IA 50677 · Phone: 800-779-5433 · Fax: 608-236-8030',
   },
-  'american memorial': {
+  'american mem': {
     fullName: 'American Memorial Life Insurance Company (TruStage)',
     footer: 'American Memorial Life Insurance Company / Union Security Insurance Company · PO Box 2730, Rapid City, SD 57709',
   },
 };
+
+// Small helpers for splitting values into a form's pre-printed blank segments (phone
+// area/prefix/line, SSN groups, MM/DD/YYYY) — several real carrier forms print the
+// parens/dashes/slashes already, so values need to land between them, not replace them.
+function splitDigits(str, groupSizes) {
+  const digits = (str || '').replace(/\D/g, '');
+  const out = []; let i = 0;
+  groupSizes.forEach(sz => { out.push(digits.slice(i, i + sz)); i += sz; });
+  return out;
+}
+function splitDateParts(str) {
+  const m = (str || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  return m ? { mm: m[1], dd: m[2], yyyy: m[3] } : { mm: '', dd: '', yyyy: '' };
+}
+
+// ── REAL CARRIER FORMS ────────────────────────────────────────────────────────
+// Fills the carrier's actual official PDF (fetched from /surrender-templates/ next to
+// index.html on GitHub Pages) instead of our own approximate re-creation. Only carriers
+// with an entry here get the real form; everyone else still falls through to the
+// generic jsPDF template below. 'fields' mode = genuine fillable AcroForm fields (most
+// reliable). 'coords' mode = flat PDF, text is drawn at fixed page coordinates —
+// verify the first generated copy against the real form before trusting it at scale.
+const CARRIER_REAL_FORMS = {
+  'american amicable': {
+    file: 'surrender-templates/amam-cancellation-2025.pdf',
+    mode: 'fields',
+    fields: c => ({
+      'Policy Number': c.existingPolicy || '',
+      'Insureds Name': c.fullName || '',
+      'Policy Owners Name': c.fullName || '',
+      'Policy Owner DOB': c.dob || '',
+      'Policy Owner Address': c.address || '',
+      'City': c.city || '',
+      'State': c.state || '',
+      'Zip': c.zip || '',
+      'SS': c.ssn || '',
+      'Phone No': c.phone || '',
+      'Email Address': c.email || '',
+      'Date': new Date().toLocaleDateString('en-US'),
+    }),
+  },
+  // CMFG Life Insurance Company (TruStage) — flat PDF, coordinates verified against the
+  // real form's own text positions. Phone/SSN/DOB are pre-printed with parens/dashes/
+  // slashes, so values are split into segments that land between them.
+  'trustage': {
+    file: 'surrender-templates/trustage-cmfg.pdf',
+    mode: 'coords',
+    coords: c => {
+      const phone = splitDigits(c.phone, [3,3,4]);
+      const ssn = splitDigits(c.ssn, [3,2,4]);
+      const dob = splitDateParts(c.dob);
+      return [
+        { x: 95,  y: 650.5, text: c.existingPolicy || '' },
+        { x: 360, y: 650.5, text: c.fullName || '' },
+        { x: 92,  y: 630.7, text: c.fullName || '' },
+        { x: 441, y: 630.7, text: phone[0], size: 9 },
+        { x: 458, y: 630.7, text: phone[1], size: 9 },
+        { x: 478, y: 630.7, text: phone[2], size: 9 },
+        { x: 100, y: 610.9, text: c.address || '' },
+        { x: 100, y: 598.7, text: c.city || '' },
+        { x: 310, y: 598.7, text: c.state || '' },
+        { x: 513, y: 598.7, text: c.zip || '' },
+        { x: 115, y: 566.3, text: dob.mm, size: 9 },
+        { x: 138, y: 566.3, text: dob.dd, size: 9 },
+        { x: 155, y: 566.3, text: dob.yyyy, size: 9 },
+        { x: 422, y: 566.3, text: ssn[0], size: 9 },
+        { x: 468, y: 566.3, text: ssn[1], size: 9 },
+        { x: 505, y: 566.3, text: ssn[2], size: 9 },
+      ];
+    },
+  },
+  'cmfg': null, // set to CARRIER_REAL_FORMS['trustage'] below — same form, same company
+  // American Memorial Life (TruStage) — this form is genuinely minimal: it only asks for
+  // the policy number. Everything else (name/address/etc.) isn't on the form at all.
+  'american mem': {
+    file: 'surrender-templates/american-memorial.pdf',
+    mode: 'coords',
+    coords: c => ([
+      { x: 280, y: 559.9, text: c.existingPolicy || '' },
+    ]),
+  },
+};
+CARRIER_REAL_FORMS['cmfg'] = CARRIER_REAL_FORMS['trustage'];
+
+async function genRealSurrenderForm(c, config) {
+  const { PDFDocument } = PDFLib;
+  const resp = await fetch(config.file);
+  if (!resp.ok) throw new Error(`Could not load template: ${config.file} (HTTP ${resp.status})`);
+  const bytes = await resp.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(bytes);
+
+  if (config.mode === 'fields') {
+    const form = pdfDoc.getForm();
+    const values = config.fields(c);
+    Object.entries(values).forEach(([name, value]) => {
+      if (!value) return;
+      try { form.getTextField(name).setText(String(value)); }
+      catch (e) { console.warn('Field not found or not a text field:', name, e.message); }
+    });
+    form.updateFieldAppearances();
+  } else if (config.mode === 'coords') {
+    const page = pdfDoc.getPages()[0];
+    const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    config.coords(c).forEach(({ x, y, text, size }) => {
+      if (!text) return;
+      page.drawText(String(text), { x, y, size: size || 10, font });
+    });
+  }
+
+  const outBytes = await pdfDoc.save();
+  const blob = new Blob([outBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Surrender_${(c.lastName||c.firstName).replace(/\s/g,'_')}_${todayStr()}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function genSurrender(){
   const c=selectedGroup[activeVisitIdx];
   // Surrender targets the client's CURRENT/existing coverage, not any new policy being written.
   const carrierName = c.existingCompany || c.newCompany || 'Carrier Not On File';
   const nameLower = carrierName.toLowerCase();
+
+  const realFormKey = Object.keys(CARRIER_REAL_FORMS).find(k => nameLower.includes(k));
+  if (realFormKey) {
+    genRealSurrenderForm(c, CARRIER_REAL_FORMS[realFormKey])
+      .then(() => toast('✓ Real carrier form ready'))
+      .catch(err => { console.error(err); toast('Could not fill real form — check surrender-templates/ is uploaded'); });
+    return;
+  }
 
   const infoKey = Object.keys(CARRIER_SURRENDER_INFO).find(k => nameLower.includes(k));
   const carrierInfo = infoKey ? CARRIER_SURRENDER_INFO[infoKey] : null;
@@ -1913,16 +2052,19 @@ function renderPipelinePanel() {
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
-  const appt      = allClients.filter(c=>c.clientStatus==='APPT');
+  const apptAll   = allClients.filter(c=>c.clientStatus==='APPT');
+  const needsOutcome = apptAll.filter(c=>c.apptNeedsOutcome);
+  const apptUpcoming = apptAll.filter(c=>!c.apptNeedsOutcome);
   const fuVisits  = allClients.filter(c=>c.followUpPending);
 
   const tabs = [
     {id:'pending',   label:'📋 Paperwork',        data:pending},
+    {id:'outcome',   label:'⚠️ Needs Outcome',    data:needsOutcome},
     {id:'fuvisit',   label:'🔄 Follow-Up Visits', data:fuVisits},
     {id:'doorknock', label:'🚪 Door Knock',        data:doorKnock},
     {id:'dial',      label:'📞 Dial',              data:dial},
     {id:'followup',  label:'📁 Follow Up',         data:followUp},
-    {id:'appt',      label:'📅 APPT',              data:appt},
+    {id:'appt',      label:'📅 APPT (upcoming)',   data:apptUpcoming},
   ];
 
   let tabHtml = `<div class="pipeline-tabs" style="margin-bottom:14px">` +
@@ -1945,15 +2087,31 @@ function renderPipelineInner(tab) {
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
-  const appt      = allClients.filter(c=>c.clientStatus==='APPT');
+  const apptAll   = allClients.filter(c=>c.clientStatus==='APPT');
+  const needsOutcome = apptAll.filter(c=>c.apptNeedsOutcome);
+  const apptUpcoming = apptAll.filter(c=>!c.apptNeedsOutcome);
   const fuVisits  = allClients.filter(c=>c.followUpPending);
-  const dataMap   = {pending,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt};
+  const dataMap   = {pending,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt:apptUpcoming,outcome:needsOutcome};
   const activeData = dataMap[tab] || [];
   const inner = document.getElementById('pipelineInner');
   if (!inner) return;
 
   if (!activeData.length) {
     inner.innerHTML = '<div class="no-results" style="text-align:center;padding:28px;color:var(--muted)">🎉 Nothing here!</div>';
+    return;
+  }
+
+  if (tab === 'outcome') {
+    inner.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These appointments already happened but nothing's been logged yet — that's why the old APPT count looked inflated. Work through these to clear the backlog.</div>
+    <div class="followup-grid">${activeData.slice(0,50).map(c=>{
+      const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+      return `<div class="followup-card">
+        <div class="followup-name">${c.fullName}</div>
+        <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+        <div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 Appt was ${c.apptDate}</div>
+        <button onclick="event.stopPropagation();openOutcomeModal('${esc(key)}',${c.sheetRow})" style="margin-top:8px;width:100%;padding:8px;background:var(--ink);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">📋 Log Outcome</button>
+      </div>`;
+    }).join('')}</div>`;
     return;
   }
 
@@ -1987,16 +2145,174 @@ function renderPipelineInner(tab) {
     return;
   }
 
-  inner.innerHTML = `<div class="followup-grid">${activeData.slice(0,24).map(c=>{
+  let sortedData = activeData;
+  if (tab === 'followup') {
+    const today0 = new Date(); today0.setHours(0,0,0,0);
+    sortedData = [...activeData].sort((a,b) => {
+      const da = a.followUpDate ? new Date(a.followUpDate) : null;
+      const db = b.followUpDate ? new Date(b.followUpDate) : null;
+      if (da && db) return da - db;
+      if (da) return -1; // dated ones first
+      if (db) return 1;
+      return 0;
+    });
+  }
+
+  inner.innerHTML = `<div class="followup-grid">${sortedData.slice(0,24).map(c=>{
     const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     const due=[c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
+    let touchLine = '';
+    if (tab === 'followup' && c.followUpDate) {
+      const touchD = new Date(c.followUpDate);
+      const overdue = !isNaN(touchD) && touchD < new Date().setHours(0,0,0,0);
+      touchLine = `<div style="font-size:11px;color:${overdue?'var(--rust)':'var(--gold)'};margin-top:5px;font-weight:600">
+        ${overdue?'⚠️ Overdue':'⏰ Next touch'}: ${c.followUpDate}${c.followUpReason?` — ${c.followUpReason}`:''}
+      </div>`;
+    }
     return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
       ${due?`<div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 ${due}</div>`:''}
+      ${touchLine}
       <div class="followup-tags">${buildPills(c)}</div>
     </div>`;
   }).join('')}</div>`;
+}
+
+// ── LOG OUTCOME ───────────────────────────────────────────────────────────────
+// Fixes the APPT-count-inflation problem: an appointment that already happened needs an
+// explicit outcome logged, not to just sit there forever labeled "APPT". Structured
+// reasons so the data actually totals up into something useful later.
+const OUTCOME_REASONS = [
+  'Needs to think about it',
+  'Spouse or family decision needed',
+  'Price or budget concern',
+  'Comparing other options',
+  'Already has adequate coverage',
+  'Health or eligibility issue',
+  'Bad timing',
+  'Other',
+];
+const OUTCOME_TOUCH_DEFAULT_DAYS = 30; // 1 month default next-touch date
+
+let outcomeModalSheetRow = null;
+
+function openOutcomeModal(key, sheetRow) {
+  outcomeModalSheetRow = sheetRow;
+  renderOutcomeModal();
+  document.getElementById('outcomeOverlay').classList.add('visible');
+}
+function closeOutcomeModal() {
+  document.getElementById('outcomeOverlay').classList.remove('visible');
+  outcomeModalSheetRow = null;
+}
+
+function renderOutcomeModal() {
+  const c = allClients.find(x => x.sheetRow === outcomeModalSheetRow);
+  if (!c) return;
+  const defaultTouch = new Date(); defaultTouch.setDate(defaultTouch.getDate() + OUTCOME_TOUCH_DEFAULT_DAYS);
+  const defaultTouchStr = `${defaultTouch.getFullYear()}-${String(defaultTouch.getMonth()+1).padStart(2,'0')}-${String(defaultTouch.getDate()).padStart(2,'0')}`;
+
+  const html = `<div style="padding:22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:2px">📋 Log Outcome — ${c.fullName}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Appointment was ${c.apptDate}. What happened?</div>
+
+    <select id="outcomeSelect" onchange="renderOutcomeDetail()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px">
+      <option value="">— Select outcome —</option>
+      <option value="sale">✅ Sale — policy placed</option>
+      <option value="considering">🤔 No sale — still considering</option>
+      <option value="dead">❌ Not interested</option>
+      <option value="rescheduled">🔄 Rescheduled — new appt date</option>
+    </select>
+
+    <div id="outcomeDetail"></div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button onclick="closeOutcomeModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+      <button id="outcomeSaveBtn" onclick="saveOutcome()" disabled style="padding:11px 20px;background:var(--muted);color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:not-allowed">Save</button>
+    </div>
+  </div>`;
+  document.getElementById('outcomeModal').innerHTML = html;
+  window._outcomeDefaultTouchStr = defaultTouchStr;
+}
+
+function renderOutcomeDetail() {
+  const outcome = document.getElementById('outcomeSelect').value;
+  const detail = document.getElementById('outcomeDetail');
+  const saveBtn = document.getElementById('outcomeSaveBtn');
+
+  if (!outcome) { detail.innerHTML = ''; saveBtn.disabled = true; saveBtn.style.background = 'var(--muted)'; saveBtn.style.cursor = 'not-allowed'; return; }
+  saveBtn.disabled = false; saveBtn.style.background = 'var(--sage)'; saveBtn.style.cursor = 'pointer';
+
+  if (outcome === 'considering') {
+    detail.innerHTML = `
+      <select id="outcomeReason" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px">
+        ${OUTCOME_REASONS.map(r => `<option value="${esc(r)}">${r}</option>`).join('')}
+      </select>
+      <div id="outcomeOtherWrap" style="display:none;margin-bottom:10px">
+        <input id="outcomeOtherText" placeholder="Describe the reason" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+      </div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Next touch date</label>
+      <input id="outcomeTouchDate" type="date" value="${window._outcomeDefaultTouchStr}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+    `;
+    document.getElementById('outcomeReason').addEventListener('change', function(){
+      document.getElementById('outcomeOtherWrap').style.display = this.value === 'Other' ? 'block' : 'none';
+    });
+  } else if (outcome === 'rescheduled') {
+    detail.innerHTML = `
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">New appointment date</label>
+      <input id="outcomeNewApptDate" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px">
+    `;
+  } else {
+    detail.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">${outcome==='sale' ? 'Clears this from the pipeline — the actual sale is already tracked via the placed-policy fields.' : 'Marks as a dead lead.'}</div>`;
+  }
+}
+
+async function saveOutcome() {
+  const c = allClients.find(x => x.sheetRow === outcomeModalSheetRow);
+  if (!c) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  const outcome = document.getElementById('outcomeSelect').value;
+  if (!outcome) return;
+
+  const btn = document.getElementById('outcomeSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    if (outcome === 'considering') {
+      const reasonSel = document.getElementById('outcomeReason').value;
+      const otherText = (document.getElementById('outcomeOtherText')||{}).value || '';
+      const reason = reasonSel === 'Other' && otherText ? otherText : reasonSel;
+      const touchDateRaw = document.getElementById('outcomeTouchDate').value;
+      const touchDate = touchDateRaw ? new Date(touchDateRaw+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}) : '';
+      await writeCellsBatch([
+        { row: c.sheetRow, col: C.CLIENT_STATUS, value: 'Follow Up' },
+        { row: c.sheetRow, col: C.FOLLOWUP_DATE, value: touchDate },
+        { row: c.sheetRow, col: C.FOLLOWUP_REASON, value: reason },
+      ]);
+      c.clientStatus = 'Follow Up'; c.followUpDate = touchDate; c.followUpReason = reason;
+      c.followUpPending = true; c.apptNeedsOutcome = false;
+    } else if (outcome === 'dead') {
+      await writeCell(c.sheetRow, C.CLIENT_STATUS, 'Dead Lead');
+      c.clientStatus = 'Dead Lead'; c.apptNeedsOutcome = false;
+    } else if (outcome === 'sale') {
+      await writeCell(c.sheetRow, C.CLIENT_STATUS, '');
+      c.clientStatus = ''; c.apptNeedsOutcome = false;
+    } else if (outcome === 'rescheduled') {
+      const newDateRaw = document.getElementById('outcomeNewApptDate').value;
+      if (!newDateRaw) { toast('Pick a new date first'); btn.disabled=false; btn.textContent='Save'; return; }
+      const newDate = new Date(newDateRaw+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+      await writeCell(c.sheetRow, C.APPT_DATE, newDate);
+      c.apptDate = newDate; c.apptNeedsOutcome = false;
+    }
+    toast('✓ Outcome logged');
+    closeOutcomeModal();
+    renderPipelinePanel();
+  } catch (err) {
+    console.error(err);
+    toast('Could not save — check connection');
+    btn.disabled = false; btn.textContent = 'Save';
+  }
 }
 
 function renderLeadsPanel() {
