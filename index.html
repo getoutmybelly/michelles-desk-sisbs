@@ -939,7 +939,12 @@ async function loadFromSheets() {
 // yields the true year. Applied to every date column that feeds Written Date logic.
 async function fetchUnformattedDateColumns() {
   if (!accessToken) return null;
-  const cols = { apptDate: 'AO', effectiveDate: 'AR', payDate: 'AS', writtenDate: 'BU' };
+  // Derived from the exact same numeric indices parseRows() uses (r[41], r[44], r[45], C.WRITTEN_DATE) —
+  // never hardcode letters here again. A prior version hardcoded AO/AR/AS from a stale inline
+  // comment, one column off from the real AP/AS/AT, which silently read Appt Date from the
+  // Premium column instead (hence the "1900" dates that matched premium amounts).
+  const DATE_COL_INDEX = { apptDate: 41, effectiveDate: 44, payDate: 45, writtenDate: C.WRITTEN_DATE };
+  const cols = Object.fromEntries(Object.entries(DATE_COL_INDEX).map(([k,idx]) => [k, colToLetter(idx)]));
   const keys = Object.keys(cols);
   const rangesQS = keys.map(k => `ranges=${encodeURIComponent(`${SHEET_TAB}!${cols[k]}1:${cols[k]}5000`)}`).join('&');
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${rangesQS}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
