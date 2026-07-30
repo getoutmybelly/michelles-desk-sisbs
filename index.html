@@ -3108,11 +3108,12 @@ async function approveCarrierReportExactMatches() {
 
   const btn = document.getElementById('carrierReportApproveBtn');
   btn.disabled = true; btn.textContent = 'Updating…';
-  let done = 0, failed = 0;
+  let done = 0, failed = 0, lastError = '';
   for (const { record, client } of exact) {
-    try { await writeCarrierReportRecord(client, record, carrierKey); done++; } catch (e) { failed++; }
+    try { await writeCarrierReportRecord(client, record, carrierKey); done++; }
+    catch (e) { failed++; lastError = e.message || String(e); console.error('Carrier report write failed for', client.fullName, e); }
   }
-  toast(`✓ Updated ${done} polic${done===1?'y':'ies'}${failed?` — ${failed} failed`:''}`);
+  toast(`✓ Updated ${done} polic${done===1?'y':'ies'}${failed?` — ${failed} failed: ${lastError}`:''}`);
   closeCarrierReportModal();
   if (document.getElementById('panel_numbers')) renderNumbersPanel();
 }
@@ -3128,7 +3129,8 @@ async function confirmCarrierReportNameMatch(index) {
     carrierReportPreviewData.match.nameOnly.splice(index, 1);
     renderCarrierReportModal();
   } catch (e) {
-    toast('Could not save — check connection');
+    console.error('Carrier report write failed for', m.client.fullName, e);
+    toast('Could not save — ' + (e.message || 'unknown error') );
   }
 }
 
