@@ -681,6 +681,7 @@
       <div class="dash-panel" id="panel_leads"></div>
       <div class="dash-panel" id="panel_commission"></div>
       <div class="dash-panel" id="panel_numbers"></div>
+      <div class="dash-panel" id="panel_notes"></div>
     </div>
     <!-- keep these for backwards compat -->
     <div id="apptSection" style="display:none"></div>
@@ -716,6 +717,17 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- Floating "Before I Forget..." button — always visible, one tap, one text field, saved on Enter -->
+<button id="quickNoteBtn" onclick="openQuickNote()" title="Before I forget..." aria-label="Quick note" style="position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:26px;background:var(--gold);color:#fff;border:none;box-shadow:0 4px 14px rgba(26,26,46,.25);font-size:22px;cursor:pointer;z-index:150;font-family:'DM Sans',sans-serif;">📝</button>
+
+<div class="briefing-overlay" id="quickNoteOverlay" onclick="if(event.target===this)closeQuickNote()">
+  <div class="briefing-modal" id="quickNoteModal" style="max-width:520px"></div>
+</div>
+
+<div class="briefing-overlay" id="noteDetailOverlay" onclick="if(event.target===this)closeNoteDetail()">
+  <div class="briefing-modal" id="noteDetailModal" style="max-width:600px"></div>
+</div>
+
 <script>
 const { jsPDF } = window.jspdf;
 
@@ -723,6 +735,7 @@ const { jsPDF } = window.jspdf;
 const SHEET_ID  = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
 const CLIENT_ID = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
 const SHEET_TAB = 'Clients';
+const NOTES_TAB = 'SessionNotes'; // new sheet tab for capture layer — see Session Notes below
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly';
 
 // Column indices (0-based)
@@ -927,6 +940,7 @@ async function loadFromSheets() {
     const data = await resp.json();
     const dateOverrides = await fetchUnformattedDateColumns().catch(() => null);
     parseRows(data.values || [], dateOverrides);
+    loadSessionNotes().catch(e => console.error('Notes load failed (non-fatal):', e));
     showLoading(false);
     document.getElementById('searchSection').classList.add('visible');
     document.getElementById('dashboardSection').classList.add('visible');
@@ -1933,6 +1947,7 @@ function renderDashboard(){
     { id:'leads',      label:'📬 Leads',             count: 0 },
     { id:'commission', label:'💰 Commission',        count: 0 },
     { id:'numbers',    label:'📊 Numbers',           count: 0 },
+    { id:'notes',      label:'📝 Notes',             count: sessionNotesCount() },
   ];
 
   document.getElementById('dashTabs').innerHTML = tabs.map(t =>
@@ -1968,6 +1983,7 @@ function renderDashPanel(tab) {
   else if (tab === 'leads') renderLeadsPanel();
   else if (tab === 'commission') renderCommissionPanel();
   else if (tab === 'numbers') renderNumbersPanel();
+  else if (tab === 'notes') renderNotesPanel();
 }
 
 function renderApptPanel() {
@@ -2828,6 +2844,348 @@ function renderNumbersPanel() {
   panel.innerHTML = html;
 }
 
+// ── SESSION NOTES ─────────────────────────────────────────────────────────────
+// Michelle records observations, likes, bugs, ideas during real work — the app
+// captures them itself instead of scattering them across texts and emails. Two paths:
+// (1) floating "📝" button, one-tap-one-field for mid-workflow capture; (2) dedicated
+// Notes tab with categories, priority, and a copy-to-clipboard report for Winston.
+// Stored on a separate `SessionNotes` sheet tab so notes and client data don't collide.
+const NOTE_CATEGORIES = [
+  { key: 'observation', label: 'Observation', emoji: '📌' },
+  { key: 'like',        label: 'Like',        emoji: '👍' },
+  { key: 'dislike',     label: 'Dislike',     emoji: '👎' },
+  { key: 'idea',        label: 'Idea',        emoji: '💡' },
+  { key: 'bug',         label: 'Bug',         emoji: '🐛' },
+  { key: 'wish',        label: 'Wish List',   emoji: '⭐' },
+];
+const NOTE_PRIORITIES = ['Low', 'Medium', 'High'];
+let sessionNotes = []; // {noteRow, timestamp, user, category, priority, title, details, status}
+let notesTabFilter = 'all';
+
+function sessionNotesCount() {
+  return sessionNotes.filter(n => n.status !== 'Resolved' && n.status !== 'Won\'t do').length;
+}
+
+function fmtNoteTs(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return ts || '';
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+}
+function noteEmoji(k) { return (NOTE_CATEGORIES.find(c => c.key === k) || {}).emoji || '📝'; }
+function noteLabel(k) { return (NOTE_CATEGORIES.find(c => c.key === k) || {}).label || k; }
+function currentUserForNote() {
+  // Notes tab is single-user in practice (Michelle). Left as a field so a future
+  // multi-user version can populate it; for now returns a stable identifier.
+  return 'Michelle';
+}
+
+async function loadSessionNotes() {
+  if (!accessToken) return;
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(NOTES_TAB)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!resp.ok) {
+      // Tab probably doesn't exist yet. Create it (with a header row) and treat the
+      // Notes list as empty. Doing this lazily so Michelle doesn't have to set anything up.
+      await ensureSessionNotesSheet();
+      sessionNotes = [];
+      return;
+    }
+    const data = await resp.json();
+    const rows = data.values || [];
+    // Row 1 = headers; data starts at row 2.
+    sessionNotes = rows.slice(1).map((r, i) => ({
+      noteRow: i + 2,
+      timestamp: r[0] || '',
+      user:      r[1] || '',
+      category:  r[2] || 'observation',
+      priority:  r[3] || 'Medium',
+      title:     r[4] || '',
+      details:   r[5] || '',
+      status:    r[6] || 'Open',
+    })).filter(n => n.title || n.details);
+  } catch (e) {
+    console.error('Could not load session notes:', e);
+    sessionNotes = [];
+  }
+}
+
+async function ensureSessionNotesSheet() {
+  // Creates the SessionNotes tab with a header row if it doesn't exist. Idempotent.
+  try {
+    const meta = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }).then(r => r.json());
+    const exists = (meta.sheets || []).some(s => s.properties && s.properties.title === NOTES_TAB);
+    if (!exists) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: NOTES_TAB } } }] }),
+      });
+    }
+    // Ensure header row exists.
+    const headers = ['Timestamp','User','Category','Priority','Title','Details','Status'];
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(NOTES_TAB)}!A1:G1?valueInputOption=USER_ENTERED`,
+      { method: 'PUT',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [headers] }) }
+    );
+  } catch (e) { console.error('Could not ensure SessionNotes sheet:', e); }
+}
+
+async function appendSessionNote({ category, priority, title, details }) {
+  if (!accessToken) { toast('Sign in first'); return null; }
+  await ensureSessionNotesSheet();
+  const now = new Date().toISOString();
+  const row = [now, currentUserForNote(), category || 'observation', priority || 'Medium', title || '', details || '', 'Open'];
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(NOTES_TAB)}!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] }) }
+  );
+  if (!resp.ok) throw new Error('Could not save note');
+  const result = await resp.json();
+  // Parse row number out of updatedRange, e.g. "SessionNotes!A5:G5" → 5
+  const m = (result.updates && result.updates.updatedRange || '').match(/!\w+(\d+):/);
+  const noteRow = m ? parseInt(m[1], 10) : null;
+  const note = { noteRow, timestamp: now, user: currentUserForNote(), category, priority, title, details, status: 'Open' };
+  sessionNotes.push(note);
+  return note;
+}
+
+async function updateSessionNoteStatus(noteRow, newStatus) {
+  if (!accessToken) { toast('Sign in first'); return; }
+  await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(NOTES_TAB)}!G${noteRow}?valueInputOption=USER_ENTERED`,
+    { method: 'PUT',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newStatus]] }) }
+  );
+  const n = sessionNotes.find(x => x.noteRow === noteRow);
+  if (n) n.status = newStatus;
+}
+
+// Quick-capture: floating button → one-field dialog → Enter saves and closes. Deliberately
+// no category/priority pickers here — that's what makes it fast enough to use mid-task.
+// Notes captured this way default to Observation/Medium/Open; edit in the Notes tab later.
+function openQuickNote() {
+  const html = `<div style="padding:20px 22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px">📝 Before I forget...</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Type it, press Enter, get back to work. Tag or edit later in the Notes tab.</div>
+    <input id="quickNoteInput" type="text" placeholder="What's on your mind?" style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:'DM Sans',sans-serif" onkeydown="if(event.key==='Enter'){saveQuickNote()}">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button onclick="closeQuickNote()" style="padding:10px 16px;background:var(--cream);color:var(--ink);border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+      <button onclick="saveQuickNote()" style="padding:10px 18px;background:var(--gold);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+    </div>
+  </div>`;
+  document.getElementById('quickNoteModal').innerHTML = html;
+  document.getElementById('quickNoteOverlay').classList.add('visible');
+  setTimeout(() => { const el = document.getElementById('quickNoteInput'); if (el) el.focus(); }, 40);
+}
+function closeQuickNote() {
+  document.getElementById('quickNoteOverlay').classList.remove('visible');
+}
+async function saveQuickNote() {
+  const input = document.getElementById('quickNoteInput');
+  const text = input && input.value.trim();
+  if (!text) { closeQuickNote(); return; }
+  const btn = event && event.target;
+  try {
+    await appendSessionNote({ category: 'observation', priority: 'Medium', title: text, details: '' });
+    closeQuickNote();
+    toast('✓ Note saved');
+    if (document.getElementById('panel_notes').classList.contains('active')) renderNotesPanel();
+    // Refresh the Notes tab badge count
+    const notesTabBtn = document.querySelector(`.dash-tab[onclick*="'notes'"]`);
+    if (notesTabBtn) {
+      const c = sessionNotesCount();
+      const existing = notesTabBtn.querySelector('.tab-badge');
+      if (c > 0) {
+        if (existing) existing.textContent = c;
+        else notesTabBtn.insertAdjacentHTML('beforeend', `<span class="tab-badge">${c}</span>`);
+      } else if (existing) existing.remove();
+    }
+  } catch (e) {
+    toast('Could not save — check connection');
+  }
+}
+
+function renderNotesPanel() {
+  const panel = document.getElementById('panel_notes');
+  const openNotes = sessionNotes.filter(n => n.status !== 'Resolved' && n.status !== 'Won\'t do');
+  const resolvedNotes = sessionNotes.filter(n => n.status === 'Resolved' || n.status === 'Won\'t do');
+
+  const filterButtons = [
+    { key: 'all', label: `All (${openNotes.length})` },
+    ...NOTE_CATEGORIES.map(c => ({
+      key: c.key,
+      label: `${c.emoji} ${c.label} (${openNotes.filter(n => n.category === c.key).length})`,
+    })),
+    { key: 'resolved', label: `✓ Resolved (${resolvedNotes.length})` },
+  ];
+
+  const visible = notesTabFilter === 'all' ? openNotes
+                : notesTabFilter === 'resolved' ? resolvedNotes
+                : openNotes.filter(n => n.category === notesTabFilter);
+  const sorted = [...visible].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="font-family:'DM Serif Display',serif;font-size:19px">📝 Session Notes</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="openFullNote()" style="padding:9px 15px;background:var(--gold);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">＋ New Note</button>
+        <button onclick="copyNotesReport()" style="padding:9px 15px;background:#fff;border:1.5px solid var(--ink);color:var(--ink);border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">📋 Copy Report</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      ${filterButtons.map(f => `<button onclick="notesTabFilter='${f.key}';renderNotesPanel()" style="padding:6px 12px;background:${notesTabFilter===f.key?'var(--ink)':'var(--cream)'};color:${notesTabFilter===f.key?'#fff':'var(--ink)'};border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;cursor:pointer">${f.label}</button>`).join('')}
+    </div>
+
+    ${sorted.length === 0
+      ? `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Nothing here yet. Tap the 📝 button anywhere in the app to capture a thought.</div>`
+      : sorted.map(n => `<div onclick="openNoteDetail(${n.noteRow})" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <div style="font-weight:600;font-size:13px">${noteEmoji(n.category)} ${n.title || '(no title)'}</div>
+            <div style="font-size:10px;color:var(--muted);white-space:nowrap">${fmtNoteTs(n.timestamp)}</div>
+          </div>
+          ${n.details ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${n.details}</div>` : ''}
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+            <span style="font-size:10px;background:var(--cream);padding:2px 8px;border-radius:10px;color:var(--muted)">${noteLabel(n.category)}</span>
+            <span style="font-size:10px;background:${n.priority==='High'?'var(--rust-light)':n.priority==='Low'?'var(--cream)':'var(--gold-light)'};color:${n.priority==='High'?'var(--rust)':'var(--ink)'};padding:2px 8px;border-radius:10px;font-weight:600">${n.priority}</span>
+            <span style="font-size:10px;background:${n.status==='Open'?'var(--sage-light)':'var(--cream)'};color:${n.status==='Open'?'var(--sage)':'var(--muted)'};padding:2px 8px;border-radius:10px;font-weight:600">${n.status}</span>
+          </div>
+        </div>`).join('')
+    }`;
+}
+
+// Full note editor — used for both new notes with all fields set explicitly, and for
+// editing an existing note's category/priority/details/status after quick-capture.
+let editingNoteRow = null;
+function openFullNote(noteRow) {
+  editingNoteRow = noteRow || null;
+  const existing = noteRow ? sessionNotes.find(n => n.noteRow === noteRow) : null;
+  const cur = existing || { category: 'observation', priority: 'Medium', title: '', details: '', status: 'Open' };
+
+  document.getElementById('noteDetailModal').innerHTML = `<div style="padding:22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:14px">${existing ? '📝 Edit Note' : '📝 New Note'}${existing && existing.timestamp ? `<span style="font-size:11px;color:var(--muted);font-family:'DM Sans',sans-serif;font-weight:400;margin-left:8px">${fmtNoteTs(existing.timestamp)}</span>` : ''}</div>
+
+    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Category</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px" id="noteCategoryPicker">
+      ${NOTE_CATEGORIES.map(c => `<button onclick="document.querySelectorAll('#noteCategoryPicker button').forEach(b=>b.dataset.active='false');this.dataset.active='true';this.style.background='var(--ink)';this.style.color='#fff';document.querySelectorAll('#noteCategoryPicker button').forEach(b=>{if(b!==this){b.style.background='var(--cream)';b.style.color='var(--ink)'}});window._noteCategory='${c.key}'" data-active="${cur.category===c.key}" style="padding:8px 12px;background:${cur.category===c.key?'var(--ink)':'var(--cream)'};color:${cur.category===c.key?'#fff':'var(--ink)'};border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">${c.emoji} ${c.label}</button>`).join('')}
+    </div>
+
+    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Priority</label>
+    <div style="display:flex;gap:6px;margin-bottom:12px" id="notePriorityPicker">
+      ${NOTE_PRIORITIES.map(p => `<button onclick="document.querySelectorAll('#notePriorityPicker button').forEach(b=>{b.style.background='var(--cream)';b.style.color='var(--ink)'});this.style.background='var(--ink)';this.style.color='#fff';window._notePriority='${p}'" style="padding:8px 14px;background:${cur.priority===p?'var(--ink)':'var(--cream)'};color:${cur.priority===p?'#fff':'var(--ink)'};border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;flex:1">${p}</button>`).join('')}
+    </div>
+
+    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Title</label>
+    <input id="noteTitleInput" type="text" value="${(cur.title||'').replace(/"/g,'&quot;')}" placeholder="Short summary" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px">
+
+    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Details (optional)</label>
+    <textarea id="noteDetailsInput" placeholder="Any extra context..." rows="4" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical">${cur.details||''}</textarea>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      ${existing ? `<button onclick="toggleNoteResolved(${existing.noteRow})" style="padding:10px 16px;background:${cur.status==='Open'?'var(--sage)':'var(--gold)'};color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;margin-right:auto">${cur.status==='Open'?'✓ Mark Resolved':'↺ Reopen'}</button>` : ''}
+      <button onclick="closeNoteDetail()" style="padding:10px 16px;background:var(--cream);color:var(--ink);border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>
+      <button onclick="saveFullNote()" style="padding:10px 18px;background:var(--gold);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Save</button>
+    </div>
+  </div>`;
+  window._noteCategory = cur.category;
+  window._notePriority = cur.priority;
+  document.getElementById('noteDetailOverlay').classList.add('visible');
+  setTimeout(() => { const el = document.getElementById('noteTitleInput'); if (el) el.focus(); }, 40);
+}
+function openNoteDetail(noteRow) { openFullNote(noteRow); }
+function closeNoteDetail() {
+  document.getElementById('noteDetailOverlay').classList.remove('visible');
+  editingNoteRow = null;
+}
+
+async function saveFullNote() {
+  const title = document.getElementById('noteTitleInput').value.trim();
+  const details = document.getElementById('noteDetailsInput').value.trim();
+  const category = window._noteCategory || 'observation';
+  const priority = window._notePriority || 'Medium';
+  if (!title && !details) { toast('Nothing to save'); return; }
+  try {
+    if (editingNoteRow) {
+      // Update existing note in place — writes all editable fields at once.
+      await writeCellsBatchOnSheet(NOTES_TAB, [
+        { row: editingNoteRow, col: 2, value: category }, // C
+        { row: editingNoteRow, col: 3, value: priority }, // D
+        { row: editingNoteRow, col: 4, value: title },    // E
+        { row: editingNoteRow, col: 5, value: details },  // F
+      ]);
+      const n = sessionNotes.find(x => x.noteRow === editingNoteRow);
+      if (n) { n.category = category; n.priority = priority; n.title = title; n.details = details; }
+    } else {
+      await appendSessionNote({ category, priority, title, details });
+    }
+    closeNoteDetail();
+    toast('✓ Note saved');
+    renderNotesPanel();
+  } catch (e) {
+    toast('Could not save — check connection');
+  }
+}
+
+async function toggleNoteResolved(noteRow) {
+  const n = sessionNotes.find(x => x.noteRow === noteRow);
+  if (!n) return;
+  const newStatus = n.status === 'Open' ? 'Resolved' : 'Open';
+  try {
+    await updateSessionNoteStatus(noteRow, newStatus);
+    toast(`✓ Marked ${newStatus}`);
+    closeNoteDetail();
+    renderNotesPanel();
+  } catch (e) { toast('Could not update — check connection'); }
+}
+
+// writeCellsBatch is Clients-tab specific; we need one that writes to an arbitrary tab.
+async function writeCellsBatchOnSheet(tabName, updates) {
+  if (!updates.length) return;
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`,
+    { method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: updates.map(u => ({ range: `${tabName}!${colToLetter(u.col)}${u.row}`, values: [[u.value]] })),
+      }),
+    }
+  );
+  if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e?.error?.message || `HTTP ${resp.status}`); }
+}
+
+function copyNotesReport() {
+  const open = sessionNotes.filter(n => n.status !== 'Resolved' && n.status !== 'Won\'t do');
+  if (!open.length) { toast('No open notes to report'); return; }
+  const by = {};
+  open.forEach(n => { (by[n.category] = by[n.category] || []).push(n); });
+
+  let text = `Michelle's Desk — Session Notes\n${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}\n${open.length} open note${open.length===1?'':'s'}\n\n`;
+  NOTE_CATEGORIES.forEach(cat => {
+    const notes = by[cat.key];
+    if (!notes || !notes.length) return;
+    text += `${cat.emoji} ${cat.label.toUpperCase()} (${notes.length})\n`;
+    notes.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(n => {
+      text += `  • [${n.priority}] ${n.title || '(no title)'} — ${fmtNoteTs(n.timestamp)}\n`;
+      if (n.details) text += `      ${n.details.replace(/\n/g,'\n      ')}\n`;
+    });
+    text += '\n';
+  });
+
+  navigator.clipboard.writeText(text.trim())
+    .then(() => toast(`✓ Copied ${open.length} note${open.length===1?'':'s'}`))
+    .catch(() => toast('Could not copy — select and copy manually'));
+}
+
 function copyTopReplacedCompanies() {
   const replacedCounts = {};
   allClients.forEach(c => {
@@ -2852,9 +3210,27 @@ function copyTopReplacedCompanies() {
 // the file input or the modal. No carrier credentials or login logic lives in this file —
 // that stays entirely with whatever fetches the report in the first place.
 
-const CARRIER_REPORT_CONFIGS = {
+// ── CARRIER ADAPTERS ──────────────────────────────────────────────────────────
+// Each adapter owns exactly two carrier-specific things: how to read that carrier's
+// raw export format, and how to translate that carrier's own status words into our
+// four-color standardized status. Everything else — matching report records to Desk
+// clients, and the persistency math — is carrier-agnostic and lives in shared functions
+// below, since those only ever need normalized records, never the carrier's raw format.
+// This is a slightly different split than "parseReport / mapStatus / calculatePersistency /
+// matchPolicy all inside the adapter" — matching and persistency don't change per carrier,
+// so keeping them shared avoids reimplementing (and re-testing) the same logic per carrier.
+const CARRIER_ADAPTERS = {
   lifeshield: {
     label: 'LifeShield',
+    sourceType: 'xlsx-report',
+    // Declared, checkable facts about what this connector can provide — Michelle's Desk
+    // asks these rather than assuming (e.g. "can I expect a premium field from this source?").
+    capabilities: {
+      supportsPagination: false,   // n/a — a full XLSX export, not a paged portal grid
+      supportsStatusDecode: true,
+      supportsPremium: true,
+      supportsPolicyDetail: false, // no per-policy drill-down beyond the report row
+    },
     // Multiple header spellings accepted — normalizeHeader() strips down to uppercase
     // letters/digits before matching, so "Policy Number", "POLICY_NUMBER", "Policy #" all resolve.
     headerAliases: {
@@ -2869,19 +3245,138 @@ const CARRIER_REPORT_CONFIGS = {
     },
     // Exact carrier wording is preserved separately (carrierStatusText) — this only sets
     // the four-color standardized status plus an internal subtype for the adverse cases.
-    statusMap: (rawStatus) => {
+    // NotTkn maps to adverse/not_taken specifically so it affects placement rate only,
+    // never post-issue persistency — see computeCarrierReportStats below.
+    mapStatus: (rawStatus) => {
       const s = (rawStatus || '').trim().toLowerCase();
       if (s === 'active') return { standardizedStatus: 'issued_paid_in_force', subtype: null };
       if (s === 'inactive') return { standardizedStatus: 'adverse', subtype: 'lapsed_or_inactive' };
       if (['nottkn','not tkn','not taken'].includes(s)) return { standardizedStatus: 'adverse', subtype: 'not_taken' };
       return { standardizedStatus: 'pending_verification', subtype: 'unrecognized_status' };
     },
-    // NotTkn affects placement rate only — it never counts as a post-issue lapse.
-    isIssued:   (rawStatus) => ['active','inactive'].includes((rawStatus||'').trim().toLowerCase()),
-    isActive:   (rawStatus) => (rawStatus||'').trim().toLowerCase() === 'active',
-    isNotTaken: (rawStatus) => ['nottkn','not tkn','not taken'].includes((rawStatus||'').trim().toLowerCase()),
+  },
+
+  // Not yet implemented — need a real Polish Falcons report/export sample before the
+  // header aliases and status vocabulary below can be filled in correctly. Guessing at
+  // carrier-specific mappings without a real sample risks silently mis-mapping statuses,
+  // which is worse than not having the adapter yet.
+  polishfalcons: {
+    label: 'Polish Falcons',
+    sourceType: 'xlsx-report',
+    capabilities: { supportsPagination: false, supportsStatusDecode: false, supportsPremium: false, supportsPolicyDetail: false },
+    headerAliases: null, // TODO once we have a real export sample
+    mapStatus: (rawStatus) => ({ standardizedStatus: 'pending_verification', subtype: 'adapter_not_implemented' }),
+  },
+
+  // Same as above — placeholder until a real KSKJ report sample is available.
+  kskj: {
+    label: 'KSKJ',
+    sourceType: 'xlsx-report',
+    capabilities: { supportsPagination: false, supportsStatusDecode: false, supportsPremium: false, supportsPolicyDetail: false },
+    headerAliases: null, // TODO once we have a real export sample
+    mapStatus: (rawStatus) => ({ standardizedStatus: 'pending_verification', subtype: 'adapter_not_implemented' }),
+  },
+
+  // PFA's Phase 1 browser agent is a separate, private project (never lives in this public
+  // file — see pfa-agent-phase1.zip) that logs into the portal and produces an envelope
+  // matching CONNECTOR_SCHEMA_VERSION below. This entry exists so Michelle's Desk can
+  // validate and later ingest that envelope through the same shared pipeline as LifeShield.
+  // Not wired into the upload UI yet — Phase 1 only proves acquisition, nothing consumes
+  // its output here yet.
+  //
+  // CAPABILITY FLAGS DESCRIBE CODE THAT EXISTS, NOT CODE THAT'S PLANNED. All four are false
+  // because the Phase 1 agent reads a single page and decodes nothing. Each flips only when
+  // its feature actually works — those flips ARE the Phase 2 exit criteria:
+  //   supportsPagination   → agent walks every page (try the portal's "Rows to show on Grid"
+  //                          input first; a large value may collapse pagination entirely)
+  //   supportsPolicyDetail → agent clicks into each policy's detail panel
+  //   supportsPremium      → premium retrieved from that detail panel (depends on the above,
+  //                          since premium is absent from the grid; do NOT substitute Balance)
+  //   supportsStatusDecode → A/B/C/N/R decoded. BLOCKED until Michelle confirms with PFA what
+  //                          each code means — guessing silently corrupts every persistency
+  //                          figure downstream, so this is an information task, not a coding one.
+  // Reconciliation is deliberately absent from that list: matchCarrierRecords is shared,
+  // carrier-agnostic Application-layer code already proven by LifeShield. Phase 2 should
+  // CONFIRM it works on PFA records unchanged — if it needs edits, something leaked layers.
+  pfa: {
+    label: 'PFA',
+    sourceType: 'browser-agent',
+    capabilities: { supportsPagination: false, supportsStatusDecode: false, supportsPremium: false, supportsPolicyDetail: false },
+    headerAliases: null, // n/a — browser agent emits already-normalized records, not a spreadsheet
+    mapStatus: (rawStatus) => ({ standardizedStatus: 'pending_verification', subtype: 'status_codes_not_yet_decoded' }),
   },
 };
+
+// ── CONNECTOR ENVELOPE CONTRACT ───────────────────────────────────────────────
+// Every connector (XLSX upload, future browser agent, future email parse, future API) hands
+// its records to Michelle's Desk wrapped in this envelope instead of a bare array — so the
+// Desk can validate completeness/staleness consistently no matter which kind of connector
+// produced the data, without needing to know that connector's internals.
+const CONNECTOR_SCHEMA_VERSION = '1.0';
+
+function makeRunId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback for older environments — not cryptographically strong, but a run id only
+  // needs to be unique enough to distinguish import runs in a log, not to be a security token.
+  return 'run-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+// Builds an envelope from a connector's raw records. `overrides` lets a specific connector
+// run report what it actually observed (e.g. pagesScraped) beyond the adapter's fixed capabilities.
+function buildConnectorEnvelope(carrierKey, records, overrides = {}) {
+  const adapter = CARRIER_ADAPTERS[carrierKey];
+  if (!adapter) throw new Error(`No adapter for carrier: ${carrierKey}`);
+
+  return {
+    schemaVersion: CONNECTOR_SCHEMA_VERSION,
+    runId: overrides.runId || makeRunId(),
+    meta: {
+      carrier: carrierKey,
+      carrierLabel: adapter.label,
+      sourceType: adapter.sourceType,
+      agentVersion: overrides.agentVersion || 'manual-xlsx-import-v1',
+      generatedAt: overrides.generatedAt || new Date().toISOString(),
+    },
+    capabilities: adapter.capabilities,
+    stats: {
+      recordCount: records.length,
+      pagesScraped: overrides.pagesScraped ?? null,
+      totalPagesAvailable: overrides.totalPagesAvailable ?? null,
+    },
+    warnings: overrides.warnings || [],
+    records,
+  };
+}
+
+// Validation every envelope goes through before its records are trusted, regardless of
+// which connector produced it. Returns { valid, errors, warnings } — errors block ingestion,
+// warnings surface to Michelle but don't block (e.g. "only read 1 of 10 pages").
+function validateConnectorEnvelope(envelope) {
+  const errors = [];
+  const warnings = [...(envelope?.warnings || [])];
+
+  if (!envelope) { errors.push({ code: 'missing_envelope', message: 'No envelope provided.' }); return { valid: false, errors, warnings }; }
+  if (envelope.schemaVersion !== CONNECTOR_SCHEMA_VERSION) errors.push({ code: 'schema_mismatch', message: `Expected schema v${CONNECTOR_SCHEMA_VERSION}, got ${envelope.schemaVersion}.` });
+  if (!envelope.runId) errors.push({ code: 'missing_run_id', message: 'Envelope has no runId.' });
+  if (!envelope.meta?.carrier) errors.push({ code: 'missing_carrier', message: 'Envelope has no meta.carrier.' });
+  if (!Array.isArray(envelope.records)) errors.push({ code: 'missing_records', message: 'Envelope.records is not an array.' });
+
+  if (Array.isArray(envelope.records) && envelope.stats?.recordCount !== envelope.records.length) {
+    errors.push({ code: 'record_count_mismatch', message: `stats.recordCount (${envelope.stats?.recordCount}) does not match records.length (${envelope.records.length}).` });
+  }
+
+  const { pagesScraped, totalPagesAvailable } = envelope.stats || {};
+  if (pagesScraped != null && totalPagesAvailable != null && pagesScraped < totalPagesAvailable) {
+    warnings.push({ code: 'incomplete_pagination', message: `Only ${pagesScraped} of ${totalPagesAvailable} pages were scraped — this run is a partial extract.` });
+  }
+
+  const ageMs = envelope.meta?.generatedAt ? Date.now() - new Date(envelope.meta.generatedAt).getTime() : null;
+  if (ageMs != null && ageMs > 1000*60*60*24*30) {
+    warnings.push({ code: 'stale_data', message: `This report is over 30 days old (generated ${envelope.meta.generatedAt}).` });
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
+}
 
 function normalizeHeader(h) {
   return String(h || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -2897,10 +3392,12 @@ function normalizeInsuredName(name) {
   return s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// Pure parse: workbook bytes in, plain array of normalized records out.
+// Pure parse: workbook bytes in, plain array of normalized records out. Carrier-specific
+// only in which header-alias map it consults — the parsing mechanics are shared.
 function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
-  const config = CARRIER_REPORT_CONFIGS[carrierKey];
-  if (!config) throw new Error(`No report config for carrier: ${carrierKey}`);
+  const adapter = CARRIER_ADAPTERS[carrierKey];
+  if (!adapter) throw new Error(`No adapter for carrier: ${carrierKey}`);
+  if (!adapter.headerAliases) throw new Error(`${adapter.label} adapter isn't implemented yet — no header mapping defined`);
 
   const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -2909,7 +3406,7 @@ function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
 
   const actualHeaders = Object.keys(rows[0]);
   const headerLookup = {};
-  Object.entries(config.headerAliases).forEach(([field, aliases]) => {
+  Object.entries(adapter.headerAliases).forEach(([field, aliases]) => {
     const found = actualHeaders.find(h => aliases.includes(normalizeHeader(h)));
     if (found) headerLookup[field] = found;
   });
@@ -2932,10 +3429,12 @@ function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
   })).filter(r => r.policyNumber || r.insuredName);
 }
 
+// ── SHARED APPLICATION LAYER (carrier-agnostic — operates on normalized records only) ──
+
 // Pure match: report records + Desk's client list in, categorized result out.
 // Policy number match first, exact normalized name second — never a partial/fuzzy match.
 function matchCarrierRecords(carrierKey, records, clients) {
-  const carrierLabel = CARRIER_REPORT_CONFIGS[carrierKey].label;
+  const carrierLabel = CARRIER_ADAPTERS[carrierKey].label;
   const isThisCarrier = c => (c.newCompany||'').toLowerCase().includes(carrierKey) || (c.existingCompany||'').toLowerCase().includes(carrierKey);
   const deskCarrierClients = clients.filter(isThisCarrier);
 
@@ -2961,13 +3460,17 @@ function matchCarrierRecords(carrierKey, records, clients) {
 }
 
 // Pure stats: straight off the carrier's own report, independent of match results.
+// Active/Issued/NotTaken are derived from each record's STANDARDIZED status (via the
+// adapter's mapStatus), not from carrier-specific raw-text checks — so this function
+// never needs to change no matter which carrier's records it's given.
 function computeCarrierReportStats(carrierKey, records) {
-  const config = CARRIER_REPORT_CONFIGS[carrierKey];
+  const adapter = CARRIER_ADAPTERS[carrierKey];
+  const mapped = records.map(r => ({ r, m: adapter.mapStatus(r.status) }));
   const total = records.length;
-  const active = records.filter(r => config.isActive(r.status));
-  const inactive = records.filter(r => !config.isActive(r.status) && config.isIssued(r.status));
-  const notTaken = records.filter(r => config.isNotTaken(r.status));
-  const issued = active.length + inactive.length;
+  const active = mapped.filter(x => x.m.standardizedStatus === 'issued_paid_in_force').map(x => x.r);
+  const inactive = mapped.filter(x => x.m.standardizedStatus === 'adverse' && x.m.subtype === 'lapsed_or_inactive').map(x => x.r);
+  const notTaken = mapped.filter(x => x.m.standardizedStatus === 'adverse' && x.m.subtype === 'not_taken').map(x => x.r);
+  const issued = active.length + inactive.length; // NotTaken affects placement rate only, never post-issue persistency
   const ap = arr => arr.reduce((s,r) => s + r.premium*12, 0);
   const activeAP = ap(active), inactiveAP = ap(inactive), notTakenAP = ap(notTaken);
 
@@ -2988,9 +3491,20 @@ async function handleCarrierReportFile(carrierKey, file) {
   try {
     const buf = await file.arrayBuffer();
     const records = parseCarrierReportWorkbook(carrierKey, buf);
-    const match = matchCarrierRecords(carrierKey, records, allClients);
-    const stats = computeCarrierReportStats(carrierKey, records);
-    carrierReportPreviewData = { carrierKey, records, match, stats };
+    const envelope = buildConnectorEnvelope(carrierKey, records, {
+      agentVersion: 'manual-xlsx-import-v1',
+      generatedAt: new Date().toISOString(),
+    });
+    const validation = validateConnectorEnvelope(envelope);
+    if (!validation.valid) {
+      console.error('Envelope validation failed:', validation.errors);
+      toast('Import rejected — ' + validation.errors.map(e => e.message).join(' '));
+      return;
+    }
+
+    const match = matchCarrierRecords(carrierKey, envelope.records, allClients);
+    const stats = computeCarrierReportStats(carrierKey, envelope.records);
+    carrierReportPreviewData = { carrierKey, envelope, match, stats, validationWarnings: validation.warnings };
     renderCarrierReportModal();
     document.getElementById('carrierReportOverlay').classList.add('visible');
   } catch (err) {
@@ -3006,14 +3520,21 @@ function closeCarrierReportModal() {
 }
 
 function renderCarrierReportModal() {
-  const { match, stats, carrierKey } = carrierReportPreviewData;
+  const { match, stats, carrierKey, envelope, validationWarnings } = carrierReportPreviewData;
   const fmt$ = v => '$' + Math.round(v).toLocaleString('en-US');
   const pct = n => (n*100).toFixed(1) + '%';
   const statCard = (label, value) => `<div style="background:var(--cream);border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${label}</div><div style="font-size:16px;font-weight:700">${value}</div></div>`;
+  const allWarnings = [...(envelope.warnings||[]), ...(validationWarnings||[])];
 
   let html = `<div style="padding:22px">
     <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">📥 ${match.carrierLabel} Carrier Report</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Run ${envelope.runId} · ${envelope.meta.sourceType} · generated ${new Date(envelope.meta.generatedAt).toLocaleString('en-US')}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Nothing has been written to the Sheet yet — review below, then approve.</div>
+
+    ${allWarnings.length ? `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:10px;padding:10px 14px;margin-bottom:16px">
+      <div style="font-weight:700;color:var(--rust);font-size:12px;margin-bottom:4px">⚠️ ${allWarnings.length} warning${allWarnings.length===1?'':'s'} on this import</div>
+      ${allWarnings.map(w => `<div style="font-size:12px;color:var(--rust)">• ${w.message}</div>`).join('')}
+    </div>` : ''}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
       ${statCard('Total Records', stats.total)}${statCard('Active', stats.activeCount)}${statCard('Inactive', stats.inactiveCount)}${statCard('Not Taken', stats.notTakenCount)}
@@ -3030,7 +3551,7 @@ function renderCarrierReportModal() {
       <table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cream)">
         <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Client</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Policy #</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Carrier Status</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">→ Standardized</th>
       </tr></thead><tbody>
-      ${match.exact.map(({record,client}) => { const mapped = CARRIER_REPORT_CONFIGS[carrierKey].statusMap(record.status); return `<tr style="border-bottom:1px solid var(--cream)">
+      ${match.exact.map(({record,client}) => { const mapped = CARRIER_ADAPTERS[carrierKey].mapStatus(record.status); return `<tr style="border-bottom:1px solid var(--cream)">
           <td style="padding:6px 8px;font-size:12px">${client.fullName}</td><td style="padding:6px 8px;font-size:12px">${record.policyNumber}</td><td style="padding:6px 8px;font-size:12px">${record.status}</td><td style="padding:6px 8px;font-size:12px">${statusBadge(mapped.standardizedStatus)}</td>
         </tr>`; }).join('') || `<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--muted);font-size:12px">None</td></tr>`}
       </tbody></table>
@@ -3068,8 +3589,8 @@ function renderCarrierReportModal() {
 }
 
 async function writeCarrierReportRecord(client, record, carrierKey) {
-  const config = CARRIER_REPORT_CONFIGS[carrierKey];
-  const mapped = config.statusMap(record.status);
+  const adapter = CARRIER_ADAPTERS[carrierKey];
+  const mapped = adapter.mapStatus(record.status);
   const now = new Date();
   const nowStr = now.toLocaleString('en-US', { month:'numeric', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
   const statusLabel = (Object.values(POLICY_STATUS).find(s => s.key === mapped.standardizedStatus) || {}).label || mapped.standardizedStatus;
