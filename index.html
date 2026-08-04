@@ -303,6 +303,12 @@
   .pipeline-tab:hover:not(.active){border-color:var(--sage);color:var(--sage);}
   .pipeline-tab .tab-count{background:rgba(0,0,0,.15);border-radius:20px;padding:1px 7px;font-size:10px;}
   .pipeline-tab.active .tab-count{background:rgba(255,255,255,.2);}
+  .pipeline-tab.ready-now{border-color:var(--rust);color:var(--rust);background:var(--rust-light);}
+  .pipeline-tab.ready-now.active{background:var(--rust);border-color:var(--rust);color:#fff;}
+  .pipeline-tab.ready-now.has-ready{animation:readyPulse 1.8s ease-in-out infinite;}
+  .carrier-approval-ready{margin-top:7px;padding:7px 9px;border-radius:8px;background:var(--rust-light);color:var(--rust);font-size:11px;font-weight:700;line-height:1.35;}
+  @keyframes readyPulse{0%,100%{box-shadow:0 0 0 0 rgba(184,90,58,0)}50%{box-shadow:0 0 0 5px rgba(184,90,58,.18)}}
+  @media (prefers-reduced-motion:reduce){.pipeline-tab.ready-now.has-ready{animation:none;}}
   .door-knock-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px;}
   .door-knock-card{background:#fff;border:1.5px solid var(--border);border-radius:11px;padding:13px;cursor:pointer;transition:all .15s;}
   .door-knock-card:hover{border-color:var(--sage);transform:translateY(-1px);box-shadow:var(--shadow);}
@@ -908,12 +914,40 @@ const CARRIER_STATUS_SOURCE = {
 };
 const PAYMENT_DECLINE_WINDOW_DAYS = 5; // Michelle's observed window for decline emails to surface
 
+// A carrier approval email is operational evidence: it means the replacement coverage is
+// approved/issued and the old bank draft can move into the Stop PAC workflow. Sender alone
+// is never enough. The message must also contain explicit approval/issue language and must
+// not contain pending-requirement, decline, cancellation, or missing-information language.
+const CARRIER_APPROVAL_EMAIL_RULES = [
+  {
+    carrier:'LifeShield',
+    companyAliases:['lifeshield','life shield'],
+    gmailQuery:'from:NoReplyUnderwriting@lifeshieldnational.com newer_than:365d',
+    senderMatches:from => /noreplyunderwriting@lifeshieldnational\.com\b/i.test(from),
+  },
+  {
+    carrier:'Illinois Mutual',
+    companyAliases:['illinois mutual'],
+    gmailQuery:'from:illinoismutual.com newer_than:365d',
+    senderMatches:from => /@(?:[a-z0-9.-]+\.)?illinoismutual\.com\b/i.test(from),
+  },
+  {
+    carrier:'Trinity',
+    companyAliases:['trinity'],
+    gmailQuery:'from:trinitylifeinsurance.com newer_than:365d',
+    senderMatches:from => /@(?:[a-z0-9.-]+\.)?trinitylifeinsurance\.com\b/i.test(from),
+  },
+];
+const CARRIER_APPROVAL_POSITIVE = /\b(approved|approval confirmed|application approval|issued|policy issued|placed in force|coverage effective|coverage is effective)\b/i;
+const CARRIER_APPROVAL_BLOCKING = /\b(not approved|unable to approve|cannot approve|declined|denied|pending|requirement(?:s)?|additional information|missing|incomplete|withdrawn|cancel(?:led|lation)?|lapse(?:d)?|terminated)\b/i;
+
 const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
 
 let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
 let commissionHistoryRows = [];
 let sheetLastLoadedAt = null;
+let carrierApprovalSignals = [];
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
 // ── REDIRECT-BASED OAUTH ─────────────────────────────────────────────────────
@@ -1035,6 +1069,12 @@ async function loadFromSheets() {
     renderDashboard();
     if (selectedGroup) renderDetail();
     toast(`✓ ${allClients.length} clients loaded`);
+    // Gmail is a second carrier-status source. Render the Sheet immediately, then fold
+    // any strict approval signals into the Ready Now queue without making Michelle wait.
+    scanCarrierApprovalEmails().then(() => {
+      renderDashboard();
+      if (selectedGroup) renderDetail();
+    }).catch(e => console.error('Carrier approval email scan failed (non-fatal):', e));
   } catch(err) {
     showLoading(false); showError(err.message); console.error(err);
   }
@@ -2002,6 +2042,120 @@ function genPhoneCancellationReference(c, carrierName, note) {
   toast('✓ Call reference sheet ready');
 }
 
+// ── CARRIER APPROVAL EMAILS → READY NOW ─────────────────────────────────────
+function decodeGmailBase64Url(data) {
+  if (!data) return '';
+  try {
+    const normalized = data.replace(/-/g,'+').replace(/_/g,'/');
+    const binary = atob(normalized);
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch { return ''; }
+}
+
+function gmailPayloadText(payload) {
+  if (!payload) return '';
+  let text = '';
+  if (/^text\/(plain|html)$/i.test(payload.mimeType || '') && payload.body?.data) {
+    text += ' ' + decodeGmailBase64Url(payload.body.data).replace(/<[^>]+>/g,' ');
+  }
+  (payload.parts || []).forEach(part => { text += ' ' + gmailPayloadText(part); });
+  return text.replace(/\s+/g,' ').trim();
+}
+
+function exactClientTextMatch(c, text) {
+  const first = normalizeInsuredName(c.firstName || '').split(' ')[0];
+  const lastParts = normalizeInsuredName(c.lastName || '').split(' ').filter(w => w.length > 1);
+  if (!first || !lastParts.length) return false;
+  const normalizedText = ` ${normalizeInsuredName(text)} `;
+  return normalizedText.includes(` ${first} `) && lastParts.every(w => normalizedText.includes(` ${w} `));
+}
+
+function findClientForCarrierApproval(email, rule) {
+  const text = `${email.subject || ''} ${email.snippet || ''} ${email.bodyText || ''}`;
+  const lower = text.toLowerCase();
+  const candidates = allClients.filter(c => {
+    const company = `${c.newCompany || ''} ${c.displayCompany || ''}`.toLowerCase();
+    if (!rule.companyAliases.some(alias => company.includes(alias))) return false;
+    const policyMatch = [c.newPolicyNumber,c.existingPolicy].some(p => p && lower.includes(String(p).toLowerCase()));
+    return policyMatch || exactClientTextMatch(c, text);
+  });
+  return candidates.sort((a,b) => {
+    const score = c => (!c.stopSent?100:0) + (c.stopPending?30:0) + (c.stopDue?20:0) + (c.newPolicyNumber?10:0) + (c.sheetRow||0)/100000;
+    return score(b)-score(a);
+  })[0] || null;
+}
+
+async function scanCarrierApprovalEmails() {
+  if (!accessToken || !allClients.length) return [];
+  const seen = new Set();
+  const signals = [];
+  for (const rule of CARRIER_APPROVAL_EMAIL_RULES) {
+    const searchResp = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(rule.gmailQuery)}&maxResults=50`,
+      {headers:{Authorization:`Bearer ${accessToken}`}}
+    );
+    if (!searchResp.ok) continue;
+    const searchData = await searchResp.json();
+    for (const msg of (searchData.messages || [])) {
+      if (seen.has(msg.id)) continue;
+      seen.add(msg.id);
+      const detailResp = await fetch(
+        `https://www.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        {headers:{Authorization:`Bearer ${accessToken}`}}
+      );
+      if (!detailResp.ok) continue;
+      const detail = await detailResp.json();
+      const headers = detail.payload?.headers || [];
+      const email = {
+        id:msg.id,
+        from:headers.find(h=>h.name.toLowerCase()==='from')?.value || '',
+        subject:headers.find(h=>h.name.toLowerCase()==='subject')?.value || '',
+        date:headers.find(h=>h.name.toLowerCase()==='date')?.value || '',
+        snippet:detail.snippet || '',
+        bodyText:gmailPayloadText(detail.payload),
+      };
+      if (!rule.senderMatches(email.from)) continue;
+      const approvalText = `${email.subject} ${email.snippet} ${email.bodyText}`;
+      if (!CARRIER_APPROVAL_POSITIVE.test(approvalText) || CARRIER_APPROVAL_BLOCKING.test(approvalText)) continue;
+      const client = findClientForCarrierApproval(email, rule);
+      if (!client) continue; // no fuzzy guesses: unrelated people never enter Michelle's queue
+      const signal = {carrier:rule.carrier,client,email};
+      signals.push(signal);
+      client.carrierApprovalEmail = signal;
+      client.carrierApprovalReady = !client.stopSent;
+      // Approval starts Stop PAC. If no due date exists, make it actionable today and
+      // persist that date to the Sheet. Existing scheduled dates are preserved.
+      if (!client.stopSent && !client.stopDue) {
+        const today = new Date().toLocaleDateString('en-US');
+        client.stopDue = today;
+        client.stopDueRaw = today;
+        client.stopPending = true;
+        client.hasPending = true;
+        try { await writeCell(client.sheetRow, C.STOP_DUE, today); }
+        catch (e) { console.error(`Could not persist email-triggered Stop PAC for ${client.fullName}:`, e); }
+      }
+    }
+  }
+  carrierApprovalSignals = signals;
+  return signals;
+}
+
+function actionDateIsReady(dateStr) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr); if (isNaN(d)) return false;
+  d.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  return d <= today;
+}
+
+function clientReadyNow(c) {
+  return !!c.carrierApprovalReady ||
+    (c.stopPending && actionDateIsReady(c.stopDue)) ||
+    (c.cxPending && actionDateIsReady(c.cxDue)) ||
+    (c.surrPending && actionDateIsReady(c.surrDue));
+}
+
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function renderDashboard(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -2014,6 +2168,7 @@ function renderDashboard(){
   }).sort((a,b)=>new Date(a.apptDate)-new Date(b.apptDate));
 
   const pending   = allClients.filter(c=>c.hasPending);
+  const readyNow  = allClients.filter(clientReadyNow);
   const stopCount = allClients.filter(c=>c.stopPending).length;
   const surrCount = allClients.filter(c=>c.surrPending).length;
   const fuVisits  = allClients.filter(c=>c.followUpPending);
@@ -2033,7 +2188,7 @@ function renderDashboard(){
   // Stats row
   document.getElementById('statsRow').innerHTML=`
     <div class="stat-box" style="border-color:var(--blue);cursor:pointer" onclick="switchDashTab('appts')"><div class="stat-number" style="color:var(--blue)">${upcoming.length}</div><div class="stat-label">This Week</div></div>
-    <div class="stat-box alert" style="cursor:pointer" onclick="switchDashTab('pipeline')"><div class="stat-number">${pending.length}</div><div class="stat-label">Pending Actions</div></div>
+    <div class="stat-box alert" style="cursor:pointer" onclick="activePipelineTab='ready';switchDashTab('pipeline')"><div class="stat-number">${readyNow.length}</div><div class="stat-label">Ready to Send Now</div></div>
     <div class="stat-box" style="cursor:pointer" onclick="switchDashTab('pipeline')"><div class="stat-number">${stopCount}</div><div class="stat-label">Stop PACs</div></div>
     <div class="stat-box" style="cursor:pointer" onclick="switchDashTab('pipeline')"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
@@ -2315,6 +2470,8 @@ function openRoute(batchIndex) {
 function renderPipelinePanel() {
   const panel = document.getElementById('panel_pipeline');
   const pending   = allClients.filter(c=>c.hasPending);
+  const ready     = allClients.filter(clientReadyNow);
+  const scheduled = pending.filter(c=>!clientReadyNow(c));
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
@@ -2324,7 +2481,8 @@ function renderPipelinePanel() {
   const fuVisits  = allClients.filter(c=>c.followUpPending);
 
   const tabs = [
-    {id:'pending',   label:'📋 Paperwork',        data:pending},
+    {id:'ready',     label:'⚡ Ready to Send Now', data:ready},
+    {id:'scheduled', label:'🗓️ Scheduled',         data:scheduled},
     {id:'outcome',   label:'⚠️ Needs Outcome',    data:needsOutcome},
     {id:'fuvisit',   label:'🔄 Follow-Up Visits', data:fuVisits},
     {id:'doorknock', label:'🚪 Door Knock',        data:doorKnock},
@@ -2334,14 +2492,14 @@ function renderPipelinePanel() {
   ];
 
   let tabHtml = `<div class="pipeline-tabs" style="margin-bottom:14px">` +
-    tabs.map(t => `<button class="pipeline-tab${activePipelineTab===t.id?' active':''}" onclick="switchPipeline('${t.id}')">${t.label}<span class="tab-count">${t.data.length}</span></button>`).join('') +
+    tabs.map(t => `<button class="pipeline-tab${activePipelineTab===t.id?' active':''}${t.id==='ready'?' ready-now':''}${t.id==='ready'&&t.data.length?' has-ready':''}" onclick="switchPipeline('${t.id}')">${t.label}<span class="tab-count">${t.data.length}</span></button>`).join('') +
     '</div><div id="pipelineInner"></div>';
 
   panel.innerHTML = tabHtml;
   renderPipelineInner(activePipelineTab);
 }
 
-let activePipelineTab = 'pending';
+let activePipelineTab = 'ready';
 
 function switchPipeline(tab) {
   activePipelineTab = tab;
@@ -2350,6 +2508,8 @@ function switchPipeline(tab) {
 
 function renderPipelineInner(tab) {
   const pending   = allClients.filter(c=>c.hasPending);
+  const ready     = allClients.filter(clientReadyNow);
+  const scheduled = pending.filter(c=>!clientReadyNow(c));
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
@@ -2357,7 +2517,7 @@ function renderPipelineInner(tab) {
   const needsOutcome = apptAll.filter(c=>c.apptNeedsOutcome);
   const apptUpcoming = apptAll.filter(c=>!c.apptNeedsOutcome);
   const fuVisits  = allClients.filter(c=>c.followUpPending);
-  const dataMap   = {pending,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt:apptUpcoming,outcome:needsOutcome};
+  const dataMap   = {ready,scheduled,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt:apptUpcoming,outcome:needsOutcome};
   const activeData = dataMap[tab] || [];
   const inner = document.getElementById('pipelineInner');
   if (!inner) return;
@@ -2424,7 +2584,12 @@ function renderPipelineInner(tab) {
     });
   }
 
-  inner.innerHTML = `<div class="followup-grid">${sortedData.slice(0,24).map(c=>{
+  const queueIntro = tab === 'ready'
+    ? `<div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:var(--rust-light);color:var(--rust);font-size:12px;font-weight:600">These forms are due now, or a trusted carrier approval email made the Stop PAC ready. Send them first.</div>`
+    : tab === 'scheduled'
+      ? `<div style="margin-bottom:12px;color:var(--muted);font-size:12px">Upcoming Stop PAC, cancellation, and surrender dates. These are scheduled—not ready to send yet.</div>`
+      : '';
+  inner.innerHTML = queueIntro + `<div class="followup-grid">${sortedData.slice(0,24).map(c=>{
     const key=c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
     const due=[c.stopDue&&`Stop PAC: ${c.stopDue}`,c.cxDue&&`CX: ${c.cxDue}`,c.surrDue&&`Surrender: ${c.surrDue}`].filter(Boolean).join(' · ');
     let touchLine = '';
@@ -2438,6 +2603,7 @@ function renderPipelineInner(tab) {
     return `<div class="followup-card" onclick="openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'});">
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
+      ${c.carrierApprovalReady?`<div class="carrier-approval-ready">✉️ ${htmlSafe(c.carrierApprovalEmail.carrier)} approved — Stop PAC ready now<br><span style="font-weight:500">${htmlSafe(c.carrierApprovalEmail.email.subject)} · ${htmlSafe(formatEmailDate(c.carrierApprovalEmail.email.date))}</span></div>`:''}
       ${due?`<div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 ${due}</div>`:''}
       ${touchLine}
       <div class="followup-tags">${buildPills(c)}</div>
