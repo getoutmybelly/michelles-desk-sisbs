@@ -2618,7 +2618,9 @@ function computeCarrierEvidenceNumbers() {
     if (!current || (c.sheetRow||0) > (current.sheetRow||0)) relationships.set(key,{...c,canonicalCarrier:carrier});
   });
   const rows = [...relationships.values()];
-  const stillInForceReasons = ['reduced_paid_up','grace_period_30_days','grace_period_60_days','grace_period_90_days_lapse_imminent'];
+  // Reduced paid-up remains an in-force policy. PFA grace codes 1/2/3 are also
+  // technically in force, but belong in Attention here so Michelle sees the lapse risk.
+  const stillInForceReasons = ['reduced_paid_up'];
   const inForce = rows.filter(c => ['issued','issued_paid_in_force'].includes(c.status) || stillInForceReasons.includes(c.carrierReason));
   const attention = rows.filter(c => c.status === 'adverse' && !stillInForceReasons.includes(c.carrierReason));
   const pending = rows.filter(c => !inForce.includes(c) && !attention.includes(c));
