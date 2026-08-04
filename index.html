@@ -3583,22 +3583,41 @@ function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
 
 // Pure match: report records + Desk's client list in, categorized result out.
 // Policy number match first, exact normalized name second — never a partial/fuzzy match.
-function matchCarrierRecords(carrierKey, records, clients) {
+function matchCarrierRecords(carrierKey, records, clients, options = {}) {
   const carrierLabel = CARRIER_ADAPTERS[carrierKey].label;
   const isThisCarrier = c => (c.newCompany||'').toLowerCase().includes(carrierKey) || (c.existingCompany||'').toLowerCase().includes(carrierKey);
   const deskCarrierClients = carrierKey === 'generic' ? clients : clients.filter(isThisCarrier);
+  const normPolicy = value => String(value || '').trim().toUpperCase().replace(/\s+/g,'');
+  const carrierHint = String(options.carrierHint || '').toLowerCase();
+  const hintWords = carrierHint.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !['detected','carrier','report'].includes(w));
+  const carrierScore = c => {
+    const company = `${c.newCompany||''} ${c.existingCompany||''}`.toLowerCase();
+    return hintWords.some(word => company.includes(word)) ? 1000 : 0;
+  };
+  const rowScore = c => carrierScore(c)
+    + (c.newCompany && parseMoney(c.newPremium) > 0 ? 300 : 0)
+    + (c.writtenDate ? 80 : 0)
+    + (c.effectiveDate ? 50 : 0)
+    + (c.newPolicyNumber ? 20 : 0)
+    + Math.min((c.sheetRow || 0) / 10000, .2);
 
   const exact = [], nameOnly = [], unmatchedPortal = [];
   const matchedSheetRows = new Set();
 
   records.forEach(rec => {
-    let match = deskCarrierClients.find(c =>
-      rec.policyNumber && ((c.newPolicyNumber && c.newPolicyNumber === rec.policyNumber) ||
-                            (c.existingPolicy && c.existingPolicy === rec.policyNumber)));
+    const reportPolicy = normPolicy(rec.policyNumber);
+    let match = deskCarrierClients.find(c => reportPolicy &&
+      (normPolicy(c.newPolicyNumber) === reportPolicy || normPolicy(c.existingPolicy) === reportPolicy));
     if (match) { exact.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
 
     const normRecName = normalizeInsuredName(rec.insuredName);
-    match = normRecName ? deskCarrierClients.find(c => normalizeInsuredName(c.fullName) === normRecName) : null;
+    // A person may have many appointment/lead rows. Use each Sheet row at most once per
+    // import and prefer the actual sold-policy row, rather than repeatedly writing every
+    // name-only approval into the first historical row for that person.
+    const candidates = normRecName ? deskCarrierClients
+      .filter(c => !matchedSheetRows.has(c.sheetRow) && normalizeInsuredName(c.fullName) === normRecName)
+      .sort((a,b) => rowScore(b)-rowScore(a)) : [];
+    match = candidates[0] || null;
     if (match) { nameOnly.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
 
     unmatchedPortal.push(rec);
@@ -3707,7 +3726,7 @@ function renderCarrierReportModal() {
       </tbody></table>
     </div>
 
-    <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:6px">🔎 ${match.nameOnly.length} name-only match${match.nameOnly.length===1?'':'es'} — confirm each individually</div>
+    <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:6px">🔎 ${match.nameOnly.length} exact-name match${match.nameOnly.length===1?'':'es'} — review here, then approve together below</div>
     <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px">
       <table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cream)">
         <th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Client</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Report Name</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Policy #</th><th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--muted)">Status</th><th></th>
@@ -3731,14 +3750,14 @@ function renderCarrierReportModal() {
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="closeCarrierReportModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Close</button>
-      <button id="carrierReportApproveBtn" onclick="approveCarrierReportExactMatches()" ${match.exact.length?'':'disabled'} style="padding:11px 20px;background:${match.exact.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${match.exact.length?'pointer':'not-allowed'}">✓ Approve & Update ${match.exact.length} Exact Match${match.exact.length===1?'':'es'}</button>
+      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length)?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length)?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length)?'pointer':'not-allowed'}">✓ Approve & Update ${match.exact.length+match.nameOnly.length} Reviewed Match${(match.exact.length+match.nameOnly.length)===1?'':'es'}</button>
     </div>
   </div>`;
 
   document.getElementById('carrierReportModal').innerHTML = html;
 }
 
-async function writeCarrierReportRecord(client, record, carrierKey) {
+function buildCarrierReportWritePlan(client, record, carrierKey) {
   const adapter = CARRIER_ADAPTERS[carrierKey];
   const mapped = adapter.mapStatus(record.status);
   const now = new Date();
@@ -3762,12 +3781,36 @@ async function writeCarrierReportRecord(client, record, carrierKey) {
   ];
   if (record.policyNumber && !client.newPolicyNumber) updates.push({ row: client.sheetRow, col: C.POLICY_NUMBER, value: record.policyNumber });
 
-  await writeCellsBatch(updates);
+  return {
+    updates,
+    applyLocal() {
+      client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
+      client.verificationSource = 'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import'; client.statusLog = newLog;
+      client.carrierIssueDate = record.issueDate; client.carrierPaidToDate = record.paidToDate; client.carrierProduct = record.product; client.carrierReportPremium = record.premium;
+      if (record.policyNumber && !client.newPolicyNumber) client.newPolicyNumber = record.policyNumber;
+    }
+  };
+}
 
-  client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
-  client.verificationSource = 'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import'; client.statusLog = newLog;
-  client.carrierIssueDate = record.issueDate; client.carrierPaidToDate = record.paidToDate; client.carrierProduct = record.product; client.carrierReportPremium = record.premium;
-  if (record.policyNumber && !client.newPolicyNumber) client.newPolicyNumber = record.policyNumber;
+async function writeCarrierReportRecord(client, record, carrierKey) {
+  const plan = buildCarrierReportWritePlan(client, record, carrierKey);
+  await writeCellsBatch(plan.updates);
+  plan.applyLocal();
+}
+
+async function writeCarrierReportMatches(matches, carrierKey, onProgress) {
+  let done = 0;
+  // One Sheets request per 40 policies avoids both the old one-request-per-person rate
+  // limit and an oversized single request for a full carrier book.
+  for (let start=0;start<matches.length;start+=40) {
+    const chunk = matches.slice(start,start+40);
+    const plans = chunk.map(({client,record}) => buildCarrierReportWritePlan(client,record,carrierKey));
+    await writeCellsBatch(plans.flatMap(plan => plan.updates));
+    plans.forEach(plan => plan.applyLocal());
+    done += chunk.length;
+    if (onProgress) onProgress(done,matches.length);
+  }
+  return done;
 }
 
 async function approveCarrierReportExactMatches() {
@@ -3779,14 +3822,39 @@ async function approveCarrierReportExactMatches() {
 
   const btn = document.getElementById('carrierReportApproveBtn');
   btn.disabled = true; btn.textContent = 'Updating…';
-  let done = 0, failed = 0, lastError = '';
-  for (const { record, client } of exact) {
-    try { await writeCarrierReportRecord(client, record, carrierKey); done++; }
-    catch (e) { failed++; lastError = e.message || String(e); console.error('Carrier report write failed for', client.fullName, e); }
+  try {
+    const done = await writeCarrierReportMatches(exact,carrierKey,(n,total)=>btn.textContent=`Updating… ${n}/${total}`);
+    toast(`✓ Updated ${done} polic${done===1?'y':'ies'}`);
+    closeCarrierReportModal();
+    await loadFromSheets();
+  } catch (e) {
+    console.error('Carrier report bulk write failed',e);
+    btn.disabled=false; btn.textContent='Try Again';
+    toast('Could not finish the Sheet update — ' + (e.message||'unknown error'));
   }
-  toast(`✓ Updated ${done} polic${done===1?'y':'ies'}${failed?` — ${failed} failed: ${lastError}`:''}`);
-  closeCarrierReportModal();
-  if (document.getElementById('panel_numbers')) renderNumbersPanel();
+}
+
+async function approveCarrierReportAllMatches() {
+  const { exact, nameOnly, carrierLabel } = carrierReportPreviewData.match;
+  const matches = [...exact,...nameOnly];
+  const carrierKey = carrierReportPreviewData.carrierKey;
+  if (!matches.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  if (!confirm(`Update ${matches.length} reviewed ${carrierLabel} matches?\n\nThis includes ${exact.length} policy-number matches and ${nameOnly.length} exact-name matches.`)) return;
+  const btn = document.getElementById('carrierReportApproveBtn');
+  btn.disabled=true; btn.textContent=`Updating… 0/${matches.length}`;
+  try {
+    const done = await writeCarrierReportMatches(matches,carrierKey,(n,total)=>btn.textContent=`Updating… ${n}/${total}`);
+    carrierReportPreviewData.match.exact=[];
+    carrierReportPreviewData.match.nameOnly=[];
+    toast(`✓ Updated ${done} reviewed match${done===1?'':'es'}`);
+    closeCarrierReportModal();
+    await loadFromSheets();
+  } catch (e) {
+    console.error('Carrier report bulk write failed',e);
+    btn.disabled=false; btn.textContent='Try Again';
+    toast('Could not finish the Sheet update — ' + (e.message||'unknown error'));
+  }
 }
 
 async function confirmCarrierReportNameMatch(index) {
@@ -3799,6 +3867,7 @@ async function confirmCarrierReportNameMatch(index) {
     toast('✓ Confirmed and updated');
     carrierReportPreviewData.match.nameOnly.splice(index, 1);
     renderCarrierReportModal();
+    renderDashboard();
   } catch (e) {
     console.error('Carrier report write failed for', m.client.fullName, e);
     toast('Could not save — ' + (e.message || 'unknown error') );
@@ -3916,7 +3985,27 @@ async function loadCommissionEmailsInline() {
       return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="font-size:11px;color:var(--gold);font-weight:600;text-decoration:none;white-space:nowrap">${label}</a>`;
     }
 
-    const soldClients = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
+    const soldRows = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
+    // The Clients sheet contains many repeat appointment/sales rows for the same person.
+    // Carrier-connection progress is one logical client+carrier relationship, not one chore
+    // per historical row. If any sibling row has a carrier-confirmed status, use that latest
+    // verified row as the representative so duplicate rows do not reappear as fake backlog.
+    const logicalSales = new Map();
+    soldRows.forEach(c => {
+      const carrier = (c.newCompany||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+      const key = `${normalizeInsuredName(c.fullName)}|${carrier}`;
+      if (!logicalSales.has(key)) logicalSales.set(key,[]);
+      logicalSales.get(key).push(c);
+    });
+    const soldClients = [...logicalSales.values()].map(rows => {
+      const verified = rows.filter(c => c.lastChecked && c.status && c.status !== POLICY_STATUS.PENDING_VERIFICATION.key)
+        .sort((a,b) => (new Date(b.lastChecked).getTime()||0)-(new Date(a.lastChecked).getTime()||0));
+      if (verified.length) return verified[0];
+      return rows.slice().sort((a,b) =>
+        ((b.newPolicyNumber?100:0)+(b.writtenDate?20:0)+(b.effectiveDate?10:0)+(b.sheetRow||0)/10000)
+        - ((a.newPolicyNumber?100:0)+(a.writtenDate?20:0)+(a.effectiveDate?10:0)+(a.sheetRow||0)/10000)
+      )[0];
+    });
     const confirmedIssues = [];
     soldClients.forEach(c => {
       const group = carrierGroupFor(c.newCompany);
@@ -3926,10 +4015,13 @@ async function loadCommissionEmailsInline() {
 
     // Carrier reports and agents write into the Sheet's standardized status columns.
     // Missing automation is a system setup item—not hundreds of individual chores for Michelle.
-    const carrierVerified = soldClients.filter(c => !!c.lastChecked && c.status && c.status !== POLICY_STATUS.PENDING_VERIFICATION.key);
-    const carrierAttention = carrierVerified.filter(c => c.status === POLICY_STATUS.ADVERSE.key);
+    // A carrier row with an unfamiliar code (R/L/X/*/1/etc.) is still a received result.
+    // It belongs in attention/code review, not back in "connection awaiting results."
+    const carrierVerified = soldClients.filter(c => !!c.lastChecked && !!c.status);
+    const carrierAttention = carrierVerified.filter(c =>
+      c.status === POLICY_STATUS.ADVERSE.key || c.status === POLICY_STATUS.PENDING_VERIFICATION.key);
     const carrierGood = carrierVerified.filter(c => c.status === POLICY_STATUS.ISSUED.key || c.status === POLICY_STATUS.ISSUED_PAID_IN_FORCE.key);
-    const awaitingCarrier = soldClients.filter(c => !c.lastChecked || !c.status || c.status === POLICY_STATUS.PENDING_VERIFICATION.key);
+    const awaitingCarrier = soldClients.filter(c => !c.lastChecked || !c.status);
     const awaitingByCarrier = {};
     awaitingCarrier.forEach(c => {
       const carrier = c.newCompany || 'Unknown carrier';
@@ -3939,7 +4031,7 @@ async function loadCommissionEmailsInline() {
     const carrierSetupLabel = carrier => {
       const n = carrier.toLowerCase();
       if (n.includes('lifeshield')) return 'Carrier report connected';
-      if (n.includes('polish falcon') || /(^|\s)pfa(\s|$)/.test(n)) return 'Agent collected · Sheet bridge pending';
+      if (n.includes('polish falcon') || /(^|\s)pfa(\s|$)/.test(n)) return 'Carrier report connected · unmatched records remain';
       return 'Automation not connected';
     };
 
@@ -3954,7 +4046,7 @@ async function loadCommissionEmailsInline() {
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">
           <div style="background:var(--green-light);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--green)">${carrierGood.length}</div><div style="font-size:10px;color:var(--muted)">Confirmed good</div></div>
-          <div style="background:var(--rust-light);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--rust)">${carrierAttention.length}</div><div style="font-size:10px;color:var(--muted)">Need attention</div></div>
+          <div style="background:var(--rust-light);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--rust)">${carrierAttention.length}</div><div style="font-size:10px;color:var(--muted)">Attention / code review</div></div>
           <div style="background:var(--cream);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--gold)">${Object.keys(awaitingByCarrier).length}</div><div style="font-size:10px;color:var(--muted)">Carrier connections left</div></div>
         </div>`;
 
@@ -5632,7 +5724,7 @@ function smartReviewFile(index) {
   if (item.type === 'policy') {
     const envelope = buildConnectorEnvelope('generic', item.records, { agentVersion:'smart-file-intake-v1', generatedAt:new Date().toISOString() });
     const validation = validateConnectorEnvelope(envelope);
-    const match = matchCarrierRecords('generic', envelope.records, allClients);
+    const match = matchCarrierRecords('generic', envelope.records, allClients, { carrierHint:item.carrier });
     // A detected generic report may be a lapse list or partial carrier export. Without a
     // confirmed carrier scope, claiming every other Desk policy is "missing" would create
     // another false homework list, so only report rows and actual matches are reviewed.
