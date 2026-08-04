@@ -5907,6 +5907,112 @@ function smartIsQlCommissionWorkbook(workbook, fileName) {
   return /QLCSAGXX/i.test(fileName || '') || ['Summary','Advance Paydown','Advance'].every(name => smartWorkbookSheetName(workbook,name));
 }
 
+// KSKJ's saved export has no header row. It is an 11-column historical commission
+// transaction ledger, and its "Table 3" tab is the exact union of Sheet1 + Sheet2.
+// Detection therefore relies on the stable row shape and value patterns observed in
+// the carrier export instead of guessing that the first customer row contains headers.
+function smartKskjSheetRows(workbook) {
+  const sheets = workbook.SheetNames.map(sheetName => ({
+    sheetName,
+    rows:XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {header:1,defval:'',raw:false})
+      .filter(row => row.some(value => String(value ?? '').trim() !== '')),
+  }));
+  const score = rows => {
+    if (rows.length < 20) return 0;
+    const sample = rows.slice(0,Math.min(rows.length,350));
+    const eleven = sample.filter(row => row.length >= 11).length;
+    const policies = sample.filter(row => /^(?:KJ\d{6,}|\d{7,})$/i.test(String(row[1]||'').trim())).length;
+    const names = sample.filter(row => normalizeCarrierMatchName(row[2]).split(' ').length >= 2).length;
+    const rates = sample.filter(row => [0,5,100].includes(parseMoney(row[9]))).length;
+    const amounts = sample.filter(row => Number.isFinite(Number(String(row[10]).replace(/[$,]/g,'')))).length;
+    const agentCounts = new Map();
+    sample.forEach(row => { const key=String(row[0]||'').trim(); if(key)agentCounts.set(key,(agentCounts.get(key)||0)+1); });
+    const sameAgent = Math.max(0,...agentCounts.values());
+    return Math.min(eleven,policies,names,rates,amounts,sameAgent) / sample.length;
+  };
+  return sheets.map(sheet => ({...sheet,score:score(sheet.rows)})).sort((a,b)=>b.score-a.score || b.rows.length-a.rows.length);
+}
+
+function smartIsKskjHeaderlessCommissionWorkbook(workbook,fileName) {
+  const sheets=smartKskjSheetRows(workbook);
+  const best=sheets[0];
+  return !!best && best.score >= .78 && (/kskj|xcel\s*commission/i.test(fileName||'') || best.score >= .92);
+}
+
+function smartKskjRowSignature(values) {
+  return values.slice(0,11).map(value=>String(value??'').trim()).join('|');
+}
+
+function smartParseKskjHistoricalRows(sheetRows,fileName) {
+  const qualified=sheetRows.filter(sheet=>sheet.score>=.78);
+  if(!qualified.length) throw new Error('I recognized a possible KSKJ file but found no complete transaction table.');
+  const combined=qualified.find(sheet=>smartHeader(sheet.sheetName)==='TABLE3') || qualified[0];
+  const componentRows=qualified.filter(sheet=>sheet!==combined && smartHeader(sheet.sheetName)!=='TABLE3').flatMap(sheet=>sheet.rows);
+  const counts=rows=>{
+    const map=new Map(); rows.forEach(row=>{const key=smartKskjRowSignature(row);map.set(key,(map.get(key)||0)+1);}); return map;
+  };
+  const sameMultiset=(a,b)=>a.size===b.size && [...a].every(([key,count])=>b.get(key)===count);
+  const duplicateComponentsSkipped=componentRows.length>0 && sameMultiset(counts(combined.rows),counts(componentRows));
+  const sourceRows=combined.rows;
+  const occurrence=new Map(),transactions=[];
+  const periodValues=[];
+  sourceRows.forEach((row,index)=>{
+    const policyNumber=String(row[1]||'').trim();
+    const insuredName=String(row[2]||'').trim();
+    const rowPeriod=String(row[6]||'').trim();
+    const rate=parseMoney(row[9]);
+    const amount=Number(String(row[10]||'0').replace(/[$,]/g,'')) || 0;
+    if(!policyNumber || !insuredName) return;
+    if(/^\d{1,2}\/\d{2}$/.test(rowPeriod)) periodValues.push(rowPeriod);
+    const rawCodes=[row[3],row[4],row[5],row[7]].map(value=>String(value??'').trim());
+    const kind=amount<0?'Reversal / chargeback':rate===5?'5% renewal credit':rate===100?'100% commission credit':'Commission credit';
+    const signature=[policyNumber,rowPeriod,amount.toFixed(2),rate,...rawCodes].join('|');
+    const ordinal=(occurrence.get(signature)||0)+1; occurrence.set(signature,ordinal);
+    transactions.push({
+      policyNumber,insuredName,rowPeriod,rate,amount,rawCodes,sourceLine:index+1,
+      commissionAmount:amount,
+      earnedCommission:amount,
+      grossAdvance:0,netAdvance:0,
+      commissionType:`KSKJ ${kind}`,
+      activity:`KSKJ ${kind}${rowPeriod?` · carrier period ${rowPeriod}`:''} · raw codes ${rawCodes.map(x=>x||'—').join('/')}`,
+      importKeyPart:[policyNumber,rowPeriod,`${amount<0?'neg':'pos'}${Math.round(Math.abs(amount)*100)}`,rate,...rawCodes,ordinal].join('|'),
+    });
+  });
+  if(!transactions.length) throw new Error('I recognized the KSKJ ledger but found no policy transactions.');
+
+  const byPolicy=new Map();
+  transactions.forEach(row=>{
+    if(!byPolicy.has(row.policyNumber)) byPolicy.set(row.policyNumber,{policyNumber:row.policyNumber,insuredName:row.insuredName,commissionAmount:0,transactionCount:0,positive:0,chargebacks:0});
+    const policy=byPolicy.get(row.policyNumber); policy.commissionAmount+=row.amount; policy.transactionCount++;
+    if(row.amount>0)policy.positive+=row.amount; else if(row.amount<0)policy.chargebacks+=row.amount;
+  });
+  const policies=[...byPolicy.values()].map(policy=>({...policy,commissionType:policy.commissionAmount<0?'Historical net chargeback':Math.abs(policy.commissionAmount)<.005?'Historical net $0':'Historical net commission'}));
+  const positive=transactions.filter(row=>row.amount>0).reduce((sum,row)=>sum+row.amount,0);
+  const chargebacks=transactions.filter(row=>row.amount<0).reduce((sum,row)=>sum+row.amount,0);
+  const net=positive+chargebacks;
+  const monthKey=value=>{const match=String(value).match(/^(\d{1,2})\/(\d{2})$/);return match?Number(`20${match[2]}${String(match[1]).padStart(2,'0')}`):null;};
+  const periodKeys=periodValues.map(monthKey).filter(Boolean).sort((a,b)=>a-b);
+  const displayMonth=key=>key?`${String(key).slice(4)}/${String(key).slice(0,4)}`:'';
+  const period=periodKeys.length?`${displayMonth(periodKeys[0])}–${displayMonth(periodKeys[periodKeys.length-1])} historical carrier ledger`:'Historical carrier ledger';
+  const netByPolicy=policies.map(policy=>policy.commissionAmount);
+  return {
+    carrier:'KSKJ',carrierKey:'kskj',period,statementDate:'',agentName:`Agent #${String(sourceRows[0]?.[0]||'unknown')}`,sourceFile:fileName,
+    reportKind:'kskj-historical-commission',historical:true,requiresReview:true,
+    statementCount:1,policies,auditRows:transactions,totalCommission:net,
+    metrics:{
+      transactionCount:transactions.length,uniquePolicies:policies.length,positiveCommission:positive,chargebacks,net,
+      positiveRows:transactions.filter(row=>row.amount>0).length,negativeRows:transactions.filter(row=>row.amount<0).length,
+      zeroNetPolicies:netByPolicy.filter(value=>Math.abs(value)<.005).length,
+      negativeNetPolicies:netByPolicy.filter(value=>value<-.005).length,
+      duplicateComponentsSkipped,sourceSheet:combined.sheetName,componentRowCount:componentRows.length,
+    },
+  };
+}
+
+function smartParseKskjHistoricalWorkbook(workbook,fileName) {
+  return smartParseKskjHistoricalRows(smartKskjSheetRows(workbook),fileName);
+}
+
 // QL/LifeShield statements are multi-tab ledgers, not one flat table. The Summary tab
 // proves the advance-exposure roll-forward; Advance Paydown proves earned commission.
 // The carrier labels the small monthly credit "Advance"; Michelle believes it is likely
@@ -5996,6 +6102,10 @@ function smartParseQlCommissionWorkbook(workbook, fileName) {
 
 async function smartParseSpreadsheet(file) {
   const workbook = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+  if (smartIsKskjHeaderlessCommissionWorkbook(workbook,file.name)) {
+    const data=smartParseKskjHistoricalWorkbook(workbook,file.name);
+    return {type:'commission',label:`KSKJ historical commission ledger · ${data.metrics.transactionCount} transactions · ${data.metrics.uniquePolicies} policies`,count:data.metrics.transactionCount,data};
+  }
   if (smartIsQlCommissionWorkbook(workbook,file.name)) {
     const data = smartParseQlCommissionWorkbook(workbook,file.name);
     return { type:'commission', label:`LifeShield monthly commission · ${smartDisplayIsoDate(data.statementDate)}`, count:data.policies.length, data };
@@ -6219,6 +6329,7 @@ async function ensureCommissionHistoryTab() {
 }
 
 function smartCommissionAuditFlag(data,existingRows) {
+  if(data?.historical) return 'Historical baseline — carrier field labels unavailable; raw transaction codes preserved in Activity';
   const currentDate = new Date(`${data.statementDate}T12:00:00`);
   const sameCarrier = existingRows.filter(row => String(row[1]||'').toLowerCase() === String(data.carrier||'').toLowerCase())
     .map(row => ({ row, date:new Date(row[3]) }))
@@ -6236,6 +6347,7 @@ function smartCommissionAuditFlag(data,existingRows) {
 
 function smartCommissionImportKey(data,row) {
   const slug = value => String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  if(row?.importKeyPart) return `${slug(data.carrier)}|historical|${slug(row.importKeyPart)}`;
   return `${slug(data.carrier)}|${data.statementDate}|${String(row.policyNumber||'').trim().toUpperCase()}|${slug(row.activity||row.commissionType)}`;
 }
 
@@ -6257,7 +6369,7 @@ async function persistCommissionStatement(data,sourceFile) {
   const values = pending.map((row,index) => [
     smartCommissionImportKey(data,row),
     data.carrier || 'Unknown carrier',
-    data.period || '',
+    row.rowPeriod || data.period || '',
     data.statementDate || '',
     row.policyNumber || '',
     row.insuredName || '',
@@ -6303,7 +6415,7 @@ function smartConsolidateCommissionStatements(items) {
 }
 
 async function smartImportAllCommissionStatements() {
-  const items = smartFileResults.filter(item => item.ok && item.type === 'commission' && item.data?.auditRows?.length)
+  const items = smartFileResults.filter(item => item.ok && item.type === 'commission' && item.data?.auditRows?.length && !item.data?.historical)
     .sort((a,b) => String(a.data.statementDate).localeCompare(String(b.data.statementDate)));
   if (!items.length) return;
   const button = document.getElementById('smartSaveAllCommissionBtn');
@@ -6355,7 +6467,7 @@ async function smartHandleFiles(fileList) {
 function renderSmartFileResults() {
   document.getElementById('commReading').style.display='none';
   const results = document.getElementById('commResults');
-  const commissionCount = smartFileResults.filter(r => r.ok && r.type === 'commission' && r.data?.auditRows?.length).length;
+  const commissionCount = smartFileResults.filter(r => r.ok && r.type === 'commission' && r.data?.auditRows?.length && !r.data?.historical).length;
   results.style.display='block';
   results.innerHTML = `<div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px">I sorted the files</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review recognized policy or commission reports before anything changes in the Sheet.</div>
@@ -6364,7 +6476,7 @@ function renderSmartFileResults() {
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
         <div><div style="font-weight:700;font-size:13px">${r.ok?'✓':'⚠️'} ${smartHtml(r.fileName)}</div>
         <div style="font-size:11px;color:${r.ok?'var(--muted)':'var(--rust)'};margin-top:2px">${r.ok?`${smartHtml(r.label)} · ${r.count||0} row${r.count===1?'':'s'} recognized`:smartHtml(r.error)}</div></div>
-        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${r.type==='commission'?'Save to ledger':'Review matches'}</button>` : ''}
+        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${r.type==='commission'?(r.data?.historical?'Review historical ledger':'Save to ledger'):'Review matches'}</button>` : ''}
       </div>
       ${r.ok && !['policy','commission'].includes(r.type) ? `<div style="font-size:11px;color:var(--muted);margin-top:7px">Recognized for reference. It does not contain policy-level status or commission rows to reconcile.</div>` : ''}
     </div>`).join('')}
@@ -6391,6 +6503,10 @@ async function smartReviewFile(index) {
   const item = smartFileResults[index];
   if (!item || !item.ok) return;
   if (item.type === 'commission') {
+    if(item.data?.reportKind==='kskj-historical-commission') {
+      matchCommissions(item.data,{reviewOnly:true,sourceIndex:index});
+      return;
+    }
     try {
       const saved = await persistCommissionStatement(item.data,item.fileName);
       await loadCommissionHistoryForNumbers();
@@ -6425,6 +6541,28 @@ async function smartReviewFile(index) {
     carrierReportPreviewData = { carrierKey, envelope, match, fullBook:detected.fullBook, stats:computeCarrierReportStats(carrierKey,envelope.records), validationWarnings:validation.warnings };
     renderCarrierReportModal();
     document.getElementById('carrierReportOverlay').classList.add('visible');
+  }
+}
+
+async function smartSaveReviewedKskj(index) {
+  const item=smartFileResults[index];
+  if(!item?.ok || item.data?.reportKind!=='kskj-historical-commission') return;
+  if(!accessToken){toast('Sign in first');return;}
+  const rows=item.data.auditRows||[];
+  const confirmed=confirm(`Save ${rows.length} KSKJ historical transactions to Commission History? This records commission evidence only; it will not change client status or count as 2026 income.`);
+  if(!confirmed)return;
+  const btn=document.getElementById('kskjHistoricalSaveBtn');
+  if(btn){btn.disabled=true;btn.textContent='Saving historical ledger…';}
+  try {
+    const saved=await persistCommissionStatement(item.data,item.fileName);
+    await loadCommissionHistoryForNumbers();
+    sheetLastLoadedAt=new Date();
+    matchCommissions(item.data,{saved:true,sourceIndex:index});
+    if(document.getElementById('panel_numbers'))renderNumbersPanel();
+    toast(saved.inserted?`✓ Saved ${saved.inserted} KSKJ historical transaction${saved.inserted===1?'':'s'}`:`All ${saved.duplicate} KSKJ transactions were already saved`);
+  } catch(error) {
+    console.error(error);toast(`Could not save KSKJ history — ${error.message}`);
+    if(btn){btn.disabled=false;btn.textContent=`Approve & Save ${rows.length} Historical Transactions`;}
   }
 }
 
@@ -6516,26 +6654,40 @@ Return only valid JSON, no other text.` }
   }
 }
 
-function matchCommissions(data) {
+function matchCommissions(data,options={}) {
   document.getElementById('commReading').style.display='none';
 
   const policies = data.policies || [];
   const matched = [], unmatched = [];
+  const isKskj=data.reportKind==='kskj-historical-commission';
+  const policyKey=value=>String(value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 
   // Build lookup of all policy numbers in sheet
   const sheetPolicies = {};
+  const kskjNames = {};
   allClients.forEach(c => {
     [c.newPolicyNumber,c.existingPolicy].filter(Boolean).forEach(policy => {
-      const key = policy.toString().trim().toUpperCase();
+      const key = policyKey(policy);
       sheetPolicies[key] = c;
     });
+    if(isKskj && clientMatchesCarrierKey(c,'kskj')) {
+      const key=normalizeCarrierMatchName(c.fullName);
+      if(key)(kskjNames[key] ||= []).push(c);
+    }
   });
 
-  // Check each statement policy against sheet
+  // Policy number wins. For the headerless KSKJ archive only, fall back to an exact
+  // first+last name within rows already identified as KSKJ; never fuzzy-match names.
   policies.filter(p => p && p.policyNumber).forEach(p => {
-    const key = p.policyNumber.toString().trim().toUpperCase();
+    const key = policyKey(p.policyNumber);
     if (sheetPolicies[key]) {
-      matched.push({ ...p, client: sheetPolicies[key] });
+      matched.push({ ...p, client: sheetPolicies[key],matchMethod:'Exact policy number' });
+    } else if(isKskj) {
+      const candidates=kskjNames[normalizeCarrierMatchName(p.insuredName)]||[];
+      if(candidates.length) {
+        const client=[...candidates].sort((a,b)=>(b.sheetRow||0)-(a.sheetRow||0))[0];
+        matched.push({...p,client,matchMethod:'Exact KSKJ name'});
+      } else unmatched.push(p);
     } else {
       unmatched.push(p);
     }
@@ -6561,21 +6713,40 @@ function matchCommissions(data) {
     <div class="comm-stat${unmatched.length?' warn':''}"><div class="comm-stat-num">${unmatched.length}</div><div class="comm-stat-label">Needs Linking</div></div>
   </div>`;
 
+  if(isKskj) {
+    const positive=Number(data.metrics?.positiveCommission||0),chargebacks=Number(data.metrics?.chargebacks||0);
+    const kskjMoney=value=>`${value<0?'−':''}$${Math.abs(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    html=`<div class="comm-summary" style="grid-template-columns:repeat(auto-fit,minmax(125px,1fr))">
+      <div class="comm-stat"><div class="comm-stat-num">${data.metrics?.transactionCount||0}</div><div class="comm-stat-label">Transactions</div></div>
+      <div class="comm-stat"><div class="comm-stat-num">${data.metrics?.uniquePolicies||policies.length}</div><div class="comm-stat-label">Unique Policies</div></div>
+      <div class="comm-stat good"><div class="comm-stat-num">${kskjMoney(positive)}</div><div class="comm-stat-label">Positive Credits</div></div>
+      <div class="comm-stat warn"><div class="comm-stat-num">${kskjMoney(chargebacks)}</div><div class="comm-stat-label">Reversals / Chargebacks</div></div>
+      <div class="comm-stat good"><div class="comm-stat-num">${kskjMoney(totalComm)}</div><div class="comm-stat-label">Historical Net</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 12px;font-size:11px;font-weight:700">
+      <span style="padding:5px 9px;border-radius:12px;background:var(--sage-light);color:var(--sage)">✓ ${matched.length} matched</span>
+      ${unmatched.length?`<span style="padding:5px 9px;border-radius:12px;background:var(--rust-light);color:var(--rust)">⚠ ${unmatched.length} need linking</span>`:''}
+      <span style="padding:5px 9px;border-radius:12px;background:var(--cream);color:var(--ink)">${data.metrics?.zeroNetPolicies||0} policies net $0 · ${data.metrics?.negativeNetPolicies||0} net negative</span>
+    </div>`;
+  }
+
   html += `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">${data.carrier||'Carrier'} · ${data.period||''} ${data.agentName?'· '+data.agentName:''}</div>`;
   html += `<div style="background:var(--blue-light);border-radius:10px;padding:10px 12px;margin:8px 0 12px;font-size:12px;color:var(--ink)">
     ${isQl
       ? `<b>What this proves:</b> LifeShield credited $${totalComm.toFixed(2)} as earned/advance paydown${carrierAdvance?` and $${carrierAdvance.toFixed(2)} in a separate line the carrier calls “Advance.” Michelle believes that smaller credit is likely second-year renewal income, so the audit keeps that interpretation visible without overwriting the carrier's original label.`:''}`
+      : isKskj
+        ? `<b>What this proves:</b> this is historical KSKJ commission activity, not current policy status and not 2026 income. ${data.metrics?.duplicateComponentsSkipped?'The app verified that Table 3 already contains Sheet1 + Sheet2 and excluded those duplicate tabs. ':''}The unidentified carrier codes are preserved verbatim in the audit instead of being guessed. A 5% line is labelled a renewal credit; negative lines remain reversals/chargebacks.`
       : `<b>What this proves:</b> these policies had commission activity on this statement. A policy not listed here is not “missing” or inactive. Current policy status comes from the carrier report and is shown below when it has been imported.`}
   </div>`;
 
   // Results table
   html += `<table class="comm-table">
-    <tr><th>Policy #</th><th>Insured</th><th>${isQl?'Earned / Paydown':'Commission'}</th><th>Type</th><th>Status</th></tr>`;
+    <tr><th>Policy #</th><th>Insured</th><th>${isQl?'Earned / Paydown':isKskj?'Historical Net':'Commission'}</th><th>Type</th><th>Status</th></tr>`;
 
   matched.forEach(p => {
     html += `<tr>
       <td>${p.policyNumber}</td>
-      <td>${p.insuredName} <span style="font-size:11px;color:var(--muted)">(${p.client.fullName})</span></td>
+      <td>${p.insuredName} <span style="font-size:11px;color:var(--muted)">(${p.client.fullName})</span>${p.matchMethod?`<div style="font-size:10px;color:var(--sage)">${p.matchMethod}</div>`:''}</td>
       <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
       <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
       <td>${p.client.lastChecked
@@ -6596,11 +6767,12 @@ function matchCommissions(data) {
 
   html += '</table>';
 
-  // Save to storage
-  saveCommissionHistory(data, totalComm, policies.length);
+  // The browser's lightweight YTD history is for current statements only. Historical
+  // KSKJ evidence belongs solely in the permanent Commission History tab after approval.
+  if(!options.reviewOnly && !data.historical) saveCommissionHistory(data, totalComm, policies.length);
 
   // Show history
-  const history = getCommissionHistory();
+  const history = data.historical ? [] : getCommissionHistory();
   if (history.length) {
     const ytd = history.reduce((s,h) => s + h.total, 0);
     html += `<div class="comm-history">
@@ -6618,6 +6790,15 @@ function matchCommissions(data) {
     html += `</div>`;
   }
 
+  if(isKskj && options.reviewOnly) {
+    html += `<div style="background:var(--gold-light,#fdf6e8);border:1.5px solid var(--gold);border-radius:12px;padding:12px 14px;margin-top:14px">
+      <div style="font-weight:700;color:var(--ink);margin-bottom:4px">Nothing has been written yet</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Approval saves all ${data.metrics?.transactionCount||0} transaction rows as a historical audit baseline. It does not change client status, Written Date, or 2026 totals.</div>
+      <button id="kskjHistoricalSaveBtn" onclick="smartSaveReviewedKskj(${Number(options.sourceIndex)||0})" style="width:100%;padding:12px 16px;background:var(--gold);color:#fff;border:0;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">Approve & Save ${data.metrics?.transactionCount||0} Historical Transactions</button>
+    </div>`;
+  } else if(isKskj && options.saved) {
+    html += `<div style="background:var(--sage-light);border:1.5px solid var(--sage);border-radius:12px;padding:11px 14px;margin-top:14px;font-size:12px;font-weight:700;color:var(--sage)">✓ Historical KSKJ audit baseline saved. Current policy status is still unknown until carrier access is restored.</div>`;
+  }
   html += `<button class="comm-scan-new" onclick="resetCommTracker()">Upload another statement</button>`;
 
   const resultsEl = document.getElementById('commResults');
