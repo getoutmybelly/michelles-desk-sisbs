@@ -3907,31 +3907,46 @@ async function loadCommissionEmailsInline() {
     }
 
     const soldClients = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
-    const confirmedIssues = [], likelyPaid = [], needsPortalCheck = [];
-
+    const confirmedIssues = [];
     soldClients.forEach(c => {
       const group = carrierGroupFor(c.newCompany);
       const matchedEmail = group.hasEmailSignal ? lapseDetails.find(email => findClientFromEmail(email) === c) : null;
-
-      if (matchedEmail) { confirmedIssues.push({ c, email: matchedEmail }); return; }
-      if (!group.hasEmailSignal) { needsPortalCheck.push(c); return; } // carrier never emails status — portal is the only source
-
-      // Carrier does email declines/cancellations and none matched this client.
-      const payDateObj = c.payDate ? new Date(c.payDate) : null;
-      const daysSincePay = (payDateObj && !isNaN(payDateObj)) ? Math.floor((Date.now() - payDateObj) / 86400000) : null;
-      if (daysSincePay !== null && daysSincePay >= PAYMENT_DECLINE_WINDOW_DAYS) {
-        likelyPaid.push(c); // inferred, not confirmed — labeled as such below
-      } else {
-        needsPortalCheck.push(c); // still inside the decline-notice window, or no Pay Date yet
-      }
+      if (matchedEmail) confirmedIssues.push({ c, email: matchedEmail });
     });
+
+    // Carrier reports and agents write into the Sheet's standardized status columns.
+    // Missing automation is a system setup item—not hundreds of individual chores for Michelle.
+    const carrierVerified = soldClients.filter(c => !!c.lastChecked && c.status && c.status !== POLICY_STATUS.PENDING_VERIFICATION.key);
+    const carrierAttention = carrierVerified.filter(c => c.status === POLICY_STATUS.ADVERSE.key);
+    const carrierGood = carrierVerified.filter(c => c.status === POLICY_STATUS.ISSUED.key || c.status === POLICY_STATUS.ISSUED_PAID_IN_FORCE.key);
+    const awaitingCarrier = soldClients.filter(c => !c.lastChecked || !c.status || c.status === POLICY_STATUS.PENDING_VERIFICATION.key);
+    const awaitingByCarrier = {};
+    awaitingCarrier.forEach(c => {
+      const carrier = c.newCompany || 'Unknown carrier';
+      if (!awaitingByCarrier[carrier]) awaitingByCarrier[carrier] = [];
+      awaitingByCarrier[carrier].push(c);
+    });
+    const carrierSetupLabel = carrier => {
+      const n = carrier.toLowerCase();
+      if (n.includes('lifeshield')) return 'Carrier report connected';
+      if (n.includes('polish falcon') || /(^|\s)pfa(\s|$)/.test(n)) return 'Agent collected · Sheet bridge pending';
+      return 'Automation not connected';
+    };
 
     let html = '';
 
-    if (confirmedIssues.length || needsPortalCheck.length || likelyPaid.length) {
+    if (soldClients.length) {
       html += `<div style="border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-        <div style="font-weight:700;font-size:15px;margin-bottom:2px">💳 Payment Status Check</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Based on which carriers actually email a status vs. which require a portal login. Sold policies only.</div>`;
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
+          <div><div style="font-weight:700;font-size:15px;margin-bottom:2px">🛡️ Carrier Verification</div>
+          <div style="font-size:11px;color:var(--muted)">Carrier-confirmed results from the Sheet. Unconnected carriers are grouped once—no individual portal homework.</div></div>
+          <button onclick="loadFromSheets()" style="padding:7px 11px;background:#fff;border:1.5px solid var(--sage);border-radius:18px;color:var(--sage);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">↻ Refresh Sheet</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:14px">
+          <div style="background:var(--green-light);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--green)">${carrierGood.length}</div><div style="font-size:10px;color:var(--muted)">Confirmed good</div></div>
+          <div style="background:var(--rust-light);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--rust)">${carrierAttention.length}</div><div style="font-size:10px;color:var(--muted)">Need attention</div></div>
+          <div style="background:var(--cream);border-radius:9px;padding:9px 10px"><div style="font-size:18px;font-weight:700;color:var(--gold)">${Object.keys(awaitingByCarrier).length}</div><div style="font-size:10px;color:var(--muted)">Carrier connections left</div></div>
+        </div>`;
 
       if (confirmedIssues.length) {
         html += `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:12px;color:var(--rust);margin-bottom:5px">⚠️ ${confirmedIssues.length} confirmed by email — declined, past due, or cancelled</div>`;
@@ -3945,24 +3960,17 @@ async function loadCommissionEmailsInline() {
         html += `</div>`;
       }
 
-      if (needsPortalCheck.length) {
-        html += `<div style="margin-bottom:10px"><div style="font-weight:600;font-size:12px;color:var(--gold);margin-bottom:5px">🔎 ${needsPortalCheck.length} need a portal check</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">No email signal exists for these yet (either the carrier never emails status, or it's still inside the decline-notice window).</div>`;
-        needsPortalCheck.slice(0,12).forEach(c => {
-          const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
-          html += `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--cream);border-radius:8px;padding:7px 11px;margin-bottom:5px">
-            <span onclick="openGroup('${esc(key)}')" style="font-size:12px;cursor:pointer">${c.fullName} · ${c.newCompany}</span>
-            ${clientPortalLink(c)}
+      const carrierGroups = Object.entries(awaitingByCarrier).sort((a,b) => b[1].length-a[1].length);
+      if (carrierGroups.length) {
+        html += `<div><div style="font-weight:700;font-size:12px;color:var(--gold);margin-bottom:6px">Connections still to finish</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:7px">These counts describe unfinished system connections—not work Michelle needs to do policy by policy.</div>`;
+        carrierGroups.forEach(([carrier, clients]) => {
+          html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--cream);border-radius:8px;padding:8px 11px;margin-bottom:5px">
+            <div><div style="font-size:12px;font-weight:700">${carrier}</div><div style="font-size:10px;color:var(--muted)">${carrierSetupLabel(carrier)}</div></div>
+            <div style="font-size:12px;color:var(--gold);font-weight:700">${clients.length} awaiting results</div>
           </div>`;
         });
-        if (needsPortalCheck.length > 12) html += `<div style="font-size:11px;color:var(--muted)">+${needsPortalCheck.length-12} more</div>`;
         html += `</div>`;
-      }
-
-      if (likelyPaid.length) {
-        html += `<div><div style="font-weight:600;font-size:12px;color:var(--sage);margin-bottom:5px">✅ ${likelyPaid.length} likely paid & in force <span style="font-weight:400;color:var(--muted)">(inferred — no decline email within ${PAYMENT_DECLINE_WINDOW_DAYS} days of Pay Date, not carrier-confirmed)</span></div>
-          <div>${likelyPaid.map(c => `<span onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')" style="display:inline-block;background:var(--green-light,#eaf5ec);color:var(--sage);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;margin:0 6px 6px 0;cursor:pointer">${c.fullName}</span>`).join('')}</div>
-        </div>`;
       }
 
       html += `</div>`;
