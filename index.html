@@ -939,7 +939,7 @@ const CARRIER_APPROVAL_EMAIL_RULES = [
   },
 ];
 const CARRIER_APPROVAL_POSITIVE = /\b(approved|approval confirmed|application approval|issued|policy issued|placed in force|coverage effective|coverage is effective)\b/i;
-const CARRIER_APPROVAL_BLOCKING = /\b(not approved|unable to approve|cannot approve|declined|denied|pending|requirement(?:s)?|additional information|missing|incomplete|withdrawn|cancel(?:led|lation)?|lapse(?:d)?|terminated)\b/i;
+const CARRIER_APPROVAL_BLOCKING = /\b(not approved|unable to approve|cannot approve|declined|denied|approval pending|pending approval|requirements? outstanding|additional information (?:is )?required|missing information|incomplete application|withdrawn|cancel(?:led|lation)?|lapse(?:d)?|terminated)\b/i;
 
 const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/michelle_headshot.jpg';
 
@@ -2067,8 +2067,12 @@ function exactClientTextMatch(c, text) {
   const first = normalizeInsuredName(c.firstName || '').split(' ')[0];
   const lastParts = normalizeInsuredName(c.lastName || '').split(' ').filter(w => w.length > 1);
   if (!first || !lastParts.length) return false;
-  const normalizedText = ` ${normalizeInsuredName(text)} `;
-  return normalizedText.includes(` ${first} `) && lastParts.every(w => normalizedText.includes(` ${w} `));
+  const textWords = normalizeInsuredName(text).split(' ').filter(Boolean);
+  if (!textWords.includes(first)) return false;
+  // Carrier emails are digital, so exact last-name matching is the norm. Permit only a
+  // single trailing character (e.g. WALLACEC) because source systems occasionally append
+  // a stray character; carrier and exact first name must still match.
+  return lastParts.every(last => textWords.some(word => word === last || (word.startsWith(last) && word.length === last.length + 1)));
 }
 
 function findClientForCarrierApproval(email, rule) {
@@ -2150,10 +2154,17 @@ function actionDateIsReady(dateStr) {
 }
 
 function clientReadyNow(c) {
-  return !!c.carrierApprovalReady ||
+  // "Ready" is an evidence claim, not a calendar guess. A due date alone never proves
+  // replacement coverage was approved.
+  return !!c.carrierApprovalReady;
+}
+
+function clientDueNeedsConfirmation(c) {
+  return !clientReadyNow(c) && (
     (c.stopPending && actionDateIsReady(c.stopDue)) ||
     (c.cxPending && actionDateIsReady(c.cxDue)) ||
-    (c.surrPending && actionDateIsReady(c.surrDue));
+    (c.surrPending && actionDateIsReady(c.surrDue))
+  );
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
@@ -2471,7 +2482,8 @@ function renderPipelinePanel() {
   const panel = document.getElementById('panel_pipeline');
   const pending   = allClients.filter(c=>c.hasPending);
   const ready     = allClients.filter(clientReadyNow);
-  const scheduled = pending.filter(c=>!clientReadyNow(c));
+  const confirm   = pending.filter(clientDueNeedsConfirmation);
+  const scheduled = pending.filter(c=>!clientReadyNow(c) && !clientDueNeedsConfirmation(c));
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
@@ -2482,6 +2494,7 @@ function renderPipelinePanel() {
 
   const tabs = [
     {id:'ready',     label:'⚡ Ready to Send Now', data:ready},
+    {id:'confirm',   label:'📞 Due — Confirm First', data:confirm},
     {id:'scheduled', label:'🗓️ Scheduled',         data:scheduled},
     {id:'outcome',   label:'⚠️ Needs Outcome',    data:needsOutcome},
     {id:'fuvisit',   label:'🔄 Follow-Up Visits', data:fuVisits},
@@ -2509,7 +2522,8 @@ function switchPipeline(tab) {
 function renderPipelineInner(tab) {
   const pending   = allClients.filter(c=>c.hasPending);
   const ready     = allClients.filter(clientReadyNow);
-  const scheduled = pending.filter(c=>!clientReadyNow(c));
+  const confirm   = pending.filter(clientDueNeedsConfirmation);
+  const scheduled = pending.filter(c=>!clientReadyNow(c) && !clientDueNeedsConfirmation(c));
   const doorKnock = allClients.filter(c=>c.clientStatus==='Door Knock');
   const dial      = allClients.filter(c=>c.clientStatus==='Dial');
   const followUp  = allClients.filter(c=>c.clientStatus==='Follow Up');
@@ -2517,7 +2531,7 @@ function renderPipelineInner(tab) {
   const needsOutcome = apptAll.filter(c=>c.apptNeedsOutcome);
   const apptUpcoming = apptAll.filter(c=>!c.apptNeedsOutcome);
   const fuVisits  = allClients.filter(c=>c.followUpPending);
-  const dataMap   = {ready,scheduled,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt:apptUpcoming,outcome:needsOutcome};
+  const dataMap   = {ready,confirm,scheduled,fuvisit:fuVisits,doorknock:doorKnock,dial,followup:followUp,appt:apptUpcoming,outcome:needsOutcome};
   const activeData = dataMap[tab] || [];
   const inner = document.getElementById('pipelineInner');
   if (!inner) return;
@@ -2585,7 +2599,9 @@ function renderPipelineInner(tab) {
   }
 
   const queueIntro = tab === 'ready'
-    ? `<div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:var(--rust-light);color:var(--rust);font-size:12px;font-weight:600">These forms are due now, or a trusted carrier approval email made the Stop PAC ready. Send them first.</div>`
+    ? `<div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:var(--rust-light);color:var(--rust);font-size:12px;font-weight:600">Carrier approval was found in Gmail and matched to this exact client and carrier. These are ready to send.</div>`
+    : tab === 'confirm'
+      ? `<div style="margin-bottom:12px;padding:10px 12px;border-radius:10px;background:var(--gold-light);color:var(--gold);font-size:12px;font-weight:600">The Sheet date has arrived, but the Desk has no carrier approval evidence. Confirm by phone, email, report, or portal before sending.</div>`
     : tab === 'scheduled'
       ? `<div style="margin-bottom:12px;color:var(--muted);font-size:12px">Upcoming Stop PAC, cancellation, and surrender dates. These are scheduled—not ready to send yet.</div>`
       : '';
@@ -2604,6 +2620,7 @@ function renderPipelineInner(tab) {
       <div class="followup-name">${c.fullName}</div>
       <div class="followup-meta">${[c.displayCompany,c.city].filter(Boolean).join(' · ')}</div>
       ${c.carrierApprovalReady?`<div class="carrier-approval-ready">✉️ ${htmlSafe(c.carrierApprovalEmail.carrier)} approved — Stop PAC ready now<br><span style="font-weight:500">${htmlSafe(c.carrierApprovalEmail.email.subject)} · ${htmlSafe(formatEmailDate(c.carrierApprovalEmail.email.date))}</span></div>`:''}
+      ${tab==='confirm'?`<div style="margin-top:7px;padding:7px 9px;border-radius:8px;background:var(--gold-light);color:var(--gold);font-size:11px;font-weight:700">No carrier approval found — confirm before sending</div>`:''}
       ${due?`<div style="font-size:11px;color:var(--rust);margin-top:5px;font-weight:600">📅 ${due}</div>`:''}
       ${touchLine}
       <div class="followup-tags">${buildPills(c)}</div>
