@@ -467,6 +467,20 @@
   .cleanup-undated{display:grid;grid-template-columns:minmax(180px,1.3fr) repeat(3,minmax(95px,.8fr)) minmax(250px,1.5fr);gap:9px;align-items:center;padding:10px;border-top:1px solid #eee9e1;font-size:11px;}.cleanup-undated:first-child{border-top:none;}
   .cleanup-footer{position:sticky;bottom:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 24px;background:rgba(255,255,255,.96);border-top:1px solid #e4dfd5;backdrop-filter:blur(8px);}.cleanup-footer-note{font-size:10.5px;color:var(--muted);line-height:1.45;}
   @media(max-width:760px){.cleanup-stats{grid-template-columns:1fr 1fr}.cleanup-body{padding:15px 12px 2px}.cleanup-hero{padding:20px 17px}.cleanup-title{font-size:23px}.cleanup-policy{grid-template-columns:24px 1fr 1fr}.cleanup-policy>div:nth-child(n+4){display:none}.cleanup-undated{grid-template-columns:1fr}.cleanup-footer{padding:12px 14px;align-items:flex-end}}
+  /* ONE-BUTTON LEAD FINALIZATION */
+  .lead-review-shell{background:linear-gradient(180deg,#edf8f2 0%,#f7fbf9 100%);border:1px solid #cfe6d8;border-radius:13px;padding:14px;margin-top:10px;}
+  .lead-review-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;}
+  .lead-review-title{font-weight:800;color:var(--green);font-size:14px;}.lead-review-copy{font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px;}
+  .lead-review-badge{background:#fff;color:var(--green);border:1px solid #b8d9c5;border-radius:999px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap;}
+  .lead-review-card{background:#fff;border:1px solid #e2e8e4;border-radius:11px;padding:12px;margin-bottom:9px;box-shadow:0 3px 12px rgba(26,60,42,.04);}
+  .lead-review-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;}.lead-review-field label{display:flex;justify-content:space-between;gap:8px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;color:var(--muted);margin-bottom:3px;}
+  .lead-review-field input{width:100%;padding:7px 8px;border:1px solid #d8ddd9;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--ink);background:#fff;}.lead-review-field input:focus{outline:none;border-color:var(--sage);box-shadow:0 0 0 3px rgba(92,122,107,.1);}
+  .lead-review-field input.needs-attention{border-color:var(--rust);background:#fff8f5;box-shadow:0 0 0 3px rgba(196,80,26,.08);}
+  .lead-file-preview{display:flex;align-items:center;gap:8px;margin-top:9px;padding:8px 9px;background:#f4f2ed;border-radius:8px;font-size:10.5px;color:var(--muted);}.lead-file-preview b{color:var(--ink);word-break:break-all;}
+  .lead-finalize-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px;padding-top:11px;border-top:1px solid #d8e7de;}.lead-finalize-note{font-size:10.5px;color:var(--muted);line-height:1.45;max-width:480px;}
+  .lead-finalize-btn{min-width:220px;padding:12px 16px;background:linear-gradient(135deg,#276f49,#39885e);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 5px 14px rgba(45,122,79,.2);}.lead-finalize-btn:disabled{opacity:.58;cursor:not-allowed;box-shadow:none;}
+  .lead-receipt{background:#fff;border:1px solid #b9dbc7;border-radius:12px;padding:14px;margin-top:10px;}.lead-receipt-title{font-family:'DM Serif Display',serif;font-size:18px;color:var(--green);}.lead-receipt-copy{font-size:11px;color:var(--muted);margin-top:3px;}.lead-receipt-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(150px,1.2fr) minmax(130px,1fr);gap:9px;padding:9px 0;border-top:1px solid #eef1ee;font-size:11px;}.lead-receipt-row:first-of-type{margin-top:10px;}.lead-receipt-row b{font-size:12px;}.lead-receipt-ok{color:var(--green);font-weight:700;}.lead-receipt-warn{color:var(--gold);font-weight:700;}
+  @media(max-width:650px){.lead-review-grid{grid-template-columns:1fr}.lead-finalize-bar{align-items:stretch;flex-direction:column}.lead-finalize-btn{width:100%}.lead-receipt-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -5180,6 +5194,7 @@ function closeScript() {
 async function openFexLeads() {
   document.getElementById('fexSection').style.display = 'block';
   document.getElementById('fexSection').scrollIntoView({behavior:'smooth',block:'start'});
+  loadStoredLeadFolderHandle();
   await checkFexEmails();
 }
 
@@ -5384,11 +5399,11 @@ Return only the JSON array, no other text.`
     }
     const aiData = await aiResp.json();
     const text = aiData.content[0].text.trim().replace(/```json|```/g,'').trim();
-    const leads = JSON.parse(text);
-    lastFexPdfB64 = base64;   // keep so individual pages can be split & downloaded
+    const leads = JSON.parse(text).map((lead,index)=>({...lead,_pdfPageIndex:index,_sourceMessageId:messageId}));
+    lastFexPdfB64 = base64;   // legacy fallback; each preview also stores its own PDF below
 
     // Show preview
-    renderFexLeadsPreview(leads, resultDiv, btn);
+    renderFexLeadsPreview(leads, resultDiv, btn, base64);
 
   } catch(err) {
     btn.disabled = false;
@@ -5398,7 +5413,7 @@ Return only the JSON array, no other text.`
   }
 }
 
-function renderFexLeadsPreview(leads, container, btn) {
+function renderFexLeadsPreview(leads, container, btn, pdfBase64) {
   btn.textContent = `✓ ${leads.length} leads found`;
   btn.style.background = 'var(--sage)';
 
@@ -5407,6 +5422,8 @@ function renderFexLeadsPreview(leads, container, btn) {
   if (!container.id) container.id = 'fex_result_' + Math.random().toString(36).slice(2);
   window._fexLeadsState = window._fexLeadsState || {};
   window._fexLeadsState[container.id] = leads.map(l => ({ ...l }));
+  window._fexPdfState = window._fexPdfState || {};
+  if (pdfBase64) window._fexPdfState[container.id] = pdfBase64;
 
   const fields = [
     ['firstName','First'], ['lastName','Last'], ['spouseName','Spouse'],
@@ -5414,45 +5431,148 @@ function renderFexLeadsPreview(leads, container, btn) {
     ['phone','Phone'], ['ageRange','Age Range'], ['health','Health']
   ];
 
-  let html = `<div style="background:var(--green-light);border-radius:10px;padding:12px;margin-bottom:10px">
-    <div style="font-weight:600;color:var(--green);margin-bottom:4px">✓ ${leads.length} lead${leads.length>1?'s':''} extracted — review and correct before saving</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">AI reads handwriting — double-check names against the card before saving.</div>`;
+  let html = `<div class="lead-review-shell">
+    <div class="lead-review-head"><div><div class="lead-review-title">${leads.length} lead${leads.length>1?'s':''} ready for review</div><div class="lead-review-copy">Double-check the card, correct anything the handwriting reader missed, then finish everything with one button.</div></div><span class="lead-review-badge">Review → File → Verify</span></div>`;
 
   leads.forEach((lead, i) => {
-    html += `<div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:13px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;margin-bottom:6px">
+    html += `<div class="lead-review-card">
+      <div class="lead-review-grid">
         ${fields.map(([key,label]) => `
-          <div>
-            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:1px">${label}</label>
+          <div class="lead-review-field">
+            <label>${label}${['firstName','lastName','phone'].includes(key)?'<span>check</span>':''}</label>
             <input type="text" value="${(lead[key]||'').toString().replace(/"/g,'&quot;')}"
-              oninput="window._fexLeadsState['${container.id}'][${i}]['${key}']=this.value"
-              style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:'DM Sans',sans-serif">
+              id="fex_${container.id}_${i}_${key}"
+              oninput="onFexLeadFieldInput('${container.id}',${i},'${key}',this.value)"
+              onblur="validateFexLeadCard('${container.id}',${i})">
           </div>`).join('')}
       </div>
-      ${lastFexPdfB64?`<button onclick="downloadSplitLead(${i}, '${container.id}')" style="margin-top:2px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:14px;border:1.5px solid var(--sage);color:var(--sage);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif">⬇ Download this lead's PDF page</button>`:''}
+      <div class="lead-file-preview"><span>📄</span><span>Will file as <b id="fex_filename_${container.id}_${i}">${htmlSafe(leadFileName(lead))}</b></span></div>
     </div>`;
   });
 
-  html += `<button onclick="saveFexLeads('${container.id}', this)"
-    style="width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px">
-    💾 Save All ${leads.length} Leads to Sheet
-  </button>`;
+  html += `<div class="lead-finalize-bar"><div class="lead-finalize-note"><b>First use:</b> Chrome will ask Michelle to choose her “Individual Leads” folder. After that, Michelle’s Desk files the renamed PDF, saves the Sheet row, and verifies it.</div><button class="lead-finalize-btn" onclick="finalizeFexLeads('${container.id}',this)">✓ Finalize ${leads.length} Lead${leads.length===1?'':'s'}</button></div>`;
 
   html += '</div>';
   container.innerHTML = html;
+  leads.forEach((_,i)=>validateFexLeadCard(container.id,i,false));
 }
 
-async function saveFexLeads(containerId, btn) {
+let leadFolderHandleCache = null;
+let leadFolderHandleLoaded = false;
+
+function onFexLeadFieldInput(containerId,index,key,value) {
+  const lead=window._fexLeadsState?.[containerId]?.[index]; if(!lead)return;
+  lead[key]=value;
+  const name=document.getElementById(`fex_filename_${containerId}_${index}`);
+  if(name) name.textContent=leadFileName(lead);
+  validateFexLeadCard(containerId,index,false);
+}
+
+function validateFexLeadCard(containerId,index,showAll=true) {
+  const lead=window._fexLeadsState?.[containerId]?.[index]||{};
+  const digits=String(lead.phone||'').replace(/\D/g,'');
+  const invalid={
+    firstName:!cl(lead.firstName), lastName:!cl(lead.lastName),
+    phone:digits && ![10,11].includes(digits.length),
+  };
+  if(!digits && !cl(lead.address)) invalid.phone=true;
+  Object.entries(invalid).forEach(([key,bad])=>{
+    const input=document.getElementById(`fex_${containerId}_${index}_${key}`);
+    if(input) input.classList.toggle('needs-attention',!!bad && showAll);
+  });
+  return Object.entries(invalid).filter(([,bad])=>bad).map(([key])=>key);
+}
+
+function validateAllFexLeads(containerId) {
+  const leads=window._fexLeadsState?.[containerId]||[];
+  const problems=[];
+  leads.forEach((lead,index)=>{const fields=validateFexLeadCard(containerId,index,true);if(fields.length)problems.push({index,lead,fields});});
+  return problems;
+}
+
+function openLeadFolderDb() {
+  return new Promise((resolve,reject)=>{
+    const request=indexedDB.open('michelles-desk',1);
+    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('settings'))db.createObjectStore('settings');};
+    request.onsuccess=()=>resolve(request.result); request.onerror=()=>reject(request.error);
+  });
+}
+
+async function loadStoredLeadFolderHandle() {
+  if(leadFolderHandleLoaded)return leadFolderHandleCache;
+  leadFolderHandleLoaded=true;
+  try{const db=await openLeadFolderDb();leadFolderHandleCache=await new Promise((resolve,reject)=>{const tx=db.transaction('settings','readonly');const req=tx.objectStore('settings').get('individualLeadsFolder');req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);});db.close();}catch(e){console.warn('Could not load saved lead folder',e);}
+  return leadFolderHandleCache;
+}
+
+async function rememberLeadFolderHandle(handle) {
+  leadFolderHandleCache=handle;leadFolderHandleLoaded=true;
+  try{const db=await openLeadFolderDb();await new Promise((resolve,reject)=>{const tx=db.transaction('settings','readwrite');tx.objectStore('settings').put(handle,'individualLeadsFolder');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();}catch(e){console.warn('Could not remember lead folder',e);}
+}
+
+async function getLeadFolderForFinalize() {
+  if(!('showDirectoryPicker' in window))return null;
+  try{
+    if(leadFolderHandleCache){const permission=await leadFolderHandleCache.requestPermission({mode:'readwrite'});if(permission==='granted')return leadFolderHandleCache;}
+    const handle=await window.showDirectoryPicker({id:'individual-leads',mode:'readwrite',startIn:'documents'});
+    await rememberLeadFolderHandle(handle);return handle;
+  }catch(e){if(e?.name!=='AbortError')console.warn('Folder selection failed',e);return null;}
+}
+
+async function buildLeadPdfBlob(pageIdx,containerId) {
+  const base64=window._fexPdfState?.[containerId]||lastFexPdfB64;
+  if(!base64)throw new Error('Source PDF is no longer in memory');
+  const bytes=Uint8Array.from(atob(base64),ch=>ch.charCodeAt(0));
+  const src=await PDFLib.PDFDocument.load(bytes);
+  if(pageIdx<0||pageIdx>=src.getPageCount())throw new Error('Lead page not found');
+  const out=await PDFLib.PDFDocument.create();const [page]=await out.copyPages(src,[pageIdx]);out.addPage(page);
+  return new Blob([await out.save()],{type:'application/pdf'});
+}
+
+async function uniqueFolderFileName(folder,requested) {
+  const dot=requested.toLowerCase().endsWith('.pdf')?requested.slice(0,-4):requested;
+  for(let n=1;n<100;n++){const name=n===1?`${dot}.pdf`:`${dot} (${n}).pdf`;try{await folder.getFileHandle(name);continue;}catch(e){if(e?.name==='NotFoundError')return name;throw e;}}
+  return `${dot} ${Date.now()}.pdf`;
+}
+
+async function saveLeadPdf(blob,lead,folder) {
+  const requested=leadFileName(lead);
+  if(folder){const fileName=await uniqueFolderFileName(folder,requested);const handle=await folder.getFileHandle(fileName,{create:true});const writer=await handle.createWritable();await writer.write(blob);await writer.close();return {mode:'folder',fileName};}
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=requested;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);return {mode:'download',fileName:requested};
+}
+
+function renderFexFinalizeReceipt(containerId,outcome,fileResults,folderUsed) {
+  const host=document.getElementById(containerId);if(!host)return;
+  host.querySelector('.lead-receipt')?.remove();
+  const items=outcome.items.map((item,index)=>{const file=fileResults[index]||{};const sheetText=item.sheetStatus==='saved'?(item.verified?`Sheet row ${item.sheetRow} · verified`:`Sheet row ${item.sheetRow} · verify warning`):item.sheetStatus==='existing'?`Already in Sheet · row ${item.sheetRow}`:item.message||'Not saved';const sheetClass=item.sheetStatus==='saved'&&item.verified?'lead-receipt-ok':item.sheetStatus==='existing'?'lead-receipt-warn':'lead-receipt-warn';const fileText=file.error?`PDF needs attention: ${file.error}`:file.mode==='folder'?`Filed: ${file.fileName}`:`Downloaded: ${file.fileName}`;return `<div class="lead-receipt-row"><div><b>${htmlSafe([item.lead.firstName,item.lead.lastName].filter(Boolean).join(' '))}</b>${item.lead.spouseName?`<div style="color:var(--muted)">Household: ${htmlSafe(item.lead.spouseName)}</div>`:''}</div><div class="${sheetClass}">${htmlSafe(sheetText)}</div><div class="${file.error?'lead-receipt-warn':'lead-receipt-ok'}">${htmlSafe(fileText)}</div></div>`;}).join('');
+  const receipt=document.createElement('div');receipt.className='lead-receipt';receipt.innerHTML=`<div class="lead-receipt-title">✓ Lead intake finished</div><div class="lead-receipt-copy">Michelle’s Desk checked the Sheet itself. ${folderUsed?'The PDFs were filed directly into the selected Individual Leads folder.':'The browser downloaded the renamed PDFs because no writable folder was selected.'}</div>${items}`;host.appendChild(receipt);
+}
+
+async function finalizeFexLeads(containerId,btn) {
+  if(!accessToken){toast('Sign in first');return;}
+  const problems=validateAllFexLeads(containerId);
+  if(problems.length){toast(`Check ${problems.length} lead card${problems.length===1?'':'s'} highlighted in orange`);document.getElementById(`fex_${containerId}_${problems[0].index}_${problems[0].fields[0]}`)?.focus();return;}
+  if(window._fexFinalizeInFlight)return;window._fexFinalizeInFlight=true;btn.disabled=true;btn.textContent='Choose folder…';
+  const folder=await getLeadFolderForFinalize();
+  btn.textContent='Saving and verifying…';
+  try{
+    const outcome=await saveFexLeads(containerId,btn,{quiet:true});
+    const leads=window._fexLeadsState?.[containerId]||[];const fileResults=[];
+    for(let i=0;i<leads.length;i++){try{const blob=await buildLeadPdfBlob(leads[i]._pdfPageIndex??i,containerId);fileResults.push(await saveLeadPdf(blob,leads[i],folder));}catch(e){fileResults.push({error:e.message});}}
+    renderFexFinalizeReceipt(containerId,outcome,fileResults,!!folder);btn.textContent='✓ Finalized and verified';btn.style.background='var(--sage)';toast(`✓ ${leads.length} lead${leads.length===1?'':'s'} finalized`);
+  }catch(e){console.error('Finalize lead error',e);btn.disabled=false;btn.textContent='Retry Finalize';toast('Could not finish: '+e.message);}finally{window._fexFinalizeInFlight=false;}
+}
+
+async function saveFexLeads(containerId, btn, options={}) {
   if (!accessToken) { toast('Sign in first'); return; }
   if (window._fexSaveInFlight) return;          // double-tap guard
   window._fexSaveInFlight = true;
   btn.disabled = true;
-  btn.textContent = 'Saving…';
+  if(!options.quiet)btn.textContent = 'Saving…';
 
   // Pull the CURRENT (possibly hand-corrected) values, not a frozen snapshot from extraction time —
   // this is what lets a corrected name (e.g. an AI misread) actually get saved.
   const leads = window._fexLeadsState?.[containerId] || [];
-  const report = [];
   try {
     // 1. Read the Leads tab so we can (a) confirm the real header layout, (b) dedupe, (c) place rows deterministically
     const getResp = await fetch(
@@ -5473,31 +5593,44 @@ async function saveFexLeads(containerId, btn) {
     const lastCol = firstCol + 2;   // Last sits 2 columns after First (D..F pattern)
     const spouseCol = firstCol + 1;
     const phoneCol = firstCol + 9;  // Phone sits 9 columns after First, per confirmed layout
+    const addressCol = firstCol + 3;
+    const zipCol = firstCol + 7;
+    const leadIdentityKey=(first,last,phone,address,zip)=>{
+      const name=`${cl(first).toLowerCase()}|${cl(last).toLowerCase()}`;
+      const digits=String(phone||'').replace(/\D/g,'');
+      if(digits)return `${name}|phone:${digits}`;
+      const normalizedAddress=cl(address).toLowerCase().replace(/[^a-z0-9]/g,'');
+      return `${name}|address:${normalizedAddress}|zip:${cl(zip)}`;
+    };
 
-    // Existing lead keys for dedupe
-    const existKeys = new Set(existing.slice(1).map(r =>
-      `${cl(r[firstCol]).toLowerCase()}|${cl(r[lastCol]).toLowerCase()}|${String(r[phoneCol]||'').replace(/\D/g,'')}`));
+    // Existing lead keys for dedupe, including the exact row so the receipt can prove
+    // where an already-saved lead lives instead of merely saying "duplicate."
+    const existingRowsByKey = new Map();
+    existing.slice(1).forEach((r,index)=>{
+      const key=leadIdentityKey(r[firstCol],r[lastCol],r[phoneCol],r[addressCol],r[zipCol]);
+      if(cl(r[firstCol])&&cl(r[lastCol])&&!existingRowsByKey.has(key))existingRowsByKey.set(key,index+2);
+    });
 
     let nextRow = existing.length + 1;          // deterministic placement — no append() drift
     const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
-    const rowsToWrite = [];
+    const rowsToWrite = [], items=[];
 
     for (const lead of leads) {
       const first = cl(lead.firstName), last = cl(lead.lastName);
       const phoneDigits = String(lead.phone||'').replace(/\D/g,'');
-      if (!first && !last) { report.push(`⚠ Skipped a lead with no name`); continue; }
-      if (!phoneDigits && !cl(lead.address)) { report.push(`⚠ ${first} ${last}: skipped — no phone or address`); continue; }
-      const key = `${first.toLowerCase()}|${last.toLowerCase()}|${phoneDigits}`;
-      if (existKeys.has(key)) { report.push(`↩ ${first} ${last}: already in Leads — skipped`); continue; }
-      existKeys.add(key);
+      if (!first || !last) { items.push({lead,sheetStatus:'skipped',message:'First and last name are required'}); continue; }
+      if (!phoneDigits && !cl(lead.address)) { items.push({lead,sheetStatus:'skipped',message:'No phone or address'}); continue; }
+      const key = leadIdentityKey(first,last,lead.phone,lead.address,lead.zip);
+      if (existingRowsByKey.has(key)) { items.push({lead,sheetStatus:'existing',sheetRow:existingRowsByKey.get(key),verified:true}); continue; }
       // Confirmed layout: A=Status, then blank(s), D=First, E=Spouse, F=Last, G=Address, H=City,
       // I=County, J=State, K=Zip, L=LeadDate, M=Phone, N=DOB, O=Age
-      rowsToWrite.push([
+      const values=[
         'Dial', '', '', first, cl(lead.spouseName), last,
         cl(lead.address), cl(lead.city), cl(lead.county) || guessCounty(lead.city),
         cl(lead.state) || 'IL', cl(lead.zip), today, cl(lead.phone), cl(lead.dob), cl(lead.age)
-      ]);
-      report.push(`✓ ${first} ${last}: saved`);
+      ];
+      const sheetRow=nextRow+rowsToWrite.length;
+      rowsToWrite.push(values);items.push({lead,sheetStatus:'saved',sheetRow,verified:false,key});existingRowsByKey.set(key,sheetRow);
     }
 
     if (rowsToWrite.length) {
@@ -5509,21 +5642,32 @@ async function saveFexLeads(containerId, btn) {
           body: JSON.stringify({ values: rowsToWrite }) }
       );
       if (!putResp.ok) { const e = await putResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Write failed (HTTP ${putResp.status})`); }
+
+      // Read the exact rows back. Michelle should never have to open the Sheet to check
+      // whether the transfer worked; the app verifies first/last/phone itself.
+      const verifyResp=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:`Bearer ${accessToken}`}});
+      if(!verifyResp.ok){const e=await verifyResp.json().catch(()=>({}));throw new Error(e?.error?.message||`Saved, but verification read failed (HTTP ${verifyResp.status})`);}
+      const verifiedRows=(await verifyResp.json()).values||[];
+      items.filter(item=>item.sheetStatus==='saved').forEach((item,index)=>{
+        const row=verifiedRows[index]||[];
+        const actual=leadIdentityKey(row[firstCol],row[lastCol],row[phoneCol],row[addressCol],row[zipCol]);
+        item.verified=actual===item.key;
+      });
     }
 
     const savedN = rowsToWrite.length;
-    btn.textContent = savedN ? `✓ Saved ${savedN} lead${savedN>1?'s':''} to Leads tab` : 'Nothing new to save';
-    btn.style.background = 'var(--sage)';
-    toast(savedN ? `✓ ${savedN} lead${savedN>1?'s':''} saved to Leads tab` : 'No new leads — all were duplicates or invalid');
-    const rep = document.createElement('div');
-    rep.style.cssText = 'font-size:12px;margin-top:8px;line-height:1.7;color:var(--muted)';
-    rep.innerHTML = report.join('<br>');
-    btn.parentElement.appendChild(rep);
+    const outcome={savedN,items,verified:items.filter(x=>x.sheetStatus==='saved').every(x=>x.verified)};
+    if(!options.quiet){
+      btn.textContent = savedN ? `✓ Saved and verified ${savedN} lead${savedN>1?'s':''}` : 'Already saved';
+      btn.style.background = 'var(--sage)';
+      toast(savedN ? `✓ ${savedN} lead${savedN>1?'s':''} saved and verified` : 'No new leads — existing records found');
+      const rep=document.createElement('div');rep.style.cssText='font-size:12px;margin-top:8px;line-height:1.7;color:var(--muted)';rep.innerHTML=items.map(item=>item.sheetStatus==='saved'?`✓ ${htmlSafe(item.lead.firstName)} ${htmlSafe(item.lead.lastName)}: Sheet row ${item.sheetRow} verified`:item.sheetStatus==='existing'?`↩ ${htmlSafe(item.lead.firstName)} ${htmlSafe(item.lead.lastName)}: already in Sheet row ${item.sheetRow}`:`⚠ ${htmlSafe(item.message)}`).join('<br>');btn.parentElement.appendChild(rep);
+    }
+    return outcome;
   } catch(e) {
     console.error('FEX save error:', e);
-    btn.disabled = false;
-    btn.textContent = '💾 Retry Save';
-    toast('Save failed: ' + e.message);
+    if(!options.quiet){btn.disabled = false;btn.textContent = '💾 Retry Save';toast('Save failed: ' + e.message);}
+    throw e;
   } finally {
     window._fexSaveInFlight = false;
   }
@@ -5847,11 +5991,15 @@ async function saveLeadToSheet() {
   window._fexLeadsState = window._fexLeadsState || {};
   window._fexLeadsState[cid] = [lead];
   const fake = { disabled:false, textContent:'', style:{}, parentElement: btn.parentElement };
-  await saveFexLeads(cid, fake);
-  if (fake.textContent.startsWith('✓')) {
-    btn.textContent = '✓ Saved!';
-    setTimeout(() => { resetScanner(); }, 1400);
-  } else {
+  try {
+    await saveFexLeads(cid, fake);
+    if (fake.textContent.startsWith('✓')) {
+      btn.textContent = '✓ Saved!';
+      setTimeout(() => { resetScanner(); }, 1400);
+    } else {
+      btn.disabled = false; btn.textContent = '💾 Save to Leads Tab';
+    }
+  } catch(e) {
     btn.disabled = false; btn.textContent = '💾 Save to Leads Tab';
   }
 }
@@ -7926,23 +8074,17 @@ function impLog(msg,cls=''){
 // ── SPLIT & DOWNLOAD INDIVIDUAL LEAD PDFs (pdf-lib) ──────────────────────────
 let lastFexPdfB64 = null;   // set by processFexPDF / importer so pages can be split out
 function leadFileName(lead) {
-  const last = cl(lead.lastName).toLowerCase().replace(/[^a-z-]/g,'');
-  const first = cl(lead.firstName).toLowerCase().replace(/[^a-z-]/g,'');
-  const spouse = cl(lead.spouseName).split(' ')[0].toLowerCase().replace(/[^a-z-]/g,'');
+  const clean = value => toProperCase(cl(value)).replace(/[<>:"/\\|?*]/g,'').replace(/\s+/g,' ').trim();
+  const last = clean(lead.lastName) || 'Unknown';
+  const first = clean(lead.firstName) || 'Lead';
+  const spouse = clean(cl(lead.spouseName).split(/\s+/)[0]);
   return `${last},${first}${spouse ? '&' + spouse : ''}.pdf`;
 }
 async function downloadSplitLead(pageIdx, containerId) {
   try {
     const lead = (window._fexLeadsState?.[containerId]||[])[pageIdx];
     if (!lead) { toast('Could not find that lead'); return; }
-    if (!lastFexPdfB64) { toast('Source PDF no longer in memory — re-import first'); return; }
-    const bytes = Uint8Array.from(atob(lastFexPdfB64), ch => ch.charCodeAt(0));
-    const src = await PDFLib.PDFDocument.load(bytes);
-    if (pageIdx >= src.getPageCount()) { toast('Page not found in PDF'); return; }
-    const out = await PDFLib.PDFDocument.create();
-    const [pg] = await out.copyPages(src, [pageIdx]);
-    out.addPage(pg);
-    const blob = new Blob([await out.save()], { type: 'application/pdf' });
+    const blob = await buildLeadPdfBlob(lead._pdfPageIndex??pageIdx,containerId);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = leadFileName(lead);
