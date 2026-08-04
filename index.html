@@ -741,6 +741,7 @@ const SHEET_ID  = '1mPtpXbJLB-4vusVrq9MJkSWYmz6BQ7qhAYerAQalDCA';
 const CLIENT_ID = '1038858471408-dc67okrrvbv4efem7ubvj2754a0uup48.apps.googleusercontent.com';
 const SHEET_TAB = 'Clients';
 const NOTES_TAB = 'SessionNotes'; // new sheet tab for capture layer — see Session Notes below
+const COMMISSION_HISTORY_TAB = 'Commission History'; // permanent, deduplicated carrier-pay audit trail
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly';
 
 // Column indices (0-based)
@@ -3381,7 +3382,7 @@ const CARRIER_ADAPTERS = {
     },
   },
   lifeshield: {
-    label: 'LifeShield',
+    label: 'LifeShield National',
     sourceType: 'xlsx-report',
     // Declared, checkable facts about what this connector can provide — Michelle's Desk
     // asks these rather than assuming (e.g. "can I expect a premium field from this source?").
@@ -3561,7 +3562,9 @@ function normalizeCarrierMatchName(name) {
 
 function clientMatchesCarrierKey(client, carrierKey) {
   if (carrierKey === 'generic') return true;
-  const company = `${client.newCompany||''} ${client.existingCompany||''}`.toLowerCase();
+  // Some older Desk rows put the carrier/product wording in New Face instead of
+  // New Company. Include it as a hint, while policy number remains the strongest key.
+  const company = `${client.newCompany||''} ${client.existingCompany||''} ${client.newFace||''} ${client.displayCompany||''}`.toLowerCase();
   if (carrierKey === 'pfa' || carrierKey === 'polishfalcons') {
     return company.includes('polish falcon') || /(^|\s)pfa(\s|$)/.test(company);
   }
@@ -3617,7 +3620,7 @@ function matchCarrierRecords(carrierKey, records, clients, options = {}) {
   const carrierHint = String(options.carrierHint || '').toLowerCase();
   const hintWords = carrierHint.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !['detected','carrier','report'].includes(w));
   const carrierScore = c => {
-    const company = `${c.newCompany||''} ${c.existingCompany||''}`.toLowerCase();
+    const company = `${c.newCompany||''} ${c.existingCompany||''} ${c.newFace||''} ${c.displayCompany||''}`.toLowerCase();
     return hintWords.some(word => company.includes(word)) ? 1000 : 0;
   };
   const rowScore = c => carrierScore(c)
@@ -3653,7 +3656,12 @@ function matchCarrierRecords(carrierKey, records, clients, options = {}) {
     // A person may have many appointment/lead rows. Use each Sheet row at most once per
     // import and prefer the actual sold-policy row, rather than repeatedly writing every
     // name-only approval into the first historical row for that person.
-    const candidates = normRecName ? deskCarrierClients
+    // A new carrier export may be the first authoritative evidence tying a person to
+    // that carrier. Permit a strong exact-name match to a row with no carrier recorded;
+    // never steal a row already assigned to a different carrier.
+    const nameCandidatePool = carrierKey === 'generic' ? clients : clients.filter(c =>
+      isThisCarrier(c) || (!c.newCompany && !c.existingCompany));
+    const candidates = normRecName ? nameCandidatePool
       .filter(c => !matchedSheetRows.has(c.sheetRow) && normalizeCarrierMatchName(c.fullName) === normRecName)
       .sort((a,b) => rowScore(b)-rowScore(a)) : [];
     match = candidates[0] || null;
@@ -5598,8 +5606,153 @@ function smartNormalizeCommissionRows(rows) {
   };
 }
 
+function smartWorkbookSheetName(workbook, wanted) {
+  return workbook.SheetNames.find(name => smartHeader(name) === smartHeader(wanted)) || '';
+}
+
+function smartSheetObjects(workbook, wanted) {
+  const sheetName = smartWorkbookSheetName(workbook,wanted);
+  if (!sheetName) return [];
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header:1, defval:'', raw:false });
+  if (!rows.length) return [];
+  const headers = rows[0].map(smartHeader);
+  return rows.slice(1).map(values => {
+    const row = {};
+    headers.forEach((header,index) => { if (header) row[header] = values[index]; });
+    return row;
+  }).filter(row => Object.values(row).some(value => value !== '' && value != null));
+}
+
+function smartIsoDate(value) {
+  if (value instanceof Date && !isNaN(value)) {
+    return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
+  }
+  const text = String(value || '').trim();
+  let match = text.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
+  const matches = [...text.matchAll(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/g)];
+  match = matches[matches.length-1];
+  return match ? `${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}` : '';
+}
+
+function smartDisplayIsoDate(iso) {
+  const match = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${Number(match[2])}/${Number(match[3])}/${match[1]}` : String(iso||'');
+}
+
+function smartCarrierName(name) {
+  const text = String(name || '').trim();
+  if (!text.includes(',')) return text;
+  const [last,...rest] = text.split(',');
+  return `${rest.join(' ').trim()} ${last.trim()}`.trim();
+}
+
+function smartIsQlCommissionWorkbook(workbook, fileName) {
+  return /QLCSAGXX/i.test(fileName || '') || ['Summary','Advance Paydown','Advance'].every(name => smartWorkbookSheetName(workbook,name));
+}
+
+// QL/LifeShield statements are multi-tab ledgers, not one flat table. The Summary tab
+// proves the advance-exposure roll-forward; Advance Paydown proves earned commission.
+// The carrier labels the small monthly credit "Advance"; Michelle believes it is likely
+// second-year renewal income. Keep it separate and carrier-labeled until that is confirmed.
+function smartParseQlCommissionWorkbook(workbook, fileName) {
+  const summaryName = smartWorkbookSheetName(workbook,'Summary');
+  if (!summaryName) throw new Error('This looks like a LifeShield statement, but the Summary tab is missing.');
+  const summaryRows = XLSX.utils.sheet_to_json(workbook.Sheets[summaryName], { header:1, defval:'', raw:false });
+  const summaryValue = (label,column=2) => {
+    const row = summaryRows.find(values => smartHeader(values[1]) === smartHeader(label));
+    return row ? row[column] : '';
+  };
+  const period = String(summaryValue('Statement Period') || '').trim();
+  const statementDate = smartIsoDate(period);
+  const agentName = String(summaryValue('Agent Name') || '').trim();
+  const metrics = {
+    beginningBalance: parseMoney(summaryValue('Beginning Balance')),
+    endingBalance: parseMoney(summaryValue('Ending Balance')),
+    payment: parseMoney(summaryValue('Payment',5)),
+    grossAdvanceChargeback: 0,
+    netPayout: 0,
+    earned: 0,
+  };
+
+  const byPolicy = new Map();
+  const ensurePolicy = row => {
+    const policyNumber = String(smartPick(row,['POLICYNUMBER','POLICYNO','POLICY']) || '').trim();
+    if (!policyNumber) return null;
+    if (!byPolicy.has(policyNumber)) byPolicy.set(policyNumber, {
+      policyNumber,
+      insuredName: smartCarrierName(smartPick(row,['INSUREDNAME','CLIENT'])),
+      commissionAmount: 0,
+      commissionType: '',
+      grossAdvance: 0,
+      netAdvance: 0,
+      writingAgent: String(smartPick(row,['WRITINGAGENTNAME','WRITINGAGENT']) || '').trim(),
+    });
+    return byPolicy.get(policyNumber);
+  };
+
+  ['Advance Paydown','As Earned'].forEach(activity => {
+    smartSheetObjects(workbook,activity).forEach(row => {
+      const policy = ensurePolicy(row);
+      if (!policy) return;
+      const earned = parseMoney(smartPick(row,['EARNED','COMMISSIONAMOUNT','AMOUNT']));
+      policy.commissionAmount += earned;
+      if (earned) policy.commissionType = policy.commissionType || activity;
+      metrics.earned += earned;
+    });
+  });
+
+  ['Advance','Chargeback'].forEach(activity => {
+    smartSheetObjects(workbook,activity).forEach(row => {
+      const policy = ensurePolicy(row);
+      if (!policy) return;
+      const gross = parseMoney(smartPick(row,['GROSSADVANCE','GROSSADVANCECHARGEBACK','AMOUNT']));
+      const net = parseMoney(smartPick(row,['NETADVANCE','NETPAYOUT','NETPAYOUTCURRENTPERIOD']));
+      policy.grossAdvance += gross;
+      policy.netAdvance += net;
+      policy.commissionType = policy.commissionType || activity;
+      metrics.grossAdvanceChargeback += gross;
+      metrics.netPayout += net;
+    });
+  });
+
+  const policies = [...byPolicy.values()];
+  if (!policies.length) throw new Error('I recognized the LifeShield statement but found no policy-number detail rows.');
+  const auditRows = policies.map(policy => ({
+    ...policy,
+    activity: policy.commissionType || 'Commission activity',
+    earnedCommission: policy.commissionAmount,
+  }));
+  return {
+    carrier:'LifeShield National',
+    carrierKey:'lifeshield',
+    period,
+    statementDate,
+    agentName,
+    sourceFile:fileName,
+    reportKind:'ql-commission',
+    policies,
+    auditRows,
+    totalCommission:metrics.earned,
+    metrics,
+  };
+}
+
 async function smartParseSpreadsheet(file) {
   const workbook = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+  if (smartIsQlCommissionWorkbook(workbook,file.name)) {
+    const data = smartParseQlCommissionWorkbook(workbook,file.name);
+    return { type:'commission', label:`LifeShield monthly commission · ${smartDisplayIsoDate(data.statementDate)}`, count:data.policies.length, data };
+  }
+
+  const bookSheet = smartWorkbookSheetName(workbook,'AllBookOfBusiness');
+  if (bookSheet) {
+    const objects = smartSheetObjects(workbook,bookSheet);
+    const records = smartNormalizePolicyRows(objects);
+    if (!records.length) throw new Error('I recognized the LifeShield book of business but found no usable policy rows.');
+    return { type:'policy', label:'LifeShield National book of business', count:records.length, records, carrier:'LifeShield National', carrierKeyHint:'lifeshield', fullBook:true };
+  }
+
   const parsed = smartRowsFromWorkbook(workbook);
   const type = smartDetectWorkbook(parsed, file.name);
   if (type === 'policy') {
@@ -5775,6 +5928,148 @@ async function smartParsePdf(file) {
   return { type:classification.documentType || 'other', label:'Insurance report PDF', count:records.length, summary:classification.summary || 'Read successfully; no policy reconciliation was identified.' };
 }
 
+const COMMISSION_HISTORY_HEADERS = ['Import Key','Carrier','Statement Period','Statement Date','Policy #','Insured','Activity','Earned / Paydown','Carrier “Advance” / Possible Renewal','Cash Payout','Beginning Advance Balance','Ending Advance Balance','Payment','Writing Agent','Source File','Imported At','Audit Flag'];
+
+async function smartSheetsRequest(url,options={}) {
+  if (!accessToken) throw new Error('Sign in to Google first');
+  const response = await fetch(url, {
+    ...options,
+    headers:{ Authorization:`Bearer ${accessToken}`, ...(options.body?{'Content-Type':'application/json'}:{}), ...(options.headers||{}) },
+  });
+  if (response.status === 401) {
+    accessToken = null;
+    sessionStorage.removeItem('m_token');
+    sessionStorage.removeItem('m_token_exp');
+    throw new Error('Google session expired — sign in again');
+  }
+  if (!response.ok) {
+    const error = await response.json().catch(()=>({}));
+    throw new Error(error?.error?.message || `Google Sheets ${response.status}`);
+  }
+  return response.status === 204 ? {} : response.json();
+}
+
+async function ensureCommissionHistoryTab() {
+  const metadata = await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?fields=sheets.properties`);
+  if (metadata.sheets?.some(sheet => sheet.properties?.title === COMMISSION_HISTORY_TAB)) return;
+  await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+    method:'POST',
+    body:JSON.stringify({requests:[{addSheet:{properties:{title:COMMISSION_HISTORY_TAB,gridProperties:{rowCount:500,columnCount:17,frozenRowCount:1}}}}]}),
+  });
+  const range = `${COMMISSION_HISTORY_TAB}!A1:Q1`;
+  await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`, {
+    method:'PUT', body:JSON.stringify({values:[COMMISSION_HISTORY_HEADERS]}),
+  });
+}
+
+function smartCommissionAuditFlag(data,existingRows) {
+  const currentDate = new Date(`${data.statementDate}T12:00:00`);
+  const sameCarrier = existingRows.filter(row => String(row[1]||'').toLowerCase() === String(data.carrier||'').toLowerCase())
+    .map(row => ({ row, date:new Date(row[3]) }))
+    .filter(item => !isNaN(item.date) && item.date < currentDate)
+    .sort((a,b) => b.date-a.date);
+  if (!sameCarrier.length) return 'Baseline imported';
+  const prior = sameCarrier[0];
+  const days = Math.round((currentDate-prior.date)/86400000);
+  if (days > 45) return `ALERT — ${days}-day gap; check for a missing statement`;
+  const priorEnding = parseMoney(prior.row[11]);
+  const beginning = parseMoney(data.metrics?.beginningBalance);
+  if (Math.abs(priorEnding-beginning) > .01) return `ALERT — prior ending $${priorEnding.toFixed(2)} does not match beginning $${beginning.toFixed(2)}`;
+  return 'OK — prior ending balance matches beginning';
+}
+
+function smartCommissionImportKey(data,row) {
+  const slug = value => String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  return `${slug(data.carrier)}|${data.statementDate}|${String(row.policyNumber||'').trim().toUpperCase()}|${slug(row.activity||row.commissionType)}`;
+}
+
+async function persistCommissionStatement(data,sourceFile) {
+  if (!data?.auditRows?.length) {
+    // Generic carrier statements still render normally; the permanent ledger waits for
+    // an adapter that can prove period, policy, activity and amounts without guessing.
+    return { inserted:0, duplicate:0, unsupported:true };
+  }
+  await ensureCommissionHistoryTab();
+  const readRange = `${COMMISSION_HISTORY_TAB}!A2:Q`;
+  const existing = await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(readRange)}?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`);
+  const existingRows = existing.values || [];
+  const existingKeys = new Set(existingRows.map(row => String(row[0]||'')));
+  const auditFlag = smartCommissionAuditFlag(data,existingRows);
+  const importedAt = new Date().toISOString();
+  const pending = data.auditRows.filter(row => !existingKeys.has(smartCommissionImportKey(data,row)));
+  if (!pending.length) return { inserted:0, duplicate:data.auditRows.length, auditFlag };
+  const values = pending.map((row,index) => [
+    smartCommissionImportKey(data,row),
+    data.carrier || 'Unknown carrier',
+    data.period || '',
+    data.statementDate || '',
+    row.policyNumber || '',
+    row.insuredName || '',
+    row.activity || row.commissionType || 'Commission activity',
+    Number(row.earnedCommission ?? row.commissionAmount ?? 0),
+    Number(row.grossAdvance || 0),
+    Number(row.netAdvance || 0),
+    index === 0 ? Number(data.metrics?.beginningBalance || 0) : '',
+    index === 0 ? Number(data.metrics?.endingBalance || 0) : '',
+    index === 0 ? Number(data.metrics?.payment || 0) : '',
+    row.writingAgent || data.agentName || '',
+    sourceFile || data.sourceFile || '',
+    importedAt,
+    auditFlag,
+  ]);
+  const appendRange = `${COMMISSION_HISTORY_TAB}!A:Q`;
+  await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method:'POST', body:JSON.stringify({values}),
+  });
+  return { inserted:values.length, duplicate:data.auditRows.length-values.length, auditFlag };
+}
+
+function smartConsolidateCommissionStatements(items) {
+  const statements = items.slice().sort((a,b) => String(a.data.statementDate).localeCompare(String(b.data.statementDate)));
+  const first = statements[0].data, last = statements[statements.length-1].data;
+  return {
+    carrier:first.carrier,
+    period:`${smartDisplayIsoDate(first.statementDate)} – ${smartDisplayIsoDate(last.statementDate)}`,
+    agentName:first.agentName,
+    policies:statements.flatMap(item => item.data.policies || []),
+    totalCommission:statements.reduce((sum,item) => sum + Number(item.data.totalCommission||0),0),
+    metrics:{
+      earned:statements.reduce((sum,item) => sum + Number(item.data.metrics?.earned||0),0),
+      grossAdvanceChargeback:statements.reduce((sum,item) => sum + Number(item.data.metrics?.grossAdvanceChargeback||0),0),
+      netPayout:statements.reduce((sum,item) => sum + Number(item.data.metrics?.netPayout||0),0),
+      beginningBalance:Number(first.metrics?.beginningBalance||0),
+      endingBalance:Number(last.metrics?.endingBalance||0),
+      payment:statements.reduce((sum,item) => sum + Number(item.data.metrics?.payment||0),0),
+    },
+    statementCount:statements.length,
+    reportKind:'ql-commission-batch',
+  };
+}
+
+async function smartImportAllCommissionStatements() {
+  const items = smartFileResults.filter(item => item.ok && item.type === 'commission' && item.data?.auditRows?.length)
+    .sort((a,b) => String(a.data.statementDate).localeCompare(String(b.data.statementDate)));
+  if (!items.length) return;
+  const button = document.getElementById('smartSaveAllCommissionBtn');
+  if (button) { button.disabled=true; button.textContent='Saving audit trail…'; }
+  try {
+    let inserted=0,duplicate=0,alerts=[];
+    for (let index=0;index<items.length;index++) {
+      if (button) button.textContent=`Saving ${index+1} of ${items.length}…`;
+      const saved = await persistCommissionStatement(items[index].data,items[index].fileName);
+      inserted += saved.inserted || 0;
+      duplicate += saved.duplicate || 0;
+      if (/^ALERT/.test(saved.auditFlag||'')) alerts.push(saved.auditFlag);
+    }
+    matchCommissions(smartConsolidateCommissionStatements(items));
+    toast(inserted ? `✓ Saved ${inserted} monthly audit row${inserted===1?'':'s'}${alerts.length?` · ${alerts.length} alert${alerts.length===1?'':'s'}`:''}` : `All ${duplicate} monthly row${duplicate===1?' was':'s were'} already saved`);
+  } catch (error) {
+    toast(`Could not save commission history — ${error.message}`);
+    if (button) { button.disabled=false; button.textContent=`Save all ${items.length} statements`; }
+    console.error(error);
+  }
+}
+
 async function smartHandleFiles(fileList) {
   const files = [...(fileList || [])];
   if (!files.length) return;
@@ -5801,14 +6096,16 @@ async function smartHandleFiles(fileList) {
 function renderSmartFileResults() {
   document.getElementById('commReading').style.display='none';
   const results = document.getElementById('commResults');
+  const commissionCount = smartFileResults.filter(r => r.ok && r.type === 'commission' && r.data?.auditRows?.length).length;
   results.style.display='block';
   results.innerHTML = `<div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px">I sorted the files</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review recognized policy or commission reports before anything changes in the Sheet.</div>
+    ${commissionCount > 1 ? `<button id="smartSaveAllCommissionBtn" onclick="smartImportAllCommissionStatements()" style="width:100%;padding:12px 16px;margin:0 0 12px;background:linear-gradient(135deg,var(--ink),#343456);color:#fff;border:0;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">✓ Save all ${commissionCount} monthly statements to the audit ledger</button>` : ''}
     ${smartFileResults.map((r,i) => `<div style="border:1.5px solid ${r.ok?'var(--border)':'var(--rust)'};background:${r.ok?'#fff':'var(--rust-light)'};border-radius:11px;padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
         <div><div style="font-weight:700;font-size:13px">${r.ok?'✓':'⚠️'} ${smartHtml(r.fileName)}</div>
         <div style="font-size:11px;color:${r.ok?'var(--muted)':'var(--rust)'};margin-top:2px">${r.ok?`${smartHtml(r.label)} · ${r.count||0} row${r.count===1?'':'s'} recognized`:smartHtml(r.error)}</div></div>
-        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Review matches</button>` : ''}
+        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${r.type==='commission'?'Save to ledger':'Review matches'}</button>` : ''}
       </div>
       ${r.ok && !['policy','commission'].includes(r.type) ? `<div style="font-size:11px;color:var(--muted);margin-top:7px">Recognized for reference. It does not contain policy-level status or commission rows to reconcile.</div>` : ''}
     </div>`).join('')}
@@ -5818,6 +6115,9 @@ function renderSmartFileResults() {
 function detectKnownCarrierReport(item) {
   const records = item?.records || [];
   if (!records.length) return { carrierKey:'generic', fullBook:false };
+  if (item.carrierKeyHint === 'lifeshield' || /lifeshield/i.test(String(item.carrier||''))) {
+    return { carrierKey:'lifeshield', fullBook:item.fullBook === true };
+  }
   const pfaPolicyCount = records.filter(r => /^(?:FE|[LP])\d{5,6}$/i.test(String(r.policyNumber||'').trim())).length;
   const pfaCodeCount = records.filter(r => /^(?:A|B|C|N|R|X|1|2|3|L|D|\*)$/i.test(String(r.status||'').trim())).length;
   const statedCarrier = String(item.carrier||'').toLowerCase();
@@ -5828,10 +6128,22 @@ function detectKnownCarrierReport(item) {
     : { carrierKey:'generic', fullBook:false };
 }
 
-function smartReviewFile(index) {
+async function smartReviewFile(index) {
   const item = smartFileResults[index];
   if (!item || !item.ok) return;
-  if (item.type === 'commission') { matchCommissions(item.data); return; }
+  if (item.type === 'commission') {
+    try {
+      const saved = await persistCommissionStatement(item.data,item.fileName);
+      matchCommissions(item.data);
+      toast(saved.unsupported
+        ? 'Reviewed — this carrier format is not yet eligible for the permanent audit ledger'
+        : saved.inserted ? `✓ Saved ${saved.inserted} commission audit row${saved.inserted===1?'':'s'}` : 'Already saved — no duplicate rows added');
+    } catch (error) {
+      toast(`Could not save commission history — ${error.message}`);
+      console.error(error);
+    }
+    return;
+  }
   if (item.type === 'policy') {
     const detected = detectKnownCarrierReport(item);
     const carrierKey = detected.carrierKey;
@@ -5967,9 +6279,20 @@ function matchCommissions(data) {
     }
   });
 
-  const totalComm = policies.reduce((s,p) => s + (parseFloat(p.commissionAmount)||0), 0);
+  const totalComm = data.totalCommission != null
+    ? Number(data.totalCommission)
+    : policies.reduce((s,p) => s + (parseFloat(p.commissionAmount)||0), 0);
+  const isQl = /^ql-commission/.test(data.reportKind || '');
+  const carrierAdvance = Number(data.metrics?.grossAdvanceChargeback || 0);
+  const endingExposure = Number(data.metrics?.endingBalance || 0);
 
-  let html = `<div class="comm-summary">
+  let html = isQl ? `<div class="comm-summary">
+    <div class="comm-stat"><div class="comm-stat-num">${data.statementCount||1}</div><div class="comm-stat-label">Monthly Statement${(data.statementCount||1)===1?'':'s'}</div></div>
+    <div class="comm-stat good"><div class="comm-stat-num">$${totalComm.toFixed(2)}</div><div class="comm-stat-label">Earned / Paydown</div></div>
+    <div class="comm-stat good"><div class="comm-stat-num">$${carrierAdvance.toFixed(2)}</div><div class="comm-stat-label">Carrier “Advance” / Possible Renewal</div></div>
+    <div class="comm-stat${endingExposure?' warn':''}"><div class="comm-stat-num">$${endingExposure.toFixed(2)}</div><div class="comm-stat-label">Advance Exposure Left</div></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 12px;font-size:11px;font-weight:700"><span style="padding:5px 9px;border-radius:12px;background:var(--sage-light);color:var(--sage)">✓ ${matched.length} matched</span>${unmatched.length?`<span style="padding:5px 9px;border-radius:12px;background:var(--rust-light);color:var(--rust)">⚠ ${unmatched.length} need linking</span>`:''}</div>` : `<div class="comm-summary">
     <div class="comm-stat"><div class="comm-stat-num">${policies.length}</div><div class="comm-stat-label">Statement Lines</div></div>
     <div class="comm-stat good"><div class="comm-stat-num">$${totalComm.toFixed(2)}</div><div class="comm-stat-label">Total Commission</div></div>
     <div class="comm-stat good"><div class="comm-stat-num">${matched.length}</div><div class="comm-stat-label">Matched</div></div>
@@ -5978,12 +6301,14 @@ function matchCommissions(data) {
 
   html += `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">${data.carrier||'Carrier'} · ${data.period||''} ${data.agentName?'· '+data.agentName:''}</div>`;
   html += `<div style="background:var(--blue-light);border-radius:10px;padding:10px 12px;margin:8px 0 12px;font-size:12px;color:var(--ink)">
-    <b>What this proves:</b> these policies had commission activity on this statement. A policy not listed here is not “missing” or inactive. Current policy status comes from the PFA/carrier report and is shown below when it has been imported.
+    ${isQl
+      ? `<b>What this proves:</b> LifeShield credited $${totalComm.toFixed(2)} as earned/advance paydown${carrierAdvance?` and $${carrierAdvance.toFixed(2)} in a separate line the carrier calls “Advance.” Michelle believes that smaller credit is likely second-year renewal income, so the audit keeps that interpretation visible without overwriting the carrier's original label.`:''}`
+      : `<b>What this proves:</b> these policies had commission activity on this statement. A policy not listed here is not “missing” or inactive. Current policy status comes from the carrier report and is shown below when it has been imported.`}
   </div>`;
 
   // Results table
   html += `<table class="comm-table">
-    <tr><th>Policy #</th><th>Insured</th><th>Commission</th><th>Type</th><th>Status</th></tr>`;
+    <tr><th>Policy #</th><th>Insured</th><th>${isQl?'Earned / Paydown':'Commission'}</th><th>Type</th><th>Status</th></tr>`;
 
   matched.forEach(p => {
     html += `<tr>
