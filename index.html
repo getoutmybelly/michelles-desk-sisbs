@@ -848,6 +848,8 @@ const MICHELLE_HEADSHOT = 'https://getoutmybelly.github.io/michelles-desk-sisbs/
 
 let accessToken = null;
 let clientGroups = {}, allClients = [], selectedGroup = null, activeVisitIdx = 0;
+let commissionHistoryRows = [];
+let sheetLastLoadedAt = null;
 
 // ── GOOGLE SIGN IN ────────────────────────────────────────────────────────────
 // ── REDIRECT-BASED OAUTH ─────────────────────────────────────────────────────
@@ -946,6 +948,11 @@ async function loadFromSheets() {
     const data = await resp.json();
     const dateOverrides = await fetchUnformattedDateColumns().catch(() => null);
     parseRows(data.values || [], dateOverrides);
+    await loadCommissionHistoryForNumbers().catch(e => {
+      console.error('Commission History load failed (non-fatal):', e);
+      commissionHistoryRows = [];
+    });
+    sheetLastLoadedAt = new Date();
     loadSessionNotes().catch(e => console.error('Notes load failed (non-fatal):', e));
     showLoading(false);
     document.getElementById('searchSection').classList.add('visible');
@@ -967,6 +974,26 @@ async function loadFromSheets() {
   } catch(err) {
     showLoading(false); showError(err.message); console.error(err);
   }
+}
+
+async function loadCommissionHistoryForNumbers() {
+  if (!accessToken) { commissionHistoryRows = []; return; }
+  const range = `${COMMISSION_HISTORY_TAB}!A1:Q`;
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,
+    { headers:{ Authorization:`Bearer ${accessToken}` } }
+  );
+  if (resp.status === 400 || resp.status === 404) { commissionHistoryRows = []; return; }
+  if (!resp.ok) throw new Error(`Commission History HTTP ${resp.status}`);
+  const data = await resp.json();
+  const values = data.values || [];
+  if (values.length < 2) { commissionHistoryRows = []; return; }
+  const headers = values[0].map(smartHeader);
+  commissionHistoryRows = values.slice(1).map(row => {
+    const out = {};
+    headers.forEach((header,index) => { if (header) out[header] = row[index] ?? ''; });
+    return out;
+  });
 }
 
 // The default Sheets read returns each cell's FORMATTED display string. Some Appt Date
@@ -2565,6 +2592,74 @@ const TRIP_PROGRAMS = [
   },
 ];
 
+function canonicalCompanyName(name) {
+  const raw = String(name || '').trim();
+  const key = raw.toLowerCase().replace(/[^a-z0-9]/g,'');
+  if (!key) return 'Unknown';
+  if (key.includes('lifeshield')) return 'LifeShield National';
+  if (key.includes('polishfalcon') || key === 'pfa') return 'Polish Falcons';
+  if (key.includes('illinoismutual')) return 'Illinois Mutual';
+  if (key.includes('trinity')) return 'Trinity';
+  if (key.includes('gerber')) return 'Gerber';
+  if (key.includes('cica')) return 'CICA';
+  if (key.includes('corebridge')) return 'Corebridge';
+  return raw;
+}
+
+function computeCarrierEvidenceNumbers() {
+  const relationships = new Map();
+  allClients.forEach(c => {
+    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || !c.status) return;
+    const carrier = canonicalCompanyName(c.newCompany);
+    const policy = String(c.newPolicyNumber || '').trim().toUpperCase();
+    const name = normalizeCarrierMatchName(c.fullName);
+    const key = policy || [name,carrier,c.effectiveDate||'',parseMoney(c.newPremium).toFixed(2)].join('|');
+    const current = relationships.get(key);
+    if (!current || (c.sheetRow||0) > (current.sheetRow||0)) relationships.set(key,{...c,canonicalCarrier:carrier});
+  });
+  const rows = [...relationships.values()];
+  const stillInForceReasons = ['reduced_paid_up','grace_period_30_days','grace_period_60_days','grace_period_90_days_lapse_imminent'];
+  const inForce = rows.filter(c => ['issued','issued_paid_in_force'].includes(c.status) || stillInForceReasons.includes(c.carrierReason));
+  const attention = rows.filter(c => c.status === 'adverse' && !stillInForceReasons.includes(c.carrierReason));
+  const pending = rows.filter(c => !inForce.includes(c) && !attention.includes(c));
+  const byCompany = {};
+  rows.forEach(c => {
+    const bucket = byCompany[c.canonicalCarrier] ||= {total:0,inForce:0,attention:0,pending:0,lastChecked:''};
+    bucket.total++;
+    if (inForce.includes(c)) bucket.inForce++;
+    else if (attention.includes(c)) bucket.attention++;
+    else bucket.pending++;
+    if (c.lastChecked && (!bucket.lastChecked || new Date(c.lastChecked) > new Date(bucket.lastChecked))) bucket.lastChecked = c.lastChecked;
+  });
+  return { rows, inForce, attention, pending, byCompany };
+}
+
+function computeCommissionEvidenceNumbers() {
+  const now = new Date();
+  const ytd = commissionHistoryRows.filter(row => {
+    const date = new Date(row.STATEMENTDATE || '');
+    return !isNaN(date) && date.getFullYear() === now.getFullYear();
+  });
+  const byCompany = {}, statementKeys = new Set();
+  ytd.forEach(row => {
+    const carrier = canonicalCompanyName(row.CARRIER || 'Unknown');
+    const bucket = byCompany[carrier] ||= {earned:0,carrierAdvance:0,cash:0,statements:new Set()};
+    bucket.earned += parseMoney(row.EARNEDPAYDOWN);
+    bucket.carrierAdvance += parseMoney(row.CARRIERADVANCEPOSSIBLERENEWAL || row.GROSSADVANCECHARGEBACK);
+    bucket.cash += parseMoney(row.CASHPAYOUT || row.NETPAYOUT);
+    const statementKey = `${carrier}|${row.STATEMENTDATE}`;
+    bucket.statements.add(statementKey); statementKeys.add(statementKey);
+  });
+  return {
+    rows:ytd,
+    statements:statementKeys.size,
+    earned:Object.values(byCompany).reduce((sum,b)=>sum+b.earned,0),
+    carrierAdvance:Object.values(byCompany).reduce((sum,b)=>sum+b.carrierAdvance,0),
+    cash:Object.values(byCompany).reduce((sum,b)=>sum+b.cash,0),
+    byCompany,
+  };
+}
+
 function computeProductionNumbers() {
   // A "sale" = a placed policy: New Company + a real premium figure.
   const sold = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
@@ -2590,6 +2685,7 @@ function computeProductionNumbers() {
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0); monthEnd.setHours(23,59,59,999);
   const yearStart = new Date(now.getFullYear(), 0, 1);
   const yearEnd   = new Date(now.getFullYear(), 11, 31); yearEnd.setHours(23,59,59,999);
+  const elapsedWeeks = Math.max(1, (now - yearStart + 86400000) / (7 * 86400000));
   // Explicit lower AND upper bound — a Written Date next week or next year no longer
   // leaks into this week's / this year's count.
   const inRange = (d, start, end) => d >= start && d <= end;
@@ -2602,13 +2698,13 @@ function computeProductionNumbers() {
 
   const byCompany = {};
   thisYear.forEach(x => {
-    const key = x.c.newCompany || 'Unknown';
+    const key = canonicalCompanyName(x.c.newCompany);
     if (!byCompany[key]) byCompany[key] = { count: 0, total: 0 };
     byCompany[key].count++;
     byCompany[key].total += x.annualized;
   });
 
-  return { withDate, thisWeek, thisMonth, thisYear, byCompany, sum, avg, missingWrittenDate };
+  return { withDate, thisWeek, thisMonth, thisYear, byCompany, sum, avg, missingWrittenDate, elapsedWeeks };
 }
 
 // ── HISTORICAL WRITTEN DATE BACKFILL ─────────────────────────────────────────
@@ -2620,7 +2716,7 @@ let backfillPreviewData = null; // cached so the approve step doesn't have to re
 
 const APPT_DATE_SANITY_FLOOR_YEAR = 2021; // no real appointment predates this — catches any remaining bad-year parses
 
-function computeWrittenDateBackfillPreview() {
+function computeWrittenDateBackfillPreviewLegacy() {
   const clean = [], review = [];
 
   allClients.forEach(c => {
@@ -2669,7 +2765,7 @@ function computeWrittenDateBackfillPreview() {
 
 let apptEstimateOffsetDays = 5; // default; editable in the modal before approval
 
-function computeApptDateEstimatePreview(offsetDays) {
+function computeApptDateEstimatePreviewLegacy(offsetDays) {
   const rows = [];
   allClients.forEach(c => {
     const isPlacedPolicy = !!(c.newCompany && parseMoney(c.newPremium) > 0);
@@ -2704,7 +2800,7 @@ function updateApptEstimateOffset(val) {
   renderBackfillModal();
 }
 
-function renderBackfillModal() {
+function renderBackfillModalLegacy() {
   const { clean, review, cutoff } = backfillPreviewData;
   const cutoffStr = cutoff.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   const rowHtml = (r, warn) => `<tr style="border-bottom:1px solid var(--cream)">
@@ -2716,7 +2812,7 @@ function renderBackfillModal() {
     <td style="padding:7px 8px;font-size:12px;font-weight:600;color:${warn?'var(--rust)':'var(--sage)'}">${warn ? r.warning : r.proposedWrittenDate}</td>
   </tr>`;
 
-  const estimateRows = computeApptDateEstimatePreview(apptEstimateOffsetDays);
+  const estimateRows = computeApptDateEstimatePreviewLegacy(apptEstimateOffsetDays);
   const estRowHtml = r => `<tr style="border-bottom:1px solid var(--cream)">
     <td style="padding:7px 8px;font-size:12px">${r.client}</td>
     <td style="padding:7px 8px;font-size:12px">${r.carrier}</td>
@@ -2800,8 +2896,8 @@ function renderBackfillModal() {
   document.getElementById('backfillModal').innerHTML = html;
 }
 
-async function approveApptDateEstimates() {
-  const estimateRows = computeApptDateEstimatePreview(apptEstimateOffsetDays);
+async function approveApptDateEstimatesLegacy() {
+  const estimateRows = computeApptDateEstimatePreviewLegacy(apptEstimateOffsetDays);
   if (!estimateRows.length) return;
   if (!accessToken) { toast('Sign in first'); return; }
   const confirmed = confirm(`Write an ESTIMATED Appt Date (Effective Date − ${apptEstimateOffsetDays} days) for ${estimateRows.length} policies? These are placeholders, not real appointment dates — they'll be clearly noted as estimated.`);
@@ -2832,7 +2928,7 @@ async function approveApptDateEstimates() {
   }
 }
 
-async function approveBackfill() {
+async function approveBackfillLegacy() {
   if (!backfillPreviewData || !backfillPreviewData.clean.length) return;
   if (!accessToken) { toast('Sign in first'); return; }
   const confirmed = confirm(`Write Written Date for ${backfillPreviewData.clean.length} policies? This cannot be bulk-undone — double check the preview first.`);
@@ -2857,9 +2953,139 @@ async function approveBackfill() {
   if (document.getElementById('panel_numbers')) renderNumbersPanel();
 }
 
+// Written Date repair v2: never invent a date. Appointment Date is the preferred
+// source; carrier Issue Date is a separately approved and audited fallback.
+function computeWrittenDateBackfillPreview() {
+  const clean = [], carrierFallback = [], review = [];
+  const today = new Date(); today.setHours(23,59,59,999);
+
+  allClients.forEach(c => {
+    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || c.writtenDate) return;
+    const effDate = c.effectiveDate ? new Date(c.effectiveDate) : null;
+    const effValid = effDate && !isNaN(effDate);
+    const apptDate = c.apptDate ? new Date(c.apptDate) : null;
+    const apptValid = apptDate && !isNaN(apptDate);
+    const base = {
+      client:c.fullName,
+      carrier:canonicalCompanyName(c.newCompany),
+      premium:c.newPremium,
+      apptDate:c.apptDate || '',
+      effectiveDate:c.effectiveDate || '',
+      carrierIssueDate:c.carrierIssueDate || '',
+      sheetRow:c.sheetRow,
+    };
+    const group = clientGroups[c.fullName.toLowerCase().replace(/\s+/g,' ').trim()] || [c];
+    const dupes = group.filter(g => g !== c && canonicalCompanyName(g.newCompany) === canonicalCompanyName(c.newCompany) && parseMoney(g.newPremium) === parseMoney(c.newPremium));
+    const otherPolicyRows = group.filter(g => g !== c && g.newCompany && parseMoney(g.newPremium) > 0);
+    const distinctApptDates = new Set(group.map(g => g.apptDate).filter(Boolean));
+
+    if (apptValid && apptDate.getFullYear() < APPT_DATE_SANITY_FLOOR_YEAR) {
+      review.push({...base,warning:`Appointment Date year looks wrong (${apptDate.getFullYear()})`});
+    } else if (apptValid && apptDate > today) {
+      review.push({...base,warning:'Appointment Date is in the future'});
+    } else if (apptValid && effValid && apptDate > effDate) {
+      review.push({...base,warning:'Appointment Date is after Effective Date'});
+    } else if (dupes.length) {
+      review.push({...base,warning:`Duplicate policy row detected (${dupes.length + 1} matching rows)`});
+    } else if (otherPolicyRows.length && distinctApptDates.size > 1) {
+      review.push({...base,warning:'Multiple appointment dates exist for this client'});
+    } else if (apptValid) {
+      clean.push({...base,proposedWrittenDate:c.apptDate,dateSource:'Appointment Date'});
+    } else {
+      const issueDate = c.carrierIssueDate ? new Date(c.carrierIssueDate) : null;
+      const issueValid = issueDate && !isNaN(issueDate) && issueDate.getFullYear() >= APPT_DATE_SANITY_FLOOR_YEAR && issueDate <= today;
+      const issueEffGapDays = issueValid && effValid ? Math.abs(issueDate - effDate) / 86400000 : 0;
+      if (!issueValid) {
+        review.push({...base,warning:'No usable Appointment Date or carrier Issue Date'});
+      } else if (issueEffGapDays > 120) {
+        review.push({...base,warning:'Carrier Issue Date is more than 120 days from Effective Date — verify the match'});
+      } else {
+        carrierFallback.push({...base,proposedWrittenDate:c.carrierIssueDate,dateSource:'Carrier Issue Date',warning:'Fallback evidence — may be later than the original application date'});
+      }
+    }
+  });
+  return {clean,carrierFallback,review};
+}
+
+function renderBackfillModal() {
+  const {clean,carrierFallback,review} = backfillPreviewData;
+  const head = labels => `<thead><tr style="background:var(--cream);position:sticky;top:0">${labels.map(x=>`<th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">${x}</th>`).join('')}</tr></thead>`;
+  const cell = value => `<td style="padding:7px 8px;font-size:12px">${value || '—'}</td>`;
+  const exactRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.apptDate)}${cell(r.effectiveDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--sage)">${r.proposedWrittenDate}</td></tr>`;
+  const fallbackRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.effectiveDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--gold)">${r.carrierIssueDate}</td>${cell(r.warning)}</tr>`;
+  const reviewRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.apptDate)}${cell(r.carrierIssueDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--rust)">${r.warning}</td></tr>`;
+  const table = (labels,rows,empty) => `<div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"><table style="width:100%;border-collapse:collapse">${head(labels)}<tbody>${rows.length?rows.join(''):`<tr><td colspan="${labels.length}" style="padding:14px;text-align:center;color:var(--muted);font-size:12px">${empty}</td></tr>`}</tbody></table></div>`;
+
+  document.getElementById('backfillModal').innerHTML = `<div style="padding:20px 22px">
+    <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">🗓️ Repair Missing Written Dates</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Appointment Date is preferred. Carrier Issue Date is shown separately as fallback evidence. Nothing changes until you approve a section.</div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:6px">✅ ${clean.length} exact Appointment Date match${clean.length===1?'':'es'}</div>
+    ${table(['Client','Carrier','Premium','Appointment Date','Effective Date','Written Date'],clean.map(exactRow),'No exact Appointment Date matches found')}
+    <div style="display:flex;justify-content:flex-end;margin-bottom:18px"><button id="backfillApproveBtn" onclick="approveBackfill()" ${clean.length?'':'disabled'} style="padding:10px 18px;background:${clean.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:${clean.length?'pointer':'not-allowed'}">✓ Approve ${clean.length} Exact Date${clean.length===1?'':'s'}</button></div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px">🔎 ${carrierFallback.length} carrier Issue Date fallback${carrierFallback.length===1?'':'s'}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Use only when the original Appointment Date is unavailable. Every approved row keeps an audit note saying this is a fallback.</div>
+    ${table(['Client','Carrier','Premium','Effective Date','Carrier Issue Date','Why separate'],carrierFallback.map(fallbackRow),'No safe carrier-date fallbacks found')}
+    <div style="display:flex;justify-content:flex-end;margin-bottom:18px"><button id="carrierFallbackApproveBtn" onclick="approveCarrierIssueDateFallbacks()" ${carrierFallback.length?'':'disabled'} style="padding:10px 18px;background:${carrierFallback.length?'var(--gold)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:${carrierFallback.length?'pointer':'not-allowed'}">✓ Approve ${carrierFallback.length} Carrier Fallback${carrierFallback.length===1?'':'s'}</button></div>
+
+    <div style="font-weight:700;font-size:14px;color:var(--rust);margin-bottom:6px">⚠️ ${review.length} need manual review — nothing will be written</div>
+    ${table(['Client','Carrier','Premium','Appointment Date','Carrier Issue Date','Reason'],review.map(reviewRow),'Nothing needs manual review')}
+    <div style="display:flex;justify-content:flex-end;margin-top:18px"><button onclick="closeBackfillModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Done</button></div>
+  </div>`;
+}
+
+async function approveBackfill() {
+  if (!backfillPreviewData?.clean?.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  const rows = backfillPreviewData.clean;
+  if (!confirm(`Write the exact Appointment Date into Written Date for ${rows.length} policies?`)) return;
+  const btn = document.getElementById('backfillApproveBtn');
+  if (btn) { btn.disabled=true; btn.textContent='Writing…'; }
+  try {
+    await writeCellsBatch(rows.map(r=>({row:r.sheetRow,col:C.WRITTEN_DATE,value:r.proposedWrittenDate})));
+    rows.forEach(r=>{ const c=allClients.find(x=>x.sheetRow===r.sheetRow); if(c)c.writtenDate=r.proposedWrittenDate; });
+    toast(`✓ Saved ${rows.length} exact Written Date${rows.length===1?'':'s'}`);
+    backfillPreviewData=computeWrittenDateBackfillPreview(); renderBackfillModal(); renderNumbersPanel();
+  } catch(e) {
+    toast('Could not save — check connection');
+    if(btn){btn.disabled=false;btn.textContent=`✓ Approve ${rows.length} Exact Dates`;}
+  }
+}
+
+async function approveCarrierIssueDateFallbacks() {
+  if (!backfillPreviewData?.carrierFallback?.length) return;
+  if (!accessToken) { toast('Sign in first'); return; }
+  const rows=backfillPreviewData.carrierFallback;
+  if (!confirm(`Use carrier Issue Date as Written Date for ${rows.length} policies? This is fallback evidence, not the original application date. An audit note will be saved.`)) return;
+  const btn=document.getElementById('carrierFallbackApproveBtn');
+  if(btn){btn.disabled=true;btn.textContent='Writing…';}
+  const approvedOn=new Date().toLocaleDateString('en-US');
+  const updates=[];
+  rows.forEach(r=>{
+    const c=allClients.find(x=>x.sheetRow===r.sheetRow);
+    const audit=`Written Date fallback approved from carrier Issue Date ${r.proposedWrittenDate} on ${approvedOn}; not the original application date.`;
+    updates.push({row:r.sheetRow,col:C.WRITTEN_DATE,value:r.proposedWrittenDate});
+    updates.push({row:r.sheetRow,col:43,value:[c?.apptNotes,audit].filter(Boolean).join('\n')});
+  });
+  try {
+    await writeCellsBatch(updates);
+    rows.forEach(r=>{
+      const c=allClients.find(x=>x.sheetRow===r.sheetRow); if(!c)return;
+      const audit=`Written Date fallback approved from carrier Issue Date ${r.proposedWrittenDate} on ${approvedOn}; not the original application date.`;
+      c.writtenDate=r.proposedWrittenDate; c.apptNotes=[c.apptNotes,audit].filter(Boolean).join('\n');
+    });
+    toast(`✓ Saved ${rows.length} carrier fallback${rows.length===1?'':'s'} with audit notes`);
+    backfillPreviewData=computeWrittenDateBackfillPreview(); renderBackfillModal(); renderNumbersPanel();
+  } catch(e) {
+    toast('Could not save — check connection');
+    if(btn){btn.disabled=false;btn.textContent=`✓ Approve ${rows.length} Carrier Fallbacks`;}
+  }
+}
+
 function buildTripProgramHtml(program, withDate) {
   const inWindow = withDate.filter(x =>
-    program.carrierMatch(x.c.newCompany || '') &&
+    program.carrierMatch(canonicalCompanyName(x.c.newCompany || '')) &&
     (!program.periodStart || (x.date >= program.periodStart && x.date <= program.periodEnd))
   );
   const premium = inWindow.reduce((s,x) => s + x.annualized, 0);
@@ -2909,17 +3135,20 @@ function buildTripProgramHtml(program, withDate) {
 function renderNumbersPanel() {
   const panel = document.getElementById('panel_numbers');
   const n = computeProductionNumbers();
+  const carrierEvidence = computeCarrierEvidenceNumbers();
+  const commissionEvidence = computeCommissionEvidenceNumbers();
   const fmt$ = v => '$' + Math.round(v).toLocaleString('en-US');
+  const refreshedAt = sheetLastLoadedAt ? sheetLastLoadedAt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'not refreshed yet';
 
   let html = `<div style="font-family:'DM Serif Display',serif;font-size:17px;margin-bottom:4px">📊 The Numbers</div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Written sales: placed policies (New Company + Premium) dated by <b>Written Date only</b> — Sunday through Saturday for the week, calendar month, Jan 1–today for the year. Raw annualized premium — not yet netted for lapses or chargebacks.</div>`;
+  <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Written sales use <b>Written Date only</b>. Carrier verification and commission payments appear separately below, because they confirm different things. Sheet refreshed ${refreshedAt}.</div>`;
 
   if (n.missingWrittenDate.length) {
     html += `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:12px;padding:12px 14px;margin-bottom:14px">
       <div style="font-weight:700;color:var(--rust);font-size:13px;margin-bottom:4px">⚠️ ${n.missingWrittenDate.length} placed ${n.missingWrittenDate.length===1?'policy has':'policies have'} no Written Date</div>
-      <div style="font-size:12px;color:var(--rust)">These aren't counted in any number below until a Written Date is logged — open the client and tap "Mark Written Today," or run the historical backfill below for older policies.</div>
+      <div style="font-size:12px;color:var(--rust)">These aren't counted as written sales until a Written Date is logged. Review exact Appointment Dates first; carrier Issue Dates are offered separately as audited fallback evidence.</div>
       <div style="margin-top:8px">${n.missingWrittenDate.slice(0,8).map(c => `<span onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')" style="display:inline-block;background:#fff;border:1px solid var(--rust);color:var(--rust);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;margin:0 6px 6px 0;cursor:pointer">${c.fullName}</span>`).join('')}${n.missingWrittenDate.length>8?`<span style="font-size:11px;color:var(--rust)">+${n.missingWrittenDate.length-8} more</span>`:''}</div>
-      <button onclick="openBackfillModal()" style="margin-top:10px;padding:9px 15px;background:var(--ink);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🗓️ Preview Historical Written Date Backfill</button>
+      <button onclick="openBackfillModal()" style="margin-top:10px;padding:9px 15px;background:var(--ink);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🗓️ Review Missing Written Dates</button>
     </div>`;
   }
 
@@ -2943,7 +3172,7 @@ function renderNumbersPanel() {
 
   html += `<div style="background:var(--cream);border-radius:12px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-around;text-align:center">
     <div><div style="font-size:16px;font-weight:700">${fmt$(n.avg(n.thisYear))}</div><div style="font-size:11px;color:var(--muted)">Avg Annualized Premium / Sale (YTD)</div></div>
-    <div><div style="font-size:16px;font-weight:700">${n.thisYear.length ? fmt$(n.sum(n.thisYear)/52) : '$0'}</div><div style="font-size:11px;color:var(--muted)">Avg Weekly Pace (YTD ÷ 52)</div></div>
+    <div><div style="font-size:16px;font-weight:700">${n.thisYear.length ? fmt$(n.sum(n.thisYear)/n.elapsedWeeks) : '$0'}</div><div style="font-size:11px;color:var(--muted)">Actual Weekly Pace (YTD ÷ ${n.elapsedWeeks.toFixed(1)} elapsed weeks)</div></div>
   </div>`;
 
   const companies = Object.entries(n.byCompany).sort((a,b) => b[1].total - a[1].total);
@@ -2957,6 +3186,31 @@ function renderNumbersPanel() {
         <span style="color:var(--muted)">${d.count} ${d.count===1?'policy':'policies'} · <b style="color:var(--ink)">${fmt$(d.total)}</b></span>
       </div>`).join('') + `</div>`;
   }
+
+  const carrierCompanies = Object.entries(carrierEvidence.byCompany).sort((a,b)=>b[1].total-a[1].total);
+  html += `<div style="border:1.5px solid var(--sage);border-radius:14px;padding:14px;margin-bottom:16px;background:#f7fbf8">
+    <div style="font-weight:700;font-size:14px;margin-bottom:2px">🛡️ Carrier-Confirmed Policy Evidence</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Latest carrier report status for matched policies. This verifies policy condition; it does not replace the original Written Date or count as a new sale.</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--sage)">${carrierEvidence.inForce.length}</div><div style="font-size:10px;color:var(--muted)">In force / still active</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--rust)">${carrierEvidence.attention.length}</div><div style="font-size:10px;color:var(--muted)">Adverse / attention</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gold)">${carrierEvidence.pending.length}</div><div style="font-size:10px;color:var(--muted)">Pending verification</div></div>
+    </div>
+    ${carrierCompanies.length ? carrierCompanies.map(([name,d])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 8px;border-top:1px solid var(--cream);font-size:12px"><b>${name}</b><span style="color:var(--muted)">${d.total} matched · <span style="color:var(--sage)">${d.inForce} active</span> · <span style="color:var(--rust)">${d.attention} attention</span>${d.pending?` · <span style="color:var(--gold)">${d.pending} pending</span>`:''}</span></div>`).join('') : `<div style="font-size:12px;color:var(--muted)">No carrier-confirmed records have been saved yet.</div>`}
+  </div>`;
+
+  const commissionCompanies = Object.entries(commissionEvidence.byCompany).sort((a,b)=>Math.abs(b[1].cash)-Math.abs(a[1].cash));
+  html += `<div style="border:1.5px solid var(--gold);border-radius:14px;padding:14px;margin-bottom:16px;background:#fffaf0">
+    <div style="font-weight:700;font-size:14px;margin-bottom:2px">💵 Commission Evidence — ${new Date().getFullYear()}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Saved statement history. Earned/paydown, carrier advance or possible renewal, and cash payout are kept separate because they are not interchangeable.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:700">${commissionEvidence.statements}</div><div style="font-size:10px;color:var(--muted)">Statements</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:700;color:var(--sage)">${fmt$(commissionEvidence.earned)}</div><div style="font-size:10px;color:var(--muted)">Earned / paydown</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:700;color:var(--gold)">${fmt$(commissionEvidence.carrierAdvance)}</div><div style="font-size:10px;color:var(--muted)">Carrier advance / possible renewal</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:17px;font-weight:700">${fmt$(commissionEvidence.cash)}</div><div style="font-size:10px;color:var(--muted)">Cash payout</div></div>
+    </div>
+    ${commissionCompanies.length ? commissionCompanies.map(([name,d])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 8px;border-top:1px solid var(--cream);font-size:12px"><b>${name}</b><span style="color:var(--muted)">${d.statements.size} statement${d.statements.size===1?'':'s'} · earned ${fmt$(d.earned)} · advance/renewal ${fmt$(d.carrierAdvance)} · cash ${fmt$(d.cash)}</span></div>`).join('') : `<div style="font-size:12px;color:var(--muted)">No ${new Date().getFullYear()} commission statements are saved yet.</div>`}
+  </div>`;
 
   // Top Companies Being Replaced — Company Name (existing carrier) filled in AND a surrender
   // is in progress (Surrender Due or Sent) means that carrier's policy is being replaced.
@@ -6061,7 +6315,10 @@ async function smartImportAllCommissionStatements() {
       duplicate += saved.duplicate || 0;
       if (/^ALERT/.test(saved.auditFlag||'')) alerts.push(saved.auditFlag);
     }
+    await loadCommissionHistoryForNumbers();
+    sheetLastLoadedAt = new Date();
     matchCommissions(smartConsolidateCommissionStatements(items));
+    if (document.getElementById('panel_numbers')) renderNumbersPanel();
     toast(inserted ? `✓ Saved ${inserted} monthly audit row${inserted===1?'':'s'}${alerts.length?` · ${alerts.length} alert${alerts.length===1?'':'s'}`:''}` : `All ${duplicate} monthly row${duplicate===1?' was':'s were'} already saved`);
   } catch (error) {
     toast(`Could not save commission history — ${error.message}`);
@@ -6134,7 +6391,10 @@ async function smartReviewFile(index) {
   if (item.type === 'commission') {
     try {
       const saved = await persistCommissionStatement(item.data,item.fileName);
+      await loadCommissionHistoryForNumbers();
+      sheetLastLoadedAt = new Date();
       matchCommissions(item.data);
+      if (document.getElementById('panel_numbers')) renderNumbersPanel();
       toast(saved.unsupported
         ? 'Reviewed — this carrier format is not yet eligible for the permanent audit ledger'
         : saved.inserted ? `✓ Saved ${saved.inserted} commission audit row${saved.inserted===1?'':'s'}` : 'Already saved — no duplicate rows added');
