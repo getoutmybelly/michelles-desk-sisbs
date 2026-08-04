@@ -3442,16 +3442,22 @@ const CARRIER_ADAPTERS = {
   // Pending Verification instead of being guessed. Premium and policy-detail capabilities
   // stay false because the grid does not expose those fields.
   pfa: {
-    label: 'PFA',
+    label: 'Polish Falcons (PFA)',
     sourceType: 'browser-agent',
     capabilities: { supportsPagination: true, supportsStatusDecode: true, supportsPremium: false, supportsPolicyDetail: false },
     headerAliases: null, // n/a — browser agent emits already-normalized records, not a spreadsheet
     mapStatus: (rawStatus) => {
       const s = String(rawStatus || '').trim().toUpperCase();
       if (s === 'A') return { standardizedStatus:'issued_paid_in_force', subtype:null };
-      if (s === 'B') return { standardizedStatus:'adverse', subtype:'premium_behind' };
-      if (s === 'C') return { standardizedStatus:'adverse', subtype:'lapsed_or_inactive' };
-      if (s === 'N') return { standardizedStatus:'adverse', subtype:'death_claim' };
+      // Status definitions confirmed directly by Ryan at PFA on 8/3/2026.
+      if (s === 'B') return { standardizedStatus:'adverse', subtype:'banking_issue_never_placed' };
+      if (s === 'C') return { standardizedStatus:'adverse', subtype:'cash_surrender' };
+      if (s === 'N') return { standardizedStatus:'adverse', subtype:'denied_claim_contestability' };
+      if (s === 'R') return { standardizedStatus:'adverse', subtype:'reduced_paid_up' };
+      if (s === 'X') return { standardizedStatus:'adverse', subtype:'cancelled_no_cash_value' };
+      if (s === '1') return { standardizedStatus:'adverse', subtype:'grace_period_30_days' };
+      if (s === '2') return { standardizedStatus:'adverse', subtype:'grace_period_60_days' };
+      if (s === '3') return { standardizedStatus:'adverse', subtype:'grace_period_90_days_lapse_imminent' };
       return { standardizedStatus:'pending_verification', subtype:'unrecognized_status_code' };
     },
   },
@@ -3539,7 +3545,27 @@ function normalizeInsuredName(name) {
     const [last, first] = s.split(',').map(p => p.trim());
     s = `${first} ${last}`;
   }
-  return s.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+  return s.toLowerCase().replace(/[-–—]/g, ' ').replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Carrier books frequently include a middle initial (or nickname/suffix) that the Desk
+// does not. First + last is the stable identity key; policy number still wins whenever it
+// exists. This turns "KENNETH L. ADAMS" ↔ "Kenneth Adams" into a strong name match without
+// ever using a partial substring match.
+function normalizeCarrierMatchName(name) {
+  const parts = normalizeInsuredName(name).split(' ').filter(Boolean)
+    .filter(part => !['jr','sr','ii','iii','iv'].includes(part));
+  if (parts.length < 2) return parts.join(' ');
+  return `${parts[0]} ${parts[parts.length-1]}`;
+}
+
+function clientMatchesCarrierKey(client, carrierKey) {
+  if (carrierKey === 'generic') return true;
+  const company = `${client.newCompany||''} ${client.existingCompany||''}`.toLowerCase();
+  if (carrierKey === 'pfa' || carrierKey === 'polishfalcons') {
+    return company.includes('polish falcon') || /(^|\s)pfa(\s|$)/.test(company);
+  }
+  return company.includes(carrierKey);
 }
 
 // Pure parse: workbook bytes in, plain array of normalized records out. Carrier-specific
@@ -3585,7 +3611,7 @@ function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
 // Policy number match first, exact normalized name second — never a partial/fuzzy match.
 function matchCarrierRecords(carrierKey, records, clients, options = {}) {
   const carrierLabel = CARRIER_ADAPTERS[carrierKey].label;
-  const isThisCarrier = c => (c.newCompany||'').toLowerCase().includes(carrierKey) || (c.existingCompany||'').toLowerCase().includes(carrierKey);
+  const isThisCarrier = c => clientMatchesCarrierKey(c,carrierKey);
   const deskCarrierClients = carrierKey === 'generic' ? clients : clients.filter(isThisCarrier);
   const normPolicy = value => String(value || '').trim().toUpperCase().replace(/\s+/g,'');
   const carrierHint = String(options.carrierHint || '').toLowerCase();
@@ -3603,27 +3629,54 @@ function matchCarrierRecords(carrierKey, records, clients, options = {}) {
 
   const exact = [], nameOnly = [], unmatchedPortal = [];
   const matchedSheetRows = new Set();
+  const matchedRelationshipNames = new Set();
 
   records.forEach(rec => {
     const reportPolicy = normPolicy(rec.policyNumber);
-    let match = deskCarrierClients.find(c => reportPolicy &&
+    let match = clients.find(c => reportPolicy &&
       (normPolicy(c.newPolicyNumber) === reportPolicy || normPolicy(c.existingPolicy) === reportPolicy));
-    if (match) { exact.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
+    // Earlier generic imports may have placed the policy number on a historical/blank
+    // row. Redirect that exact policy hit to the real sold-carrier sibling row.
+    if (match && carrierKey !== 'generic' && !isThisCarrier(match)) {
+      const siblingKey = normalizeCarrierMatchName(match.fullName);
+      match = deskCarrierClients.filter(c => normalizeCarrierMatchName(c.fullName) === siblingKey)
+        .sort((a,b) => rowScore(b)-rowScore(a))[0] || match;
+    }
+    if (match) {
+      exact.push({ record: rec, client: match });
+      matchedSheetRows.add(match.sheetRow);
+      matchedRelationshipNames.add(normalizeCarrierMatchName(match.fullName));
+      return;
+    }
 
-    const normRecName = normalizeInsuredName(rec.insuredName);
+    const normRecName = normalizeCarrierMatchName(rec.insuredName);
     // A person may have many appointment/lead rows. Use each Sheet row at most once per
     // import and prefer the actual sold-policy row, rather than repeatedly writing every
     // name-only approval into the first historical row for that person.
     const candidates = normRecName ? deskCarrierClients
-      .filter(c => !matchedSheetRows.has(c.sheetRow) && normalizeInsuredName(c.fullName) === normRecName)
+      .filter(c => !matchedSheetRows.has(c.sheetRow) && normalizeCarrierMatchName(c.fullName) === normRecName)
       .sort((a,b) => rowScore(b)-rowScore(a)) : [];
     match = candidates[0] || null;
-    if (match) { nameOnly.push({ record: rec, client: match }); matchedSheetRows.add(match.sheetRow); return; }
+    if (match) {
+      nameOnly.push({ record: rec, client: match });
+      matchedSheetRows.add(match.sheetRow);
+      matchedRelationshipNames.add(normRecName);
+      return;
+    }
 
     unmatchedPortal.push(rec);
   });
 
-  const deskNotFound = deskCarrierClients.filter(c => !matchedSheetRows.has(c.sheetRow));
+  // Missing-from-report is one sold client/carrier relationship, never every historical
+  // appointment row. It is only acted on when the caller confirms this was a full book.
+  const deskRelationshipRows = new Map();
+  deskCarrierClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0).forEach(c => {
+    const key = normalizeCarrierMatchName(c.fullName);
+    if (!key || matchedRelationshipNames.has(key)) return;
+    const current = deskRelationshipRows.get(key);
+    if (!current || rowScore(c) > rowScore(current)) deskRelationshipRows.set(key,c);
+  });
+  const deskNotFound = [...deskRelationshipRows.values()];
 
   return { carrierLabel, exact, nameOnly, unmatchedPortal, deskNotFound };
 }
@@ -3636,9 +3689,12 @@ function computeCarrierReportStats(carrierKey, records) {
   const adapter = CARRIER_ADAPTERS[carrierKey];
   const mapped = records.map(r => ({ r, m: adapter.mapStatus(r.status) }));
   const total = records.length;
-  const active = mapped.filter(x => x.m.standardizedStatus === 'issued_paid_in_force').map(x => x.r);
-  const inactive = mapped.filter(x => x.m.standardizedStatus === 'adverse' && x.m.subtype === 'lapsed_or_inactive').map(x => x.r);
-  const notTaken = mapped.filter(x => x.m.standardizedStatus === 'adverse' && x.m.subtype === 'not_taken').map(x => x.r);
+  const stillInForceSubtypes = ['reduced_paid_up','grace_period_30_days','grace_period_60_days','grace_period_90_days_lapse_imminent'];
+  const notTakenSubtypes = ['not_taken','banking_issue_never_placed'];
+  const active = mapped.filter(x => x.m.standardizedStatus === 'issued_paid_in_force' || stillInForceSubtypes.includes(x.m.subtype)).map(x => x.r);
+  const notTaken = mapped.filter(x => notTakenSubtypes.includes(x.m.subtype)).map(x => x.r);
+  const inactive = mapped.filter(x => x.m.standardizedStatus === 'adverse'
+    && !notTakenSubtypes.includes(x.m.subtype) && !stillInForceSubtypes.includes(x.m.subtype)).map(x => x.r);
   const issued = active.length + inactive.length; // NotTaken affects placement rate only, never post-issue persistency
   const ap = arr => arr.reduce((s,r) => s + r.premium*12, 0);
   const activeAP = ap(active), inactiveAP = ap(inactive), notTakenAP = ap(notTaken);
@@ -3649,6 +3705,7 @@ function computeCarrierReportStats(carrierKey, records) {
     policyPersistency: issued ? active.length/issued : 0,
     activeAP, inactiveAP, notTakenAP,
     premiumPersistency: (activeAP+inactiveAP) ? activeAP/(activeAP+inactiveAP) : 0,
+    premiumAvailable: !!adapter.capabilities.supportsPremium,
   };
 }
 
@@ -3709,10 +3766,10 @@ function renderCarrierReportModal() {
       ${statCard('Total Records', stats.total)}${statCard('Active', stats.activeCount)}${statCard('Inactive', stats.inactiveCount)}${statCard('Not Taken', stats.notTakenCount)}
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
-      ${statCard('Placement Rate', pct(stats.placementRate))}${statCard('Policy Persistency', pct(stats.policyPersistency))}${statCard('Premium Persistency', pct(stats.premiumPersistency))}${statCard('Not-Taken AP', fmt$(stats.notTakenAP))}
+      ${statCard('Placement Rate', pct(stats.placementRate))}${statCard('Policy Persistency', pct(stats.policyPersistency))}${statCard('Premium Persistency', stats.premiumAvailable?pct(stats.premiumPersistency):'Not in report')}${statCard('Not-Taken AP', stats.premiumAvailable?fmt$(stats.notTakenAP):'Not in report')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
-      ${statCard('Active AP', fmt$(stats.activeAP))}${statCard('Inactive AP', fmt$(stats.inactiveAP))}
+      ${statCard('Active AP', stats.premiumAvailable?fmt$(stats.activeAP):'Not in report')}${statCard('Inactive AP', stats.premiumAvailable?fmt$(stats.inactiveAP):'Not in report')}
     </div>
 
     <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:6px">✅ ${match.exact.length} exact match${match.exact.length===1?'':'es'} (by policy number) — will update on approval</div>
@@ -3743,14 +3800,14 @@ function renderCarrierReportModal() {
       ${match.unmatchedPortal.map(r => `<div style="padding:6px 8px;border-bottom:1px solid var(--cream)">${r.insuredName || '(no name)'} — ${r.policyNumber||'no policy #'} — ${r.status}</div>`).join('') || `<div style="padding:12px;text-align:center;color:var(--muted)">None</div>`}
     </div>
 
-    <div style="font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">🕳️ ${match.deskNotFound.length} Desk record${match.deskNotFound.length===1?'':'s'} for this carrier not found in the report</div>
+    <div style="font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">🕳️ ${match.deskNotFound.length} Desk sale${match.deskNotFound.length===1?'':'s'} for this carrier not found in the ${carrierReportPreviewData.fullBook?'full current report':'report'}</div>
     <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:20px;font-size:12px">
       ${match.deskNotFound.map(c => `<div style="padding:6px 8px;border-bottom:1px solid var(--cream)">${c.fullName} — ${c.newPolicyNumber||c.existingPolicy||'no policy # on file'}</div>`).join('') || `<div style="padding:12px;text-align:center;color:var(--muted)">None</div>`}
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="closeCarrierReportModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Close</button>
-      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length)?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length)?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length)?'pointer':'not-allowed'}">✓ Approve & Update ${match.exact.length+match.nameOnly.length} Reviewed Match${(match.exact.length+match.nameOnly.length)===1?'':'es'}</button>
+      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'pointer':'not-allowed'}">✓ Approve Full Reconciliation (${match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0)})</button>
     </div>
   </div>`;
 
@@ -3792,6 +3849,29 @@ function buildCarrierReportWritePlan(client, record, carrierKey) {
   };
 }
 
+function buildMissingFromFullReportPlan(client, carrierKey) {
+  const carrierLabel = CARRIER_ADAPTERS[carrierKey]?.label || 'carrier';
+  const now = new Date();
+  const nowStr = now.toLocaleString('en-US', { month:'numeric', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+  const carrierText = `Not found in current full ${carrierLabel} report`;
+  const reason = 'missing_from_current_carrier_report';
+  const logEntry = `[${nowStr}] Pending Verification (${reason}) — ${carrierText} — via Carrier Report, Full-Book Reconciliation`;
+  const newLog = [logEntry, ...(client.statusLog ? client.statusLog.split('\n').filter(Boolean) : [])].join('\n');
+  const updates = [
+    { row:client.sheetRow, col:C.STATUS, value:'pending_verification' },
+    { row:client.sheetRow, col:C.CARRIER_STATUS_TEXT, value:carrierText },
+    { row:client.sheetRow, col:C.CARRIER_REASON, value:reason },
+    { row:client.sheetRow, col:C.VERIFICATION_SOURCE, value:'Carrier Report' },
+    { row:client.sheetRow, col:C.LAST_CHECKED, value:nowStr },
+    { row:client.sheetRow, col:C.CHECK_METHOD, value:'Full-Book Reconciliation' },
+    { row:client.sheetRow, col:C.STATUS_LOG, value:newLog },
+  ];
+  return { updates, applyLocal() {
+    client.status='pending_verification'; client.carrierStatusText=carrierText; client.carrierReason=reason;
+    client.verificationSource='Carrier Report'; client.lastChecked=nowStr; client.checkMethod='Full-Book Reconciliation'; client.statusLog=newLog;
+  }};
+}
+
 async function writeCarrierReportRecord(client, record, carrierKey) {
   const plan = buildCarrierReportWritePlan(client, record, carrierKey);
   await writeCellsBatch(plan.updates);
@@ -3809,6 +3889,19 @@ async function writeCarrierReportMatches(matches, carrierKey, onProgress) {
     plans.forEach(plan => plan.applyLocal());
     done += chunk.length;
     if (onProgress) onProgress(done,matches.length);
+  }
+  return done;
+}
+
+async function writeMissingFromFullReport(clients,carrierKey,onProgress) {
+  let done=0;
+  for (let start=0;start<clients.length;start+=40) {
+    const chunk=clients.slice(start,start+40);
+    const plans=chunk.map(client=>buildMissingFromFullReportPlan(client,carrierKey));
+    await writeCellsBatch(plans.flatMap(plan=>plan.updates));
+    plans.forEach(plan=>plan.applyLocal());
+    done+=chunk.length;
+    if (onProgress) onProgress(done,clients.length);
   }
   return done;
 }
@@ -3835,19 +3928,24 @@ async function approveCarrierReportExactMatches() {
 }
 
 async function approveCarrierReportAllMatches() {
-  const { exact, nameOnly, carrierLabel } = carrierReportPreviewData.match;
+  const { exact, nameOnly, carrierLabel, deskNotFound } = carrierReportPreviewData.match;
   const matches = [...exact,...nameOnly];
+  const missing = carrierReportPreviewData.fullBook ? deskNotFound : [];
   const carrierKey = carrierReportPreviewData.carrierKey;
-  if (!matches.length) return;
+  if (!matches.length && !missing.length) return;
   if (!accessToken) { toast('Sign in first'); return; }
-  if (!confirm(`Update ${matches.length} reviewed ${carrierLabel} matches?\n\nThis includes ${exact.length} policy-number matches and ${nameOnly.length} exact-name matches.`)) return;
+  if (!confirm(`Complete the ${carrierLabel} reconciliation?\n\n${matches.length} report matches will receive their carrier status.\n${missing.length} Desk sales absent from this full report will be marked for review—not guessed as lapsed.`)) return;
   const btn = document.getElementById('carrierReportApproveBtn');
-  btn.disabled=true; btn.textContent=`Updating… 0/${matches.length}`;
+  const total=matches.length+missing.length;
+  btn.disabled=true; btn.textContent=`Updating… 0/${total}`;
   try {
-    const done = await writeCarrierReportMatches(matches,carrierKey,(n,total)=>btn.textContent=`Updating… ${n}/${total}`);
+    const matchedDone = await writeCarrierReportMatches(matches,carrierKey,(n)=>btn.textContent=`Updating matches… ${n}/${total}`);
+    const missingDone = await writeMissingFromFullReport(missing,carrierKey,(n)=>btn.textContent=`Recording report exceptions… ${matchedDone+n}/${total}`);
+    const done=matchedDone+missingDone;
     carrierReportPreviewData.match.exact=[];
     carrierReportPreviewData.match.nameOnly=[];
-    toast(`✓ Updated ${done} reviewed match${done===1?'':'es'}`);
+    carrierReportPreviewData.match.deskNotFound=[];
+    toast(`✓ Reconciled ${done} Desk relationship${done===1?'':'s'}`);
     closeCarrierReportModal();
     await loadFromSheets();
   } catch (e) {
@@ -5717,20 +5815,40 @@ function renderSmartFileResults() {
     <button onclick="resetCommTracker()" style="margin-top:6px;padding:9px 14px;background:var(--cream);color:var(--ink);border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">Add more files</button>`;
 }
 
+function detectKnownCarrierReport(item) {
+  const records = item?.records || [];
+  if (!records.length) return { carrierKey:'generic', fullBook:false };
+  const pfaPolicyCount = records.filter(r => /^(?:FE|[LP])\d{5,6}$/i.test(String(r.policyNumber||'').trim())).length;
+  const pfaCodeCount = records.filter(r => /^(?:A|B|C|N|R|X|1|2|3|L|D|\*)$/i.test(String(r.status||'').trim())).length;
+  const statedCarrier = String(item.carrier||'').toLowerCase();
+  const looksLikePfa = statedCarrier.includes('polish falcon') || statedCarrier === 'pfa'
+    || (records.length >= 50 && pfaPolicyCount/records.length >= .8 && pfaCodeCount/records.length >= .8);
+  return looksLikePfa
+    ? { carrierKey:'pfa', fullBook:records.length >= 100 }
+    : { carrierKey:'generic', fullBook:false };
+}
+
 function smartReviewFile(index) {
   const item = smartFileResults[index];
   if (!item || !item.ok) return;
   if (item.type === 'commission') { matchCommissions(item.data); return; }
   if (item.type === 'policy') {
-    const envelope = buildConnectorEnvelope('generic', item.records, { agentVersion:'smart-file-intake-v1', generatedAt:new Date().toISOString() });
+    const detected = detectKnownCarrierReport(item);
+    const carrierKey = detected.carrierKey;
+    // The PFA portal ledger has a BALANCE column, not a modal-premium column. Generic PDF
+    // extraction can mistake that balance for premium, so never use it for PFA AP math.
+    const records = carrierKey === 'pfa' ? item.records.map(r => ({...r,premium:0})) : item.records;
+    const envelope = buildConnectorEnvelope(carrierKey, records, { agentVersion:'smart-file-intake-v1', generatedAt:new Date().toISOString() });
     const validation = validateConnectorEnvelope(envelope);
-    const match = matchCarrierRecords('generic', envelope.records, allClients, { carrierHint:item.carrier });
+    const match = matchCarrierRecords(carrierKey, envelope.records, allClients, { carrierHint:item.carrier });
     // A detected generic report may be a lapse list or partial carrier export. Without a
     // confirmed carrier scope, claiming every other Desk policy is "missing" would create
     // another false homework list, so only report rows and actual matches are reviewed.
-    match.deskNotFound = [];
-    match.carrierLabel = item.carrier && item.carrier !== 'Detected carrier' ? item.carrier : 'Detected Carrier';
-    carrierReportPreviewData = { carrierKey:'generic', envelope, match, stats:computeCarrierReportStats('generic',envelope.records), validationWarnings:validation.warnings };
+    if (!detected.fullBook) match.deskNotFound = [];
+    match.carrierLabel = carrierKey === 'pfa'
+      ? 'Polish Falcons (PFA)'
+      : (item.carrier && item.carrier !== 'Detected carrier' ? item.carrier : 'Detected Carrier');
+    carrierReportPreviewData = { carrierKey, envelope, match, fullBook:detected.fullBook, stats:computeCarrierReportStats(carrierKey,envelope.records), validationWarnings:validation.warnings };
     renderCarrierReportModal();
     document.getElementById('carrierReportOverlay').classList.add('visible');
   }
