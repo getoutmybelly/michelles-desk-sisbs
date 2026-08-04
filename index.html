@@ -675,6 +675,7 @@
     <div class="stats-row" id="statsRow"></div>
     <div class="dash-tabs" id="dashTabs"></div>
     <div id="dashPanels">
+      <div class="dash-panel" id="panel_today"></div>
       <div class="dash-panel" id="panel_appts"></div>
       <div class="dash-panel" id="panel_pipeline"></div>
       <div class="dash-panel" id="panel_signals"></div>
@@ -1940,7 +1941,9 @@ function renderDashboard(){
     <div class="stat-box" style="cursor:pointer" onclick="switchDashTab('pipeline')"><div class="stat-number">${surrCount}</div><div class="stat-label">Surrenders</div></div>`;
 
   // Build tabs
+  const todayOpportunities = computeTodayOpportunities();
   const tabs = [
+    { id:'today',      label:'⭐ Today',             count: todayOpportunities.sales.length + todayOpportunities.protect.length },
     { id:'appts',      label:'📅 Appointments',     count: upcoming.length },
     { id:'signals',    label:'🔔 Signals',           count: signalCount },
     { id:'pipeline',   label:'📋 Pipeline',          count: pending.length + fuVisits.length },
@@ -1959,7 +1962,7 @@ function renderDashboard(){
   renderDashPanel(activeDashTab);
 }
 
-let activeDashTab = 'appts';
+let activeDashTab = 'today';
 
 function switchDashTab(tab) {
   activeDashTab = tab;
@@ -1977,13 +1980,150 @@ function renderDashPanel(tab) {
   const panel = document.getElementById('panel_' + tab);
   if (panel) panel.classList.add('active');
 
-  if (tab === 'appts') renderApptPanel();
+  if (tab === 'today') renderTodayPanel();
+  else if (tab === 'appts') renderApptPanel();
   else if (tab === 'signals') renderSignalsPanel();
   else if (tab === 'pipeline') renderPipelinePanel();
   else if (tab === 'leads') renderLeadsPanel();
   else if (tab === 'commission') renderCommissionPanel();
   else if (tab === 'numbers') renderNumbersPanel();
   else if (tab === 'notes') renderNotesPanel();
+}
+
+// ── TODAY'S OPPORTUNITIES ────────────────────────────────────────────────────
+// Turns existing Sheet + carrier-status data into a short, explainable work list.
+// This is deliberately read-only: opening, calling, texting, or dismissing a suggestion
+// never changes the client row. Michelle still confirms every real outcome/status herself.
+const OPPORTUNITY_DISMISS_KEY = 'michelles_desk_dismissed_opportunities_v1';
+
+function readDismissedOpportunities() {
+  try { return JSON.parse(localStorage.getItem(OPPORTUNITY_DISMISS_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function opportunityId(c, type) { return `${c.sheetRow}:${type}`; }
+
+function dismissOpportunity(id) {
+  const dismissed = readDismissedOpportunities();
+  dismissed[id] = new Date().toISOString();
+  localStorage.setItem(OPPORTUNITY_DISMISS_KEY, JSON.stringify(dismissed));
+  renderDashboard();
+  toast('Removed from Today — the client record was not changed');
+}
+
+function resetDismissedOpportunities() {
+  localStorage.removeItem(OPPORTUNITY_DISMISS_KEY);
+  renderDashboard();
+  toast('Dismissed suggestions restored');
+}
+
+function opportunityDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d)) return null;
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function daysBetween(from, to) { return Math.round((to - from) / 86400000); }
+
+function computeTodayOpportunities() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dismissed = readDismissedOpportunities();
+  const sales = [], protect = [];
+
+  const add = (lane, c, type, score, title, why, actionLabel) => {
+    const id = opportunityId(c, type);
+    if (dismissed[id]) return;
+    lane.push({ id, c, type, score, title, why, actionLabel });
+  };
+
+  allClients.forEach(c => {
+    const combinedStatus = [c.status, c.carrierStatusText, c.carrierReason].filter(Boolean).join(' ').toLowerCase();
+    const followDate = opportunityDate(c.followUpDate);
+    const nextCheck = opportunityDate(c.nextCheck);
+    const isDeathClaim = /death claim|deceased|\bdeath\b/.test(combinedStatus) || /^n$/i.test((c.carrierStatusText || '').trim());
+    const isNotTaken = /not[\s_-]*tkn|not[\s_-]*taken/.test(combinedStatus);
+    const isBehind = /one month behind|past due|premium failed|payment failed|\bnsf\b/.test(combinedStatus) || /^b$/i.test((c.carrierStatusText || '').trim());
+    const isInactive = /inactive|lapsed|cancelled|canceled/.test(combinedStatus) || /^c$/i.test((c.carrierStatusText || '').trim());
+    const hasPlacedPolicy = !!(c.newCompany && parseMoney(c.newPremium) > 0);
+
+    if (c.apptNeedsOutcome) {
+      const appt = opportunityDate(c.apptDate);
+      const overdueDays = appt ? Math.max(0, daysBetween(appt, today)) : 0;
+      add(sales, c, 'appointment_outcome', 120 + Math.min(overdueDays, 30), 'Appointment needs an outcome',
+        `${c.apptDate || 'Past appointment'} passed without a result being logged.`, 'Log outcome');
+    }
+
+    if (c.clientStatus === 'Follow Up' && followDate && followDate <= today) {
+      const overdueDays = Math.max(0, daysBetween(followDate, today));
+      add(sales, c, 'follow_up_due', 115 + Math.min(overdueDays, 30), overdueDays ? 'Follow-up is overdue' : 'Follow up today',
+        `${c.followUpDate}${c.followUpReason ? ` — ${c.followUpReason}` : ''}`, 'Open follow-up');
+    }
+
+    if (isNotTaken && !isDeathClaim) {
+      add(sales, c, 'not_taken', 105, 'Application was not taken',
+        `${c.newCompany || 'Carrier'} shows ${c.carrierStatusText || 'Not Taken'}${c.carrierReason ? ` — ${c.carrierReason}` : ''}. This may be worth reworking.`, 'Review opportunity');
+    } else if (isInactive && !isDeathClaim) {
+      add(sales, c, 'inactive_policy', 90, 'Coverage may be recoverable',
+        `${c.newCompany || 'Carrier'} shows ${c.carrierStatusText || 'inactive/cancelled'}${c.carrierReason ? ` — ${c.carrierReason}` : ''}.`, 'Review client');
+    }
+
+    if (isBehind && !isDeathClaim) {
+      add(protect, c, 'premium_behind', 130, 'Premium needs attention',
+        `${c.newCompany || 'Carrier'} shows ${c.carrierStatusText || c.carrierReason || 'payment trouble'}.`, 'Protect policy');
+    }
+
+    if (hasPlacedPolicy && nextCheck && nextCheck <= today && !isDeathClaim) {
+      const overdueDays = Math.max(0, daysBetween(nextCheck, today));
+      add(protect, c, 'verification_due', 100 + Math.min(overdueDays, 20), overdueDays ? 'Status check is overdue' : 'Status check due today',
+        `Next check: ${c.nextCheck}${c.lastChecked ? ` · Last checked: ${c.lastChecked}` : ''}`, 'Verify status');
+    } else if (hasPlacedPolicy && c.status === POLICY_STATUS.PENDING_VERIFICATION.key && !c.lastChecked && !isDeathClaim) {
+      add(protect, c, 'never_verified', 75, 'Policy has never been verified',
+        `${c.newCompany} policy is still marked Pending Verification.`, 'Verify status');
+    }
+  });
+
+  // Keep one suggestion of each type per sheet row and present the most urgent first.
+  const uniqueSorted = items => [...new Map(items.sort((a,b) => b.score-a.score).map(x => [x.id,x])).values()];
+  return { sales: uniqueSorted(sales), protect: uniqueSorted(protect), dismissedCount: Object.keys(dismissed).length };
+}
+
+function opportunityCard(o) {
+  const c = o.c;
+  const key = c.fullName.toLowerCase().replace(/\s+/g,' ').trim();
+  const call = c.phone ? `<a href="tel:${c.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()" style="padding:7px 10px;border-radius:9px;background:var(--green);color:#fff;text-decoration:none;font-size:11px;font-weight:700">📞 Call</a>` : '';
+  const text = c.phone ? `<a href="sms:${c.phone.replace(/[^0-9+]/g,'')}" onclick="event.stopPropagation()" style="padding:7px 10px;border-radius:9px;background:var(--blue);color:#fff;text-decoration:none;font-size:11px;font-weight:700">💬 Text</a>` : '';
+  const primary = o.type === 'appointment_outcome'
+    ? `<button onclick="event.stopPropagation();openOutcomeModal('${esc(key)}',${c.sheetRow})" style="padding:7px 10px;border:0;border-radius:9px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;cursor:pointer">📋 ${o.actionLabel}</button>`
+    : `<button onclick="event.stopPropagation();openGroup('${esc(key)}');window.scrollTo({top:0,behavior:'smooth'})" style="padding:7px 10px;border:0;border-radius:9px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;cursor:pointer">${o.actionLabel}</button>`;
+  return `<div style="background:#fff;border:1px solid var(--border);border-left:5px solid ${o.score>=120?'var(--rust)':o.score>=100?'var(--gold)':'var(--sage)'};border-radius:12px;padding:12px 13px">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+      <div><div style="font-weight:700;font-size:14px">${c.fullName}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${[c.newCompany||c.displayCompany,c.city].filter(Boolean).join(' · ')}</div></div>
+      <button onclick="event.stopPropagation();dismissOpportunity('${esc(o.id)}')" title="Remove this suggestion without changing the client" style="border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px">✕</button>
+    </div>
+    <div style="font-weight:700;font-size:12px;color:var(--ink);margin-top:9px">${o.title}</div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.45;margin-top:3px">${o.why}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${primary}${call}${text}</div>
+  </div>`;
+}
+
+function renderTodayPanel() {
+  const panel = document.getElementById('panel_today');
+  const data = computeTodayOpportunities();
+  const lane = (title, subtitle, items, emptyText) => `<div style="margin-bottom:20px">
+    <div style="font-family:'DM Serif Display',serif;font-size:19px">${title}</div>
+    <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">${subtitle}</div>
+    ${items.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px">${items.slice(0,18).map(opportunityCard).join('')}</div>` : `<div class="no-results" style="padding:20px">${emptyText}</div>`}
+  </div>`;
+
+  panel.innerHTML = `<div style="background:var(--cream);border-radius:14px;padding:14px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:14px">Michelle's shortest useful work list</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-top:3px">Every suggestion explains why it appeared. Nothing here changes the spreadsheet until Michelle opens the client and confirms what happened.</div>
+    </div>
+    ${lane('💵 Sales opportunities', 'People most likely to need a follow-up, rework, or coverage conversation.', data.sales, '🎉 No urgent sales opportunities found today.')}
+    ${lane('🛡️ Protect the book', 'Policies needing payment attention or a status check.', data.protect, '✓ No urgent policy-protection work found today.')}
+    ${data.dismissedCount ? `<button onclick="resetDismissedOpportunities()" style="border:0;background:transparent;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:11px">Restore ${data.dismissedCount} dismissed suggestion${data.dismissedCount===1?'':'s'}</button>` : ''}`;
 }
 
 function renderApptPanel() {
