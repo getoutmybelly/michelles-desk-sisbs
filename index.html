@@ -473,6 +473,17 @@
   .lead-review-title{font-weight:800;color:var(--green);font-size:14px;}.lead-review-copy{font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px;}
   .lead-review-badge{background:#fff;color:var(--green);border:1px solid #b8d9c5;border-radius:999px;padding:4px 9px;font-size:10px;font-weight:800;white-space:nowrap;}
   .lead-review-card{background:#fff;border:1px solid #e2e8e4;border-radius:11px;padding:12px;margin-bottom:9px;box-shadow:0 3px 12px rgba(26,60,42,.04);}
+  .lead-review-workspace{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(360px,1.35fr);gap:14px;align-items:start;}
+  .lead-source-panel{background:#f5f2ec;border:1px solid #e2ddd4;border-radius:10px;padding:9px;min-width:0;}
+  .lead-source-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:10px;font-weight:800;color:var(--ink);}
+  .lead-source-hint{font-size:9px;font-weight:600;color:var(--muted);}
+  .lead-source-canvas-wrap{position:relative;display:flex;align-items:center;justify-content:center;min-height:250px;max-height:390px;overflow:hidden;background:#fff;border:1px solid #d9d5ce;border-radius:8px;cursor:zoom-in;}
+  .lead-source-canvas-wrap canvas{display:block;width:100%;height:auto;max-height:390px;object-fit:contain;}
+  .lead-source-loading{font-size:11px;color:var(--muted);padding:28px;text-align:center;}
+  .lead-verify-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding:9px 10px;border:1px solid #dfe9e3;border-radius:9px;background:#f6fbf8;}
+  .lead-verify-copy{font-size:9.5px;color:var(--muted);line-height:1.45;}.lead-verify-copy b{display:block;color:var(--ink);font-size:10.5px;}
+  .lead-verify-btn{flex:0 0 auto;border:1px solid #7da38e;background:#fff;color:#35654e;border-radius:999px;padding:8px 11px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;}.lead-verify-btn:hover{background:#eaf5ee;}
+  .lead-card-zoom{max-width:1000px!important;background:#f4f1eb!important;overflow:hidden!important;}.lead-card-zoom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 17px;background:var(--ink);color:#fff;}.lead-card-zoom-title{font-family:'DM Serif Display',serif;font-size:20px;}.lead-card-zoom-close{border:none;border-radius:50%;width:34px;height:34px;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer;}.lead-card-zoom-body{padding:14px;max-height:76vh;overflow:auto;text-align:center;}.lead-card-zoom-body img{display:block;width:100%;height:auto;background:#fff;border-radius:9px;box-shadow:0 8px 24px rgba(20,22,42,.12);}
   .lead-review-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;}.lead-review-field label{display:flex;justify-content:space-between;gap:8px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.045em;color:var(--muted);margin-bottom:3px;}
   .lead-review-field input{width:100%;padding:7px 8px;border:1px solid #d8ddd9;border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--ink);background:#fff;}.lead-review-field input:focus{outline:none;border-color:var(--sage);box-shadow:0 0 0 3px rgba(92,122,107,.1);}
   .lead-review-field input.needs-attention{border-color:var(--rust);background:#fff8f5;box-shadow:0 0 0 3px rgba(196,80,26,.08);}
@@ -480,7 +491,8 @@
   .lead-finalize-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px;padding-top:11px;border-top:1px solid #d8e7de;}.lead-finalize-note{font-size:10.5px;color:var(--muted);line-height:1.45;max-width:480px;}
   .lead-finalize-btn{min-width:220px;padding:12px 16px;background:linear-gradient(135deg,#276f49,#39885e);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 5px 14px rgba(45,122,79,.2);}.lead-finalize-btn:disabled{opacity:.58;cursor:not-allowed;box-shadow:none;}
   .lead-receipt{background:#fff;border:1px solid #b9dbc7;border-radius:12px;padding:14px;margin-top:10px;}.lead-receipt-title{font-family:'DM Serif Display',serif;font-size:18px;color:var(--green);}.lead-receipt-copy{font-size:11px;color:var(--muted);margin-top:3px;}.lead-receipt-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(150px,1.2fr) minmax(130px,1fr);gap:9px;padding:9px 0;border-top:1px solid #eef1ee;font-size:11px;}.lead-receipt-row:first-of-type{margin-top:10px;}.lead-receipt-row b{font-size:12px;}.lead-receipt-ok{color:var(--green);font-weight:700;}.lead-receipt-warn{color:var(--gold);font-weight:700;}
-  @media(max-width:650px){.lead-review-grid{grid-template-columns:1fr}.lead-finalize-bar{align-items:stretch;flex-direction:column}.lead-finalize-btn{width:100%}.lead-receipt-row{grid-template-columns:1fr}}
+  @media(max-width:820px){.lead-review-workspace{grid-template-columns:1fr}.lead-source-canvas-wrap{max-height:330px}.lead-source-canvas-wrap canvas{max-height:330px}}
+  @media(max-width:650px){.lead-review-grid{grid-template-columns:1fr}.lead-finalize-bar{align-items:stretch;flex-direction:column}.lead-finalize-btn{width:100%}.lead-receipt-row{grid-template-columns:1fr}.lead-verify-row{align-items:stretch;flex-direction:column}.lead-verify-btn{width:100%}}
 </style>
 </head>
 <body>
@@ -753,6 +765,10 @@
 
 <div class="briefing-overlay" id="briefingOverlay" onclick="if(event.target===this)closeBriefing()">
   <div class="briefing-modal" id="briefingModal"></div>
+</div>
+
+<div class="briefing-overlay" id="leadCardOverlay" onclick="if(event.target===this)closeLeadCardZoom()">
+  <div class="briefing-modal lead-card-zoom" id="leadCardModal"></div>
 </div>
 
 <div class="briefing-overlay" id="backfillOverlay" onclick="if(event.target===this)closeBackfillModal()">
@@ -5436,17 +5452,26 @@ function renderFexLeadsPreview(leads, container, btn, pdfBase64) {
 
   leads.forEach((lead, i) => {
     html += `<div class="lead-review-card">
-      <div class="lead-review-grid">
-        ${fields.map(([key,label]) => `
-          <div class="lead-review-field">
-            <label>${label}${['firstName','lastName','phone'].includes(key)?'<span>check</span>':''}</label>
-            <input type="text" value="${(lead[key]||'').toString().replace(/"/g,'&quot;')}"
-              id="fex_${container.id}_${i}_${key}"
-              oninput="onFexLeadFieldInput('${container.id}',${i},'${key}',this.value)"
-              onblur="validateFexLeadCard('${container.id}',${i})">
-          </div>`).join('')}
+      <div class="lead-review-workspace">
+        <div class="lead-source-panel">
+          <div class="lead-source-head"><span>Original lead card</span><span class="lead-source-hint">Click to enlarge</span></div>
+          <div class="lead-source-canvas-wrap" id="fex_source_${container.id}_${i}" onclick="openLeadCardZoom('${container.id}',${i})"><div class="lead-source-loading">Loading the original card…</div></div>
+        </div>
+        <div>
+          <div class="lead-review-grid">
+            ${fields.map(([key,label]) => `
+              <div class="lead-review-field">
+                <label>${label}${['firstName','lastName','phone'].includes(key)?'<span>check</span>':''}</label>
+                <input type="text" value="${(lead[key]||'').toString().replace(/"/g,'&quot;')}"
+                  id="fex_${container.id}_${i}_${key}"
+                  oninput="onFexLeadFieldInput('${container.id}',${i},'${key}',this.value)"
+                  onblur="validateFexLeadCard('${container.id}',${i})">
+              </div>`).join('')}
+          </div>
+          <div class="lead-verify-row"><div class="lead-verify-copy"><b>Verify before saving</b><span id="fex_verify_copy_${container.id}_${i}"></span></div><button class="lead-verify-btn" id="fex_verify_btn_${container.id}_${i}" onclick="openTruePeopleSearch('${container.id}',${i})"></button></div>
+          <div class="lead-file-preview"><span>📄</span><span>Will file as <b id="fex_filename_${container.id}_${i}">${htmlSafe(leadFileName(lead))}</b></span></div>
+        </div>
       </div>
-      <div class="lead-file-preview"><span>📄</span><span>Will file as <b id="fex_filename_${container.id}_${i}">${htmlSafe(leadFileName(lead))}</b></span></div>
     </div>`;
   });
 
@@ -5454,7 +5479,7 @@ function renderFexLeadsPreview(leads, container, btn, pdfBase64) {
 
   html += '</div>';
   container.innerHTML = html;
-  leads.forEach((_,i)=>validateFexLeadCard(container.id,i,false));
+  leads.forEach((_,i)=>{validateFexLeadCard(container.id,i,false);updateLeadVerifyButton(container.id,i);renderLeadSourcePreview(container.id,i);});
 }
 
 let leadFolderHandleCache = null;
@@ -5465,8 +5490,82 @@ function onFexLeadFieldInput(containerId,index,key,value) {
   lead[key]=value;
   const name=document.getElementById(`fex_filename_${containerId}_${index}`);
   if(name) name.textContent=leadFileName(lead);
+  updateLeadVerifyButton(containerId,index);
   validateFexLeadCard(containerId,index,false);
 }
+
+function normalizedLeadPhone(value) {
+  let digits=String(value||'').replace(/\D/g,'');
+  if(digits.length===11&&digits.startsWith('1'))digits=digits.slice(1);
+  return digits.length===10?digits:'';
+}
+
+function truePeopleSearchUrl(lead) {
+  const phone=normalizedLeadPhone(lead?.phone);
+  if(phone)return `https://www.truepeoplesearch.com/results?phoneno=${encodeURIComponent(phone)}`;
+  const name=[lead?.firstName,lead?.lastName].map(cl).filter(Boolean).join(' ');
+  const place=[lead?.city,lead?.state,lead?.zip].map(cl).filter(Boolean).join(' ');
+  if(!name)return 'https://www.truepeoplesearch.com/';
+  return `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(name)}&citystatezip=${encodeURIComponent(place)}`;
+}
+
+function updateLeadVerifyButton(containerId,index) {
+  const lead=window._fexLeadsState?.[containerId]?.[index]||{};
+  const phone=normalizedLeadPhone(lead.phone);
+  const btn=document.getElementById(`fex_verify_btn_${containerId}_${index}`);
+  const copy=document.getElementById(`fex_verify_copy_${containerId}_${index}`);
+  if(btn)btn.textContent=phone?'🔎 Search this phone':'🔎 Search name + location';
+  if(copy)copy.textContent=phone?' Uses the edited phone above in TruePeopleSearch.':' No usable phone—searches the edited name and location instead.';
+}
+
+function openTruePeopleSearch(containerId,index) {
+  const lead=window._fexLeadsState?.[containerId]?.[index];
+  if(!lead){toast('Could not find that lead');return;}
+  const popup=window.open(truePeopleSearchUrl(lead),'_blank','noopener,noreferrer');
+  if(!popup)toast('Allow pop-ups to open TruePeopleSearch');
+}
+
+async function getFexPdfDocument(containerId) {
+  window._fexPdfDocState=window._fexPdfDocState||{};
+  if(window._fexPdfDocState[containerId])return window._fexPdfDocState[containerId];
+  smartPdfConfigure();
+  const base64=window._fexPdfState?.[containerId]||lastFexPdfB64;
+  if(!base64)throw new Error('Source card is no longer in memory');
+  const bytes=Uint8Array.from(atob(base64),ch=>ch.charCodeAt(0));
+  const promise=pdfjsLib.getDocument({data:bytes}).promise;
+  window._fexPdfDocState[containerId]=promise;
+  return promise;
+}
+
+async function renderLeadSourcePreview(containerId,index) {
+  const host=document.getElementById(`fex_source_${containerId}_${index}`);if(!host)return;
+  try{
+    const lead=window._fexLeadsState?.[containerId]?.[index]||{};
+    const pdf=await getFexPdfDocument(containerId);
+    const pageNumber=Math.min(pdf.numPages,Math.max(1,(lead._pdfPageIndex??index)+1));
+    const page=await pdf.getPage(pageNumber);
+    const base=page.getViewport({scale:1});
+    const scale=Math.min(2.2,Math.max(1.25,720/base.width));
+    const viewport=page.getViewport({scale});
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+    canvas.setAttribute('aria-label','Original lead card; click to enlarge');
+    await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+    host.replaceChildren(canvas);
+  }catch(e){console.warn('Lead preview failed',e);host.innerHTML='<div class="lead-source-loading">Original card preview unavailable.<br>You can still finalize the lead.</div>';}
+}
+
+function openLeadCardZoom(containerId,index) {
+  const canvas=document.querySelector(`#fex_source_${CSS.escape(containerId)}_${index} canvas`);
+  if(!canvas){toast('The original card is still loading');return;}
+  const lead=window._fexLeadsState?.[containerId]?.[index]||{};
+  const title=[lead.firstName,lead.lastName].map(cl).filter(Boolean).join(' ')||'Original lead card';
+  const modal=document.getElementById('leadCardModal');
+  modal.innerHTML=`<div class="lead-card-zoom-head"><div><div class="lead-card-zoom-title">${htmlSafe(title)}</div><div style="font-size:10px;color:rgba(255,255,255,.65);margin-top:2px">Compare the handwriting with the editable fields</div></div><button class="lead-card-zoom-close" onclick="closeLeadCardZoom()">✕</button></div><div class="lead-card-zoom-body"><img src="${canvas.toDataURL('image/png')}" alt="Original lead card"></div>`;
+  document.getElementById('leadCardOverlay').classList.add('visible');
+}
+
+function closeLeadCardZoom(){document.getElementById('leadCardOverlay')?.classList.remove('visible');}
 
 function validateFexLeadCard(containerId,index,showAll=true) {
   const lead=window._fexLeadsState?.[containerId]?.[index]||{};
