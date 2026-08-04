@@ -239,13 +239,13 @@
   /* COMMISSION TRACKER */
   .comm-section{display:none;margin-bottom:22px;}
   .comm-section.visible{display:block;}
-  .comm-box{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
-  .comm-header{background:var(--ink);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .comm-box{background:#fff;border:1.5px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 12px 38px rgba(26,26,46,.12);}
+  .comm-header{background:linear-gradient(120deg,var(--ink),#31314d);padding:17px 20px;display:flex;align-items:center;justify-content:space-between;}
   .comm-title{font-family:'DM Serif Display',serif;color:#fff;font-size:18px;}
   .comm-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
   .comm-body{padding:20px;}
-  .comm-drop{border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;}
-  .comm-drop:hover{border-color:var(--gold);background:var(--gold-light);}
+  .comm-drop{border:2px dashed rgba(184,146,58,.72);border-radius:16px;padding:34px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px;background:linear-gradient(145deg,#fff,var(--gold-light));}
+  .comm-drop:hover,.comm-drop.drag{border-color:var(--sage);background:linear-gradient(145deg,#fff,var(--sage-light));transform:translateY(-1px);box-shadow:0 8px 22px rgba(26,26,46,.08);}
   .comm-drop-icon{font-size:28px;margin-bottom:8px;}
   .comm-reading{display:none;text-align:center;padding:24px;color:var(--muted);}
   .comm-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;}
@@ -653,15 +653,17 @@
   <div class="comm-section" id="commSection">
     <div class="comm-box">
       <div class="comm-header">
-        <div class="comm-title">💰 Commission Statement Tracker</div>
+        <div class="comm-title">✨ Smart File Reconciliation</div>
         <button class="comm-close" onclick="closeCommTracker()">✕</button>
       </div>
       <div class="comm-body">
-        <div class="comm-drop" id="commDrop" onclick="document.getElementById('commInput').click()">
+        <div class="comm-drop" id="commDrop" onclick="document.getElementById('commInput').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');smartHandleFiles(event.dataTransfer.files)">
           <div class="comm-drop-icon">📄</div>
-          <div style="font-size:14px;color:var(--muted)"><b style="color:var(--ink)">Upload commission statement</b><br>Trinity, Illinois Mutual, American General, Polish Falcons, and more</div>
+          <div style="font-size:14px;color:var(--muted)"><b style="color:var(--ink);font-size:16px">Drop any carrier file here</b><br><span style="display:inline-block;margin-top:4px">I’ll recognize it, sort it, and show you what it can update.</span>
+            <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:13px"><span style="background:#fff;border:1px solid var(--border);padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700">PDF</span><span style="background:#fff;border:1px solid var(--border);padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700">EXCEL</span><span style="background:#fff;border:1px solid var(--border);padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700">CSV</span><span style="background:#fff;border:1px solid var(--border);padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700">MULTIPLE FILES</span></div>
+          </div>
         </div>
-        <input type="file" id="commInput" accept="application/pdf" style="display:none" onchange="handleCommUpload(this)">
+        <input type="file" id="commInput" multiple accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" style="display:none" onchange="smartHandleFiles(this.files)">
         <div class="comm-reading" id="commReading">
           <div class="comm-spinner"></div>
           <div>Reading statement…</div>
@@ -693,6 +695,7 @@
   </div>
 </div>
 
+<div aria-label="Made with love from W to Michelle" style="text-align:center;padding:10px 0 28px;color:rgba(92,122,107,.72);font-family:'DM Serif Display',serif;font-size:13px;letter-spacing:.08em">W ❤️ M</div>
 
 
 
@@ -3360,6 +3363,22 @@ function copyTopReplacedCompanies() {
 // matchPolicy all inside the adapter" — matching and persistency don't change per carrier,
 // so keeping them shared avoids reimplementing (and re-testing) the same logic per carrier.
 const CARRIER_ADAPTERS = {
+  generic: {
+    label: 'Detected Carrier Report',
+    sourceType: 'smart-file-intake',
+    capabilities: { supportsPagination: false, supportsStatusDecode: true, supportsPremium: true, supportsPolicyDetail: true },
+    headerAliases: null,
+    mapStatus: (rawStatus) => {
+      const s = String(rawStatus || '').trim().toLowerCase();
+      if (/^(a|active)$|in[ -]?force|active.*current|paid.*force/.test(s)) return { standardizedStatus:'issued_paid_in_force', subtype:null };
+      if (/^(issued|approved)$/.test(s)) return { standardizedStatus:'issued', subtype:null };
+      if (/not[\s_-]*tkn|not[\s_-]*taken/.test(s)) return { standardizedStatus:'adverse', subtype:'not_taken' };
+      if (/^(b)$|behind|past due|payment fail|draft fail|\bnsf\b/.test(s)) return { standardizedStatus:'adverse', subtype:'premium_behind' };
+      if (/^(n)$|death claim|deceased/.test(s)) return { standardizedStatus:'adverse', subtype:'death_claim' };
+      if (/^(c)$|lapsed|inactive|cancelled|canceled|terminated|surrendered/.test(s)) return { standardizedStatus:'adverse', subtype:'lapsed_or_inactive' };
+      return { standardizedStatus:'pending_verification', subtype:'unrecognized_status' };
+    },
+  },
   lifeshield: {
     label: 'LifeShield',
     sourceType: 'xlsx-report',
@@ -3576,7 +3595,7 @@ function parseCarrierReportWorkbook(carrierKey, arrayBuffer) {
 function matchCarrierRecords(carrierKey, records, clients) {
   const carrierLabel = CARRIER_ADAPTERS[carrierKey].label;
   const isThisCarrier = c => (c.newCompany||'').toLowerCase().includes(carrierKey) || (c.existingCompany||'').toLowerCase().includes(carrierKey);
-  const deskCarrierClients = clients.filter(isThisCarrier);
+  const deskCarrierClients = carrierKey === 'generic' ? clients : clients.filter(isThisCarrier);
 
   const exact = [], nameOnly = [], unmatchedPortal = [];
   const matchedSheetRows = new Set();
@@ -3799,7 +3818,7 @@ function renderCommissionPanel() {
   const panel = document.getElementById('panel_commission');
   panel.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <button onclick="openCommTracker()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--gold);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--gold);cursor:pointer">📄 Upload Statement</button>
+      <button onclick="openCommTracker()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--gold);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--gold);cursor:pointer">✨ Reconcile Files</button>
       <button onclick="document.getElementById('carrierReportFileInput').click()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--sage);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--sage);cursor:pointer">📥 Import Carrier Report</button>
       <button onclick="renderCommissionPanel()" style="padding:10px 16px;background:#fff;border:1.5px solid var(--border);border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">↻ Refresh</button>
     </div>
@@ -5303,12 +5322,212 @@ function closeCommTracker() {
 function resetCommTracker() {
   document.getElementById('commDrop').style.display='block';
   document.getElementById('commReading').style.display='none';
+  document.getElementById('commReading').innerHTML='<div class="comm-spinner"></div><div>Reading and sorting files…</div>';
   document.getElementById('commResults').style.display='none';
   document.getElementById('commResults').innerHTML='';
   document.getElementById('commInput').value='';
 }
 
-async function handleCommUpload(input) {
+let smartFileResults = [];
+
+function smartHtml(value) {
+  return String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function smartHeader(value) { return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
+function smartPick(row, aliases) {
+  for (const alias of aliases) {
+    const value = row[smartHeader(alias)];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return '';
+}
+
+function smartRowsFromWorkbook(workbook) {
+  let best = null;
+  workbook.SheetNames.forEach(sheetName => {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header:1, defval:'', raw:false });
+    for (let i=0; i<Math.min(rows.length,30); i++) {
+      const headers = rows[i].map(smartHeader);
+      const headerSet = new Set(headers.filter(Boolean));
+      const clues = ['POLICYNUMBER','POLICY','STATUS','STATUSCATEGORY','POLICYSTATUS','INSUREDNAME','CLIENT','COMMISSIONAMOUNT','AMOUNT','PREMIUM','PAIDTODATE','AGENTNUMBER','AGENTCOMPLETENAME'];
+      const score = clues.filter(x => headerSet.has(x)).length + headers.filter(Boolean).length/100;
+      if (!best || score > best.score) best = { score, sheetName, headerIndex:i, rows, headers };
+    }
+  });
+  if (!best || best.score < 1) throw new Error('I could not find a recognizable table header in this workbook.');
+  const objects = best.rows.slice(best.headerIndex+1).map(values => {
+    const out = {};
+    best.headers.forEach((h,i) => { if (h) out[h] = values[i]; });
+    return out;
+  }).filter(row => Object.values(row).some(v => v !== '' && v != null));
+  return { ...best, objects };
+}
+
+function smartDetectWorkbook(parsed, fileName) {
+  const headers = new Set(parsed.headers);
+  const has = (...names) => names.some(n => headers.has(n));
+  const hasPolicy = has('POLICYNUMBER','POLICYNO','POLICY','CERTIFICATENUMBER');
+  const hasStatus = has('STATUS','STATUSCATEGORY','STATUSDISPLAYTEXT','POLICYSTATUS','PAIDTODATE');
+  const hasCommission = has('COMMISSIONAMOUNT','MONTHLYCOMMISSIONCREDIT') || (has('AMOUNT') && has('ACTIVITY','COMMISSIONTYPE','COMMISSIONCATEGORY'));
+
+  if (hasPolicy && hasCommission) return 'commission';
+  if (hasPolicy && hasStatus) return 'policy';
+  if (hasPolicy && has('OUTSTANDINGAMOUNT','ADVANCEDAMOUNT','ADVANCEEARNED')) return 'advance';
+  if (has('AGENTCOMPLETENAME') && has('AGENTNUMBER')) return 'roster';
+  if (/production/i.test(fileName) || (has('LCNAME') && has('APPS'))) return 'production';
+  return 'unknown';
+}
+
+function smartNormalizePolicyRows(rows) {
+  return rows.map(row => {
+    const first = smartPick(row,['FIRSTNAME','OWNERFIRSTNAME']);
+    const last = smartPick(row,['LASTNAME','OWNERLASTNAME']);
+    const insured = smartPick(row,['INSUREDNAME','WHOLE NAME','WHOLENAME','OWNER','CLIENT','POLICYHOLDERNAME']) || [first,last].filter(Boolean).join(' ');
+    const category = smartPick(row,['STATUSCATEGORY','STATUS','POLICYSTATUS']);
+    const display = smartPick(row,['STATUSDISPLAYTEXT']);
+    const status = [category,display].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' - ');
+    return {
+      policyNumber: String(smartPick(row,['POLICYNUMBER','POLICYNO','POLICY','CERTIFICATENUMBER']) || '').trim(),
+      insuredName: String(insured || '').trim(),
+      status: String(status || 'Pending Verification').trim(),
+      issueDate: smartPick(row,['ISSUEDATE','ORIGEFFDATE','EFFECTIVEDATE']),
+      premium: parseMoney(smartPick(row,['CURRENTMODALPREMIUM','MODEPREMIUM','PREMIUM','COMMISSIONABLEPREMIUM'])),
+      paidToDate: smartPick(row,['PAIDTODATE','PAIDTO']),
+      product: smartPick(row,['PRODUCTNAME','PRODUCT','PRODUCTTYPE','LONGDESCRIPTION']),
+      faceAmount: parseMoney(smartPick(row,['BASEFACEAMOUNT','FACEVALUE','FACEAMOUNT'])),
+    };
+  }).filter(r => r.policyNumber || r.insuredName);
+}
+
+function smartNormalizeCommissionRows(rows) {
+  const policies = rows.map(row => ({
+    policyNumber: String(smartPick(row,['POLICYNUMBER','POLICYNO','POLICY']) || '').trim(),
+    insuredName: String(smartPick(row,['CLIENT','INSUREDNAME','POLICYHOLDERNAME','DESCRIPTION']) || '').trim(),
+    commissionAmount: parseMoney(smartPick(row,['COMMISSIONAMOUNT','AMOUNT','MONTHLYCOMMISSIONCREDIT'])),
+    commissionType: String(smartPick(row,['COMMISSIONCATEGORY','ACTIVITY','COMMISSIONTYPE','LONGDESCRIPTION','DESCRIPTION']) || '').trim(),
+  })).filter(r => r.policyNumber);
+  const first = rows[0] || {};
+  return {
+    carrier: String(smartPick(first,['COMPANY','COMPANYCODE','AGENCYNAME']) || 'Detected carrier').trim(),
+    period: String(smartPick(first,['ACTIVITYFORPERIODENDING','COMMISSIONPAIDDATE','PROCESSDATE']) || '').trim(),
+    agentName: String(smartPick(first,['WRITINGAGENTNAME','AGENTNAME']) || '').trim(),
+    policies,
+  };
+}
+
+async function smartParseSpreadsheet(file) {
+  const workbook = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+  const parsed = smartRowsFromWorkbook(workbook);
+  const type = smartDetectWorkbook(parsed, file.name);
+  if (type === 'policy') {
+    const records = smartNormalizePolicyRows(parsed.objects);
+    if (!records.length) throw new Error('I recognized a policy report but found no usable policy rows.');
+    return { type, label:'Policy / book-of-business report', count:records.length, records, carrier:smartPick(parsed.objects[0]||{},['COMPANY','COMPANYCODE']) || 'Detected carrier' };
+  }
+  if (type === 'commission') {
+    const data = smartNormalizeCommissionRows(parsed.objects);
+    if (!data.policies.length) throw new Error('I recognized a commission report but found no policy-number rows.');
+    return { type, label:'Commission detail report', count:data.policies.length, data };
+  }
+  const labels = { advance:'Advance balance report', roster:'Agent roster', production:'Production summary', unknown:'Unrecognized spreadsheet' };
+  return { type, label:labels[type], count:parsed.objects.length, sheetName:parsed.sheetName, headers:parsed.headers.filter(Boolean) };
+}
+
+async function smartParsePdf(file) {
+  const base64 = await fileToBase64(file);
+  const response = await fetch(WORKER_URL, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6', max_tokens:6000,
+      messages:[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+        {type:'text',text:`Classify and extract this insurance-business PDF. It may be a policy summary, book-of-business report, lapse/due report, commission statement, production report, or another carrier report. Return ONLY valid JSON with this shape:
+{"documentType":"policy|commission|production|other","carrier":"","period":"","policies":[{"policyNumber":"","insuredName":"","status":"","issueDate":"","premium":0,"paidToDate":"","product":"","faceAmount":0,"commissionAmount":0,"commissionType":""}],"summary":""}
+Use documentType policy when policy status/coverage is the main purpose; commission when payment/commission line items are the main purpose. Include every visible policy row. For premium, return the monthly/modal premium only; if the document does not identify the premium frequency, return 0. Never invent values.`}
+      ]}]
+    })
+  });
+  const rawResponse = await response.text();
+  if (!response.ok) throw new Error(`AI service ${response.status}: ${rawResponse.slice(0,180)}`);
+  let payload;
+  try { payload = JSON.parse(rawResponse); } catch { throw new Error('The AI service returned an unreadable response.'); }
+  const text = payload?.content?.[0]?.text;
+  if (!text) throw new Error(payload?.error?.message || 'The AI service returned no extracted text.');
+  let extracted;
+  try { extracted = JSON.parse(text.trim().replace(/```json|```/g,'').trim()); }
+  catch { throw new Error('The PDF was read, but its extracted result was not valid JSON.'); }
+  const policies = Array.isArray(extracted.policies) ? extracted.policies : [];
+  if (extracted.documentType === 'commission') {
+    return { type:'commission', label:'Commission statement PDF', count:policies.length, data:{ carrier:extracted.carrier, period:extracted.period, policies } };
+  }
+  if (extracted.documentType === 'policy') {
+    return { type:'policy', label:'Policy report PDF', count:policies.length, records:policies, carrier:extracted.carrier || 'Detected carrier' };
+  }
+  return { type:extracted.documentType || 'other', label:'Insurance report PDF', count:policies.length, summary:extracted.summary || 'Read successfully; no policy reconciliation was identified.' };
+}
+
+async function smartHandleFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  smartFileResults = [];
+  document.getElementById('commDrop').style.display='none';
+  document.getElementById('commReading').style.display='block';
+  document.getElementById('commResults').style.display='none';
+  for (let i=0;i<files.length;i++) {
+    const file = files[i];
+    document.getElementById('commReading').innerHTML = `<div class="comm-spinner"></div><div>Recognizing ${smartHtml(file.name)} (${i+1} of ${files.length})…</div>`;
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['pdf','xlsx','xls','csv'].includes(ext)) throw new Error('Supported files are PDF, Excel, and CSV.');
+      const result = ext === 'pdf' ? await smartParsePdf(file) : await smartParseSpreadsheet(file);
+      smartFileResults.push({ fileName:file.name, ok:true, ...result });
+    } catch (error) {
+      console.error('Smart file intake failed:', file.name, error);
+      smartFileResults.push({ fileName:file.name, ok:false, error:error.message || String(error) });
+    }
+  }
+  renderSmartFileResults();
+}
+
+function renderSmartFileResults() {
+  document.getElementById('commReading').style.display='none';
+  const results = document.getElementById('commResults');
+  results.style.display='block';
+  results.innerHTML = `<div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px">I sorted the files</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review recognized policy or commission reports before anything changes in the Sheet.</div>
+    ${smartFileResults.map((r,i) => `<div style="border:1.5px solid ${r.ok?'var(--border)':'var(--rust)'};background:${r.ok?'#fff':'var(--rust-light)'};border-radius:11px;padding:12px 13px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <div><div style="font-weight:700;font-size:13px">${r.ok?'✓':'⚠️'} ${smartHtml(r.fileName)}</div>
+        <div style="font-size:11px;color:${r.ok?'var(--muted)':'var(--rust)'};margin-top:2px">${r.ok?`${smartHtml(r.label)} · ${r.count||0} row${r.count===1?'':'s'} recognized`:smartHtml(r.error)}</div></div>
+        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Review matches</button>` : ''}
+      </div>
+      ${r.ok && !['policy','commission'].includes(r.type) ? `<div style="font-size:11px;color:var(--muted);margin-top:7px">Recognized for reference. It does not contain policy-level status or commission rows to reconcile.</div>` : ''}
+    </div>`).join('')}
+    <button onclick="resetCommTracker()" style="margin-top:6px;padding:9px 14px;background:var(--cream);color:var(--ink);border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer">Add more files</button>`;
+}
+
+function smartReviewFile(index) {
+  const item = smartFileResults[index];
+  if (!item || !item.ok) return;
+  if (item.type === 'commission') { matchCommissions(item.data); return; }
+  if (item.type === 'policy') {
+    const envelope = buildConnectorEnvelope('generic', item.records, { agentVersion:'smart-file-intake-v1', generatedAt:new Date().toISOString() });
+    const validation = validateConnectorEnvelope(envelope);
+    const match = matchCarrierRecords('generic', envelope.records, allClients);
+    // A detected generic report may be a lapse list or partial carrier export. Without a
+    // confirmed carrier scope, claiming every other Desk policy is "missing" would create
+    // another false homework list, so only report rows and actual matches are reviewed.
+    match.deskNotFound = [];
+    match.carrierLabel = item.carrier && item.carrier !== 'Detected carrier' ? item.carrier : 'Detected Carrier';
+    carrierReportPreviewData = { carrierKey:'generic', envelope, match, stats:computeCarrierReportStats('generic',envelope.records), validationWarnings:validation.warnings };
+    renderCarrierReportModal();
+    document.getElementById('carrierReportOverlay').classList.add('visible');
+  }
+}
+
+async function handleLegacyCommPdfUpload(input) {
   if (!input.files[0]) return;
   const file = input.files[0];
   document.getElementById('commDrop').style.display='none';
@@ -5405,14 +5624,14 @@ function matchCommissions(data) {
   // Build lookup of all policy numbers in sheet
   const sheetPolicies = {};
   allClients.forEach(c => {
-    if (c.existingPolicy) {
-      const key = c.existingPolicy.toString().trim().toUpperCase();
+    [c.newPolicyNumber,c.existingPolicy].filter(Boolean).forEach(policy => {
+      const key = policy.toString().trim().toUpperCase();
       sheetPolicies[key] = c;
-    }
+    });
   });
 
   // Check each statement policy against sheet
-  policies.forEach(p => {
+  policies.filter(p => p && p.policyNumber).forEach(p => {
     const key = p.policyNumber.toString().trim().toUpperCase();
     if (sheetPolicies[key]) {
       matched.push({ ...p, client: sheetPolicies[key] });
@@ -5426,9 +5645,9 @@ function matchCommissions(data) {
   if (carrier) {
     allClients.forEach(c => {
       const clientCarrier = (c.existingCompany || c.displayCompany || '').toLowerCase();
-      if (clientCarrier && carrier.includes(clientCarrier.split(' ')[0]) || clientCarrier.includes(carrier.split(' ')[0])) {
-        const key = (c.existingPolicy || '').toString().trim().toUpperCase();
-        if (key && !policies.find(p => p.policyNumber.toString().trim().toUpperCase() === key)) {
+      if (clientCarrier && (carrier.includes(clientCarrier.split(' ')[0]) || clientCarrier.includes(carrier.split(' ')[0]))) {
+        const key = (c.newPolicyNumber || c.existingPolicy || '').toString().trim().toUpperCase();
+        if (key && !policies.find(p => p.policyNumber && p.policyNumber.toString().trim().toUpperCase() === key)) {
           missing.push(c);
         }
       }
