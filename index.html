@@ -2854,6 +2854,16 @@ function canonicalCompanyName(name) {
   return raw;
 }
 
+function isPlausibleCarrierName(name) {
+  const raw = String(name || '').trim();
+  if (!raw || /^(?:unknown|detected carrier|n\/?a|none)$/i.test(raw)) return false;
+  // Lead qualifiers and face-amount buckets sometimes lived in the carrier column in
+  // older rows. They are useful history, but they are not insurance companies.
+  if (/\b\d+\s*k?\s*(?:or|and)\s*(?:above|below|more|less)\b/i.test(raw)) return false;
+  if (/\b(?:face amount|coverage amount|lead qualifier|final expense lead)\b/i.test(raw)) return false;
+  return true;
+}
+
 const DESK_RESOLUTION = {
   new_sale: { tag:'desk:sale:new_sale', label:'New sale', counts:true },
   additional_coverage: { tag:'desk:sale:additional_coverage', label:'Upsell / additional coverage', counts:true },
@@ -2890,7 +2900,7 @@ function formatMoneyShort(value) { const amount=parseMoney(value); return amount
 function computeCarrierEvidenceNumbers() {
   const relationships = new Map();
   allClients.forEach(c => {
-    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || !c.status || getDeskResolution(c.relationshipResolution).startsWith('desk:duplicate_of:')) return;
+    if (!isPlausibleCarrierName(c.newCompany) || parseMoney(c.newPremium) <= 0 || getDeskResolution(c.relationshipResolution).startsWith('desk:duplicate_of:')) return;
     const carrier = canonicalCompanyName(c.newCompany);
     const policy = String(c.newPolicyNumber || '').trim().toUpperCase();
     const name = normalizeCarrierMatchName(c.fullName);
@@ -2898,23 +2908,26 @@ function computeCarrierEvidenceNumbers() {
     const current = relationships.get(key);
     if (!current || (c.sheetRow||0) > (current.sheetRow||0)) relationships.set(key,{...c,canonicalCarrier:carrier});
   });
-  const rows = [...relationships.values()];
+  const allRelationships = [...relationships.values()];
+  const isConfirmed = c => ['issued','issued_paid_in_force','adverse'].includes(c.status)
+    && !!String(c.verificationSource || '').trim()
+    && !/commission statement/i.test(String(c.verificationSource || ''));
+  const rows = allRelationships.filter(isConfirmed);
+  const unverified = allRelationships.filter(c => !isConfirmed(c));
   // Reduced paid-up remains an in-force policy. PFA grace codes 1/2/3 are also
   // technically in force, but belong in Attention here so Michelle sees the lapse risk.
   const stillInForceReasons = ['reduced_paid_up'];
   const inForce = rows.filter(c => ['issued','issued_paid_in_force'].includes(c.status) || stillInForceReasons.includes(c.carrierReason));
   const attention = rows.filter(c => c.status === 'adverse' && !stillInForceReasons.includes(c.carrierReason));
-  const pending = rows.filter(c => !inForce.includes(c) && !attention.includes(c));
   const byCompany = {};
   rows.forEach(c => {
-    const bucket = byCompany[c.canonicalCarrier] ||= {total:0,inForce:0,attention:0,pending:0,lastChecked:''};
+    const bucket = byCompany[c.canonicalCarrier] ||= {total:0,inForce:0,attention:0,lastChecked:''};
     bucket.total++;
     if (inForce.includes(c)) bucket.inForce++;
     else if (attention.includes(c)) bucket.attention++;
-    else bucket.pending++;
     if (c.lastChecked && (!bucket.lastChecked || new Date(c.lastChecked) > new Date(bucket.lastChecked))) bucket.lastChecked = c.lastChecked;
   });
-  return { rows, inForce, attention, pending, byCompany };
+  return { rows, inForce, attention, byCompany, unverified };
 }
 
 function computeCommissionEvidenceNumbers() {
@@ -3510,9 +3523,13 @@ function renderNumbersPanel() {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
       <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--sage)">${carrierEvidence.inForce.length}</div><div style="font-size:10px;color:var(--muted)">In force / still active</div></div>
       <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--rust)">${carrierEvidence.attention.length}</div><div style="font-size:10px;color:var(--muted)">Adverse / attention</div></div>
-      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gold)">${carrierEvidence.pending.length}</div><div style="font-size:10px;color:var(--muted)">Pending verification</div></div>
+      <div style="background:#fff;border-radius:10px;padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--ink)">${carrierEvidence.rows.length}</div><div style="font-size:10px;color:var(--muted)">Carrier-confirmed total</div></div>
     </div>
-    ${carrierCompanies.length ? carrierCompanies.map(([name,d])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 8px;border-top:1px solid var(--cream);font-size:12px"><b>${name}</b><span style="color:var(--muted)">${d.total} matched · <span style="color:var(--sage)">${d.inForce} active</span> · <span style="color:var(--rust)">${d.attention} attention</span>${d.pending?` · <span style="color:var(--gold)">${d.pending} pending</span>`:''}</span></div>`).join('') : `<div style="font-size:12px;color:var(--muted)">No carrier-confirmed records have been saved yet.</div>`}
+    ${carrierCompanies.length ? carrierCompanies.map(([name,d])=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 8px;border-top:1px solid var(--cream);font-size:12px"><b>${name}</b><span style="color:var(--muted)">${d.total} confirmed · <span style="color:var(--sage)">${d.inForce} active</span> · <span style="color:var(--rust)">${d.attention} attention</span></span></div>`).join('') : `<div style="font-size:12px;color:var(--muted)">No carrier-confirmed records have been saved yet.</div>`}
+  </div>`;
+
+  html += `<div style="border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin:-6px 0 16px;background:#fff;font-size:12px;color:var(--muted)">
+    <b style="color:var(--ink)">${carrierEvidence.unverified.length} policy relationship${carrierEvidence.unverified.length===1?'':'s'} still awaiting carrier verification</b> — kept outside the confirmed totals until a portal report, trusted carrier email, or documented manual check proves the current condition.
   </div>`;
 
   const commissionCompanies = Object.entries(commissionEvidence.byCompany).sort((a,b)=>Math.abs(b[1].cash)-Math.abs(a[1].cash));
@@ -4338,11 +4355,14 @@ function renderCarrierReportModal() {
   const pct = n => (n*100).toFixed(1) + '%';
   const statCard = (label, value) => `<div style="background:var(--cream);border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${label}</div><div style="font-size:16px;font-weight:700">${value}</div></div>`;
   const allWarnings = [...(envelope.warnings||[]), ...(validationWarnings||[])];
+  const isCommissionEvidence = !!carrierReportPreviewData.commissionData;
+  const approvalCount = match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0);
+  const canApprove = approvalCount > 0 || isCommissionEvidence;
 
   let html = `<div style="padding:22px">
     <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">📥 ${match.carrierLabel} Carrier Report</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Run ${envelope.runId} · ${envelope.meta.sourceType} · generated ${new Date(envelope.meta.generatedAt).toLocaleString('en-US')}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Nothing has been written to the Sheet yet — review below, then approve.</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Nothing has been written to the Sheet yet — review below, then approve.${isCommissionEvidence?' This is commission activity, not proof that a policy is currently active or inactive.':''}</div>
 
     ${allWarnings.length ? `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:10px;padding:10px 14px;margin-bottom:16px">
       <div style="font-weight:700;color:var(--rust);font-size:12px;margin-bottom:4px">⚠️ ${allWarnings.length} warning${allWarnings.length===1?'':'s'} on this import</div>
@@ -4394,7 +4414,7 @@ function renderCarrierReportModal() {
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="closeCarrierReportModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Close</button>
-      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'pointer':'not-allowed'}">✓ Approve & Retain All Evidence (${match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0)})</button>
+      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${canApprove?'':'disabled'} style="padding:11px 20px;background:${canApprove?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${canApprove?'pointer':'not-allowed'}">✓ ${isCommissionEvidence?'Retain Policies + Commission':'Approve & Retain All Evidence'} (${approvalCount})</button>
     </div>
   </div>`;
 
@@ -4423,11 +4443,11 @@ function buildCarrierReportWritePlan(client, record, carrierKey) {
   if(record.paidToDate&&(!existingPaidTo||isNaN(existingPaidTo)||!reportedPaidTo||isNaN(reportedPaidTo)||reportedPaidTo>=existingPaidTo)) {
     updates.push({ row: client.sheetRow, col: C.CARRIER_PAID_TO_DATE, value: record.paidToDate });
   }
-  if (!record.evidenceOnly || !client.status) updates.push(
+  if (!record.evidenceOnly) updates.push(
     { row: client.sheetRow, col: C.STATUS, value: mapped.standardizedStatus },
     { row: client.sheetRow, col: C.CARRIER_STATUS_TEXT, value: record.status },
     { row: client.sheetRow, col: C.CARRIER_REASON, value: mapped.subtype || '' },
-    { row: client.sheetRow, col: C.VERIFICATION_SOURCE, value: record.evidenceOnly?'Carrier Commission Statement':'Carrier Report' },
+    { row: client.sheetRow, col: C.VERIFICATION_SOURCE, value: 'Carrier Report' },
     { row: client.sheetRow, col: C.LAST_CHECKED, value: nowStr },
     { row: client.sheetRow, col: C.CHECK_METHOD, value: 'Manual Import' },
   );
@@ -4436,9 +4456,9 @@ function buildCarrierReportWritePlan(client, record, carrierKey) {
   return {
     updates,
     applyLocal() {
-      if (!record.evidenceOnly || !client.status) {
+      if (!record.evidenceOnly) {
         client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
-        client.verificationSource = record.evidenceOnly?'Carrier Commission Statement':'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import';
+        client.verificationSource = 'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import';
       }
       client.statusLog = newLog;
       client.carrierIssueDate = record.issueDate;
@@ -4469,12 +4489,14 @@ function buildCarrierSourceClientRow(record,carrierKey,sourceFile) {
   row[39]=record.faceAmount||'';
   row[40]=record.premium||'';
   row[63]=`Carrier-sourced policy row created from ${sourceFile||adapter.label+' report'}. Original client paperwork was not yet in Michelle's Desk.`;
-  row[C.STATUS]=mapped.standardizedStatus;
-  row[C.CARRIER_STATUS_TEXT]=record.status||'Carrier record imported';
-  row[C.CARRIER_REASON]=mapped.subtype||'';
-  row[C.VERIFICATION_SOURCE]=record.evidenceOnly?'Carrier Commission Statement':'Carrier Report';
-  row[C.LAST_CHECKED]=nowStr;
-  row[C.CHECK_METHOD]='Manual Import';
+  if (!record.evidenceOnly) {
+    row[C.STATUS]=mapped.standardizedStatus;
+    row[C.CARRIER_STATUS_TEXT]=record.status||'Carrier record imported';
+    row[C.CARRIER_REASON]=mapped.subtype||'';
+    row[C.VERIFICATION_SOURCE]='Carrier Report';
+    row[C.LAST_CHECKED]=nowStr;
+    row[C.CHECK_METHOD]='Manual Import';
+  }
   row[C.POLICY_NUMBER]=record.policyNumber||'';
   row[C.STATUS_LOG]=`[${nowStr}] Carrier-sourced row created (${mapped.subtype||mapped.standardizedStatus}) — carrier said: "${record.status||'record imported'}" — source: ${sourceFile||adapter.label}`;
   row[C.CARRIER_ISSUE_DATE]=record.issueDate||'';
@@ -4591,23 +4613,24 @@ async function approveCarrierReportAllMatches() {
   const unmatched=[...unmatchedPortal];
   const missing = carrierReportPreviewData.fullBook ? deskNotFound : [];
   const carrierKey = carrierReportPreviewData.carrierKey;
-  if (!matches.length && !unmatched.length && !missing.length) return;
+  const hasCommissionData = !!carrierReportPreviewData.commissionData;
+  if (!matches.length && !unmatched.length && !missing.length && !hasCommissionData) return;
   if (!accessToken) { toast('Sign in first'); return; }
-  if (!confirm(`Complete the ${carrierLabel} reconciliation?\n\n${matches.length} existing Desk record${matches.length===1?'':'s'} will retain this carrier evidence.\n${unmatched.length} carrier record${unmatched.length===1?'':'s'} not yet in the Desk will be created as durable policy rows.\n${missing.length} Desk sales absent from this full report will be marked for review—not guessed as lapsed.`)) return;
+  if (!confirm(`Complete the ${carrierLabel} reconciliation?\n\n${matches.length} existing Desk record${matches.length===1?'':'s'} will retain this carrier evidence.\n${unmatched.length} carrier record${unmatched.length===1?'':'s'} not yet in the Desk will be created as durable policy rows.\n${missing.length} Desk sales absent from this full report will be marked for review—not guessed as lapsed.${hasCommissionData?'\nThe commission statement will also be saved to the permanent ledger; it will not be treated as current policy status.':''}`)) return;
   const btn = document.getElementById('carrierReportApproveBtn');
   const total=matches.length+unmatched.length+missing.length;
-  btn.disabled=true; btn.textContent=`Updating… 0/${total}`;
+  btn.disabled=true; btn.textContent=total?`Updating… 0/${total}`:'Saving commission statement…';
   try {
     const matchedDone = await writeCarrierReportMatches(matches,carrierKey,(n)=>btn.textContent=`Updating matches… ${n}/${total}`);
     const created=await appendUnmatchedCarrierRecords(unmatched,carrierKey,carrierReportPreviewData.sourceFile,(n)=>btn.textContent=`Creating missing policy rows… ${matchedDone+n}/${total}`);
     const missingDone = await writeMissingFromFullReport(missing,carrierKey,(n)=>btn.textContent=`Recording report exceptions… ${matchedDone+created.inserted+n}/${total}`);
-    if(carrierReportPreviewData.commissionData) await persistCommissionStatement(carrierReportPreviewData.commissionData,carrierReportPreviewData.sourceFile||'Gerber commission statement');
+    const commissionSaved = hasCommissionData ? await persistCommissionStatement(carrierReportPreviewData.commissionData,carrierReportPreviewData.sourceFile||'Gerber commission statement') : null;
     const done=matchedDone+created.inserted+missingDone;
     carrierReportPreviewData.match.exact=[];
     carrierReportPreviewData.match.nameOnly=[];
     carrierReportPreviewData.match.unmatchedPortal=[];
     carrierReportPreviewData.match.deskNotFound=[];
-    toast(`✓ Reconciled ${done} relationship${done===1?'':'s'} · created ${created.inserted} carrier-sourced row${created.inserted===1?'':'s'}`);
+    toast(`✓ Reconciled ${done} relationship${done===1?'':'s'} · created ${created.inserted} carrier-sourced row${created.inserted===1?'':'s'}${commissionSaved?` · saved ${commissionSaved.inserted||0} commission row${commissionSaved.inserted===1?'':'s'}`:''}`);
     closeCarrierReportModal();
     await loadFromSheets();
   } catch (e) {
@@ -7108,8 +7131,9 @@ function smartConsolidateCommissionStatements(items) {
 }
 
 async function smartImportAllCommissionStatements() {
-  const items = smartFileResults.filter(item => item.ok && item.type === 'commission' && item.data?.auditRows?.length && !item.data?.historical)
-    .sort((a,b) => String(a.data.statementDate).localeCompare(String(b.data.statementDate)));
+  const items = smartFileResults.map(item => ({...item,commissionLedgerData:item.type==='commission'?item.data:item.commissionData}))
+    .filter(item => item.ok && item.commissionLedgerData?.auditRows?.length && !item.commissionLedgerData?.historical)
+    .sort((a,b) => String(a.commissionLedgerData.statementDate).localeCompare(String(b.commissionLedgerData.statementDate)));
   if (!items.length) return;
   const button = document.getElementById('smartSaveAllCommissionBtn');
   if (button) { button.disabled=true; button.textContent='Saving audit trail…'; }
@@ -7117,16 +7141,15 @@ async function smartImportAllCommissionStatements() {
     let inserted=0,duplicate=0,alerts=[];
     for (let index=0;index<items.length;index++) {
       if (button) button.textContent=`Saving ${index+1} of ${items.length}…`;
-      const saved = await persistCommissionStatement(items[index].data,items[index].fileName);
+      const saved = await persistCommissionStatement(items[index].commissionLedgerData,items[index].fileName);
       inserted += saved.inserted || 0;
       duplicate += saved.duplicate || 0;
       if (/^ALERT/.test(saved.auditFlag||'')) alerts.push(saved.auditFlag);
     }
     await loadCommissionHistoryForNumbers();
     sheetLastLoadedAt = new Date();
-    matchCommissions(smartConsolidateCommissionStatements(items));
     if (document.getElementById('panel_numbers')) renderNumbersPanel();
-    toast(inserted ? `✓ Saved ${inserted} monthly audit row${inserted===1?'':'s'}${alerts.length?` · ${alerts.length} alert${alerts.length===1?'':'s'}`:''}` : `All ${duplicate} monthly row${duplicate===1?' was':'s were'} already saved`);
+    toast(inserted ? `✓ Saved ${inserted} commission audit row${inserted===1?'':'s'}${alerts.length?` · ${alerts.length} alert${alerts.length===1?'':'s'}`:''}` : `All ${duplicate} commission row${duplicate===1?' was':'s were'} already saved`);
   } catch (error) {
     toast(`Could not save commission history — ${error.message}`);
     if (button) { button.disabled=false; button.textContent=`Save all ${items.length} statements`; }
@@ -7160,16 +7183,16 @@ async function smartHandleFiles(fileList) {
 function renderSmartFileResults() {
   document.getElementById('commReading').style.display='none';
   const results = document.getElementById('commResults');
-  const commissionCount = smartFileResults.filter(r => r.ok && r.type === 'commission' && r.data?.auditRows?.length && !r.data?.historical).length;
+  const commissionCount = smartFileResults.filter(r => r.ok && (r.type==='commission'?r.data:r.commissionData)?.auditRows?.length && !(r.type==='commission'?r.data:r.commissionData)?.historical).length;
   results.style.display='block';
   results.innerHTML = `<div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:4px">I sorted the files</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Review recognized policy or commission reports before anything changes in the Sheet.</div>
-    ${commissionCount > 1 ? `<button id="smartSaveAllCommissionBtn" onclick="smartImportAllCommissionStatements()" style="width:100%;padding:12px 16px;margin:0 0 12px;background:linear-gradient(135deg,var(--ink),#343456);color:#fff;border:0;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">✓ Save all ${commissionCount} monthly statements to the audit ledger</button>` : ''}
+    ${commissionCount > 1 ? `<button id="smartSaveAllCommissionBtn" onclick="smartImportAllCommissionStatements()" style="width:100%;padding:12px 16px;margin:0 0 12px;background:linear-gradient(135deg,var(--ink),#343456);color:#fff;border:0;border-radius:12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">✓ Save all ${commissionCount} statements to the audit ledger</button>` : ''}
     ${smartFileResults.map((r,i) => `<div style="border:1.5px solid ${r.ok?'var(--border)':'var(--rust)'};background:${r.ok?'#fff':'var(--rust-light)'};border-radius:11px;padding:12px 13px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
         <div><div style="font-weight:700;font-size:13px">${r.ok?'✓':'⚠️'} ${smartHtml(r.fileName)}</div>
         <div style="font-size:11px;color:${r.ok?'var(--muted)':'var(--rust)'};margin-top:2px">${r.ok?`${smartHtml(r.label)} · ${r.count||0} row${r.count===1?'':'s'} recognized`:smartHtml(r.error)}</div></div>
-        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${r.type==='commission'?(r.data?.historical?'Review historical ledger':'Save to ledger'):'Review matches'}</button>` : ''}
+        ${r.ok && ['policy','commission'].includes(r.type) ? `<button onclick="smartReviewFile(${i})" style="padding:8px 13px;background:var(--sage);color:#fff;border:0;border-radius:18px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">${r.type==='commission'?(r.data?.historical?'Review historical ledger':'Save to ledger'):(r.commissionData?'Review policies + commission':'Review matches')}</button>` : ''}
       </div>
       ${r.ok && !['policy','commission'].includes(r.type) ? `<div style="font-size:11px;color:var(--muted);margin-top:7px">Recognized for reference. It does not contain policy-level status or commission rows to reconcile.</div>` : ''}
     </div>`).join('')}
