@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Google auth handled via redirect -->
 <style>
@@ -526,10 +527,10 @@
           ondrop="importHandleDrop(event)"
           onclick="document.getElementById('importFileInput').click()">
           <div class="import-drop-icon">📄</div>
-          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Drop PDF files here</div>
-          <div style="font-size:13px;color:var(--muted)">T-2 cards, B-26 cards, intake sheets — select as many as you want</div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:4px">Drop any insurance files here</div>
+          <div style="font-size:13px;color:var(--muted)">Lead cards, intake sheets, carrier reports, statements — I’ll send each one to the right place</div>
         </div>
-        <input type="file" id="importFileInput" multiple accept="application/pdf" style="display:none" onchange="importHandleFiles(this.files)">
+        <input type="file" id="importFileInput" multiple accept=".pdf,.xlsx,.xls,.csv,application/pdf" style="display:none" onchange="importHandleFiles(this.files)">
         <div class="import-stats" id="importStats" style="display:none">
           <div class="import-stat"><div class="import-stat-n" id="impTotal">0</div><div class="import-stat-l">Total</div></div>
           <div class="import-stat is-lead"><div class="import-stat-n" id="impLeads">0</div><div class="import-stat-l">Leads</div></div>
@@ -3436,33 +3437,23 @@ const CARRIER_ADAPTERS = {
     mapStatus: (rawStatus) => ({ standardizedStatus: 'pending_verification', subtype: 'adapter_not_implemented' }),
   },
 
-  // PFA's Phase 1 browser agent is a separate, private project (never lives in this public
-  // file — see pfa-agent-phase1.zip) that logs into the portal and produces an envelope
-  // matching CONNECTOR_SCHEMA_VERSION below. This entry exists so Michelle's Desk can
-  // validate and later ingest that envelope through the same shared pipeline as LifeShield.
-  // Not wired into the upload UI yet — Phase 1 only proves acquisition, nothing consumes
-  // its output here yet.
-  //
-  // CAPABILITY FLAGS DESCRIBE CODE THAT EXISTS, NOT CODE THAT'S PLANNED. All four are false
-  // because the Phase 1 agent reads a single page and decodes nothing. Each flips only when
-  // its feature actually works — those flips ARE the Phase 2 exit criteria:
-  //   supportsPagination   → agent walks every page (try the portal's "Rows to show on Grid"
-  //                          input first; a large value may collapse pagination entirely)
-  //   supportsPolicyDetail → agent clicks into each policy's detail panel
-  //   supportsPremium      → premium retrieved from that detail panel (depends on the above,
-  //                          since premium is absent from the grid; do NOT substitute Balance)
-  //   supportsStatusDecode → A/B/C/N/R decoded. BLOCKED until Michelle confirms with PFA what
-  //                          each code means — guessing silently corrupts every persistency
-  //                          figure downstream, so this is an information task, not a coding one.
-  // Reconciliation is deliberately absent from that list: matchCarrierRecords is shared,
-  // carrier-agnostic Application-layer code already proven by LifeShield. Phase 2 should
-  // CONFIRM it works on PFA records unchanged — if it needs edits, something leaked layers.
+  // PFA's private browser agent now captures the full 140-policy portal grid. The status
+  // codes confirmed during the carrier audit are decoded here; every other code remains
+  // Pending Verification instead of being guessed. Premium and policy-detail capabilities
+  // stay false because the grid does not expose those fields.
   pfa: {
     label: 'PFA',
     sourceType: 'browser-agent',
-    capabilities: { supportsPagination: false, supportsStatusDecode: false, supportsPremium: false, supportsPolicyDetail: false },
+    capabilities: { supportsPagination: true, supportsStatusDecode: true, supportsPremium: false, supportsPolicyDetail: false },
     headerAliases: null, // n/a — browser agent emits already-normalized records, not a spreadsheet
-    mapStatus: (rawStatus) => ({ standardizedStatus: 'pending_verification', subtype: 'status_codes_not_yet_decoded' }),
+    mapStatus: (rawStatus) => {
+      const s = String(rawStatus || '').trim().toUpperCase();
+      if (s === 'A') return { standardizedStatus:'issued_paid_in_force', subtype:null };
+      if (s === 'B') return { standardizedStatus:'adverse', subtype:'premium_behind' };
+      if (s === 'C') return { standardizedStatus:'adverse', subtype:'lapsed_or_inactive' };
+      if (s === 'N') return { standardizedStatus:'adverse', subtype:'death_claim' };
+      return { standardizedStatus:'pending_verification', subtype:'unrecognized_status_code' };
+    },
   },
 };
 
@@ -5435,37 +5426,163 @@ async function smartParseSpreadsheet(file) {
   return { type, label:labels[type], count:parsed.objects.length, sheetName:parsed.sheetName, headers:parsed.headers.filter(Boolean) };
 }
 
-async function smartParsePdf(file) {
+function smartParseJsonText(text) {
+  let clean = String(text || '').trim().replace(/```(?:json)?/gi,'').replace(/```/g,'').trim();
+  try { return JSON.parse(clean); } catch (_) {}
+  const start = clean.indexOf('{'), end = clean.lastIndexOf('}');
+  if (start >= 0 && end > start) return JSON.parse(clean.slice(start,end+1));
+  throw new Error('The AI response was not valid JSON.');
+}
+
+async function smartClaudeText(prompt, maxTokens=4500) {
+  const response = await fetch(WORKER_URL, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:maxTokens, messages:[{role:'user',content:prompt}] })
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`AI service ${response.status}: ${raw.slice(0,180)}`);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { throw new Error('The AI service returned an unreadable response.'); }
+  const text = payload?.content?.find?.(part => part.type === 'text')?.text || payload?.content?.[0]?.text;
+  if (!text) throw new Error(payload?.error?.message || 'The AI service returned no extracted text.');
+  return smartParseJsonText(text);
+}
+
+function smartPdfConfigure() {
+  if (!window.pdfjsLib) throw new Error('The PDF reader did not load. Refresh the page and try again.');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+async function smartPdfPageText(page) {
+  const content = await page.getTextContent();
+  const lines = [];
+  content.items.filter(i => String(i.str || '').trim()).forEach(item => {
+    const x = item.transform?.[4] || 0, y = item.transform?.[5] || 0;
+    let line = lines.find(l => Math.abs(l.y-y) < 2.5);
+    if (!line) { line = { y, items:[] }; lines.push(line); }
+    line.items.push({ x, text:String(item.str).trim(), width:item.width || 0 });
+  });
+  return lines.sort((a,b)=>b.y-a.y).map(line => {
+    const sorted = line.items.sort((a,b)=>a.x-b.x);
+    let out='', edge=0;
+    sorted.forEach((item,i) => {
+      if (i && item.x-edge > 3) out += ' ';
+      out += item.text;
+      edge = Math.max(edge,item.x+item.width);
+    });
+    return out.trim();
+  }).filter(Boolean).join('\n');
+}
+
+async function smartReadPdfPages(file, maxPages=null) {
+  smartPdfConfigure();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjsLib.getDocument({data:bytes}).promise;
+  const count = maxPages ? Math.min(pdf.numPages,maxPages) : pdf.numPages;
+  const pages = [];
+  for (let i=1;i<=count;i++) {
+    const status = document.getElementById('commReading');
+    if (status && !maxPages) status.innerHTML = `<div class="comm-spinner"></div><div>Reading ${smartHtml(file.name)} — page ${i} of ${pdf.numPages}…</div>`;
+    pages.push(await smartPdfPageText(await pdf.getPage(i)));
+  }
+  return { pages, pageCount:pdf.numPages };
+}
+
+function smartLooksLikeCarrierReportText(text) {
+  const s = String(text || '').toUpperCase();
+  if (!/\bPOLICY\b/.test(s)) return false;
+  return ['STATUS','ISSUE DATE','COMMISSION','FACE','PAID TO','PLAN','BALANCE'].filter(term => s.includes(term)).length >= 2;
+}
+
+async function smartClassifyPdfText(pages, fileName) {
+  const sample = pages.slice(0,2).join('\n\n--- NEXT PAGE ---\n\n').slice(0,24000);
+  try {
+    return await smartClaudeText(`Classify this insurance-business PDF from its extracted text. Return ONLY JSON:
+{"documentType":"policy|commission|production|other","carrier":"","period":"","summary":""}
+Use policy for a policy ledger, book of business, policy summary, lapse/due report, or carrier-status report. Use commission only when the rows are commission/payment transactions. Filename: ${fileName}\n\n${sample}`,700);
+  } catch (_) {
+    const upper = sample.toUpperCase();
+    const documentType = /COMMISSION|COMMISSIONABLE/.test(upper) ? 'commission' : smartLooksLikeCarrierReportText(sample) ? 'policy' : /PRODUCTION/.test(upper) ? 'production' : 'other';
+    return { documentType, carrier:'', period:'', summary:'Recognized from the PDF text.' };
+  }
+}
+
+async function smartExtractPdfTextBatch(pageTexts, type, fileName, pageLabel) {
+  const fields = type === 'commission'
+    ? '{"records":[{"policyNumber":"","insuredName":"","commissionAmount":0,"commissionType":""}]}'
+    : '{"records":[{"policyNumber":"","insuredName":"","status":"","issueDate":"","premium":0,"paidToDate":"","product":"","faceAmount":0}]}';
+  const instructions = type === 'commission'
+    ? 'Extract commission transaction rows. Commission amount must be numeric. Do not treat policies absent from these pages as missing.'
+    : 'Extract every policy row. Preserve the carrier status exactly as printed. Premium means monthly/modal premium only; if frequency is unclear use 0. Do not substitute balance for premium.';
+  const prompt = `Extract the insurance table rows from ${fileName}, ${pageLabel}. ${instructions}
+Ignore repeated headers and page furniture. Never invent a row or value. Return ONLY valid compact JSON shaped exactly like:
+${fields}\n\n${pageTexts.join('\n\n--- NEXT PAGE ---\n\n')}`;
+  try {
+    const parsed = await smartClaudeText(prompt,5000);
+    return Array.isArray(parsed.records) ? parsed.records : [];
+  } catch (error) {
+    if (pageTexts.length > 1) {
+      const records = [];
+      for (let i=0;i<pageTexts.length;i++) records.push(...await smartExtractPdfTextBatch([pageTexts[i]],type,fileName,`${pageLabel}.${i+1}`));
+      return records;
+    }
+    throw error;
+  }
+}
+
+async function smartParseScannedPdf(file) {
   const base64 = await fileToBase64(file);
   const response = await fetch(WORKER_URL, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6', max_tokens:6000,
-      messages:[{role:'user',content:[
-        {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
-        {type:'text',text:`Classify and extract this insurance-business PDF. It may be a policy summary, book-of-business report, lapse/due report, commission statement, production report, or another carrier report. Return ONLY valid JSON with this shape:
-{"documentType":"policy|commission|production|other","carrier":"","period":"","policies":[{"policyNumber":"","insuredName":"","status":"","issueDate":"","premium":0,"paidToDate":"","product":"","faceAmount":0,"commissionAmount":0,"commissionType":""}],"summary":""}
-Use documentType policy when policy status/coverage is the main purpose; commission when payment/commission line items are the main purpose. Include every visible policy row. For premium, return the monthly/modal premium only; if the document does not identify the premium frequency, return 0. Never invent values.`}
-      ]}]
-    })
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:6000, messages:[{role:'user',content:[
+      {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+      {type:'text',text:'Classify this scanned insurance PDF and extract its visible policy or commission rows. Return ONLY JSON: {"documentType":"policy|commission|production|other","carrier":"","period":"","policies":[{"policyNumber":"","insuredName":"","status":"","issueDate":"","premium":0,"paidToDate":"","product":"","faceAmount":0,"commissionAmount":0,"commissionType":""}],"summary":""}. Never invent values.'}
+    ]}] })
   });
-  const rawResponse = await response.text();
-  if (!response.ok) throw new Error(`AI service ${response.status}: ${rawResponse.slice(0,180)}`);
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`AI service ${response.status}: ${raw.slice(0,180)}`);
   let payload;
-  try { payload = JSON.parse(rawResponse); } catch { throw new Error('The AI service returned an unreadable response.'); }
-  const text = payload?.content?.[0]?.text;
-  if (!text) throw new Error(payload?.error?.message || 'The AI service returned no extracted text.');
-  let extracted;
-  try { extracted = JSON.parse(text.trim().replace(/```json|```/g,'').trim()); }
-  catch { throw new Error('The PDF was read, but its extracted result was not valid JSON.'); }
-  const policies = Array.isArray(extracted.policies) ? extracted.policies : [];
-  if (extracted.documentType === 'commission') {
-    return { type:'commission', label:'Commission statement PDF', count:policies.length, data:{ carrier:extracted.carrier, period:extracted.period, policies } };
+  try { payload = JSON.parse(raw); } catch { throw new Error('The AI service returned an unreadable response.'); }
+  return smartParseJsonText(payload?.content?.[0]?.text || '');
+}
+
+async function smartParsePdf(file) {
+  const {pages,pageCount} = await smartReadPdfPages(file);
+  const hasText = pages.some(page => page.trim().length > 80);
+  let classification, records=[];
+
+  if (!hasText) {
+    const extracted = await smartParseScannedPdf(file);
+    classification = extracted;
+    records = Array.isArray(extracted.policies) ? extracted.policies : [];
+  } else {
+    classification = await smartClassifyPdfText(pages,file.name);
+    if (['policy','commission'].includes(classification.documentType)) {
+      for (let start=0;start<pages.length;start+=2) {
+        const end = Math.min(start+2,pages.length);
+        const status = document.getElementById('commReading');
+        if (status) status.innerHTML = `<div class="comm-spinner"></div><div>Reconciling ${smartHtml(file.name)} — pages ${start+1}-${end} of ${pageCount}…</div>`;
+        records.push(...await smartExtractPdfTextBatch(pages.slice(start,end),classification.documentType,file.name,`pages ${start+1}-${end}`));
+      }
+    }
   }
-  if (extracted.documentType === 'policy') {
-    return { type:'policy', label:'Policy report PDF', count:policies.length, records:policies, carrier:extracted.carrier || 'Detected carrier' };
+
+  const seen = new Set();
+  records = records.filter(record => {
+    const key = classification.documentType === 'commission'
+      ? [record.policyNumber,record.commissionAmount,record.commissionType].join('|').toUpperCase()
+      : String(record.policyNumber || '').trim().toUpperCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+
+  if (classification.documentType === 'commission') {
+    return { type:'commission', label:'Commission statement PDF', count:records.length, data:{ carrier:classification.carrier, period:classification.period, policies:records } };
   }
-  return { type:extracted.documentType || 'other', label:'Insurance report PDF', count:policies.length, summary:extracted.summary || 'Read successfully; no policy reconciliation was identified.' };
+  if (classification.documentType === 'policy') {
+    return { type:'policy', label:`Policy report PDF · ${pageCount} pages`, count:records.length, records, carrier:classification.carrier || 'Detected carrier' };
+  }
+  return { type:classification.documentType || 'other', label:'Insurance report PDF', count:records.length, summary:classification.summary || 'Read successfully; no policy reconciliation was identified.' };
 }
 
 async function smartHandleFiles(fileList) {
@@ -5619,7 +5736,7 @@ function matchCommissions(data) {
   document.getElementById('commReading').style.display='none';
 
   const policies = data.policies || [];
-  const matched = [], unmatched = [], missing = [];
+  const matched = [], unmatched = [];
 
   // Build lookup of all policy numbers in sheet
   const sheetPolicies = {};
@@ -5640,30 +5757,19 @@ function matchCommissions(data) {
     }
   });
 
-  // Check sheet clients with matching carrier for missing policies
-  const carrier = (data.carrier || '').toLowerCase();
-  if (carrier) {
-    allClients.forEach(c => {
-      const clientCarrier = (c.existingCompany || c.displayCompany || '').toLowerCase();
-      if (clientCarrier && (carrier.includes(clientCarrier.split(' ')[0]) || clientCarrier.includes(carrier.split(' ')[0]))) {
-        const key = (c.newPolicyNumber || c.existingPolicy || '').toString().trim().toUpperCase();
-        if (key && !policies.find(p => p.policyNumber && p.policyNumber.toString().trim().toUpperCase() === key)) {
-          missing.push(c);
-        }
-      }
-    });
-  }
-
   const totalComm = policies.reduce((s,p) => s + (parseFloat(p.commissionAmount)||0), 0);
 
   let html = `<div class="comm-summary">
-    <div class="comm-stat"><div class="comm-stat-num">${policies.length}</div><div class="comm-stat-label">Policies</div></div>
+    <div class="comm-stat"><div class="comm-stat-num">${policies.length}</div><div class="comm-stat-label">Statement Lines</div></div>
     <div class="comm-stat good"><div class="comm-stat-num">$${totalComm.toFixed(2)}</div><div class="comm-stat-label">Total Commission</div></div>
-    <div class="comm-stat${unmatched.length?' warn':''}"><div class="comm-stat-num">${unmatched.length}</div><div class="comm-stat-label">Unmatched</div></div>
-    <div class="comm-stat${missing.length?' warn':''}"><div class="comm-stat-num">${missing.length}</div><div class="comm-stat-label">Missing</div></div>
+    <div class="comm-stat good"><div class="comm-stat-num">${matched.length}</div><div class="comm-stat-label">Matched</div></div>
+    <div class="comm-stat${unmatched.length?' warn':''}"><div class="comm-stat-num">${unmatched.length}</div><div class="comm-stat-label">Needs Linking</div></div>
   </div>`;
 
   html += `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">${data.carrier||'Carrier'} · ${data.period||''} ${data.agentName?'· '+data.agentName:''}</div>`;
+  html += `<div style="background:var(--blue-light);border-radius:10px;padding:10px 12px;margin:8px 0 12px;font-size:12px;color:var(--ink)">
+    <b>What this proves:</b> these policies had commission activity on this statement. A policy not listed here is not “missing” or inactive. Current policy status comes from the PFA/carrier report and is shown below when it has been imported.
+  </div>`;
 
   // Results table
   html += `<table class="comm-table">
@@ -5675,7 +5781,9 @@ function matchCommissions(data) {
       <td>${p.insuredName} <span style="font-size:11px;color:var(--muted)">(${p.client.fullName})</span></td>
       <td>$${parseFloat(p.commissionAmount).toFixed(2)}</td>
       <td style="font-size:12px;color:var(--muted)">${p.commissionType||''}</td>
-      <td><span class="status-matched">✓ Matched</span></td>
+      <td>${p.client.lastChecked
+        ? `${statusBadge(p.client.status)}<div style="font-size:10px;color:var(--muted);margin-top:3px">Carrier: ${smartHtml(p.client.carrierStatusText||'verified')} · ${smartHtml(p.client.lastChecked)}</div>`
+        : '<span class="status-matched">✓ In Sheet</span><div style="font-size:10px;color:var(--muted);margin-top:3px">No carrier-status import yet</div>'}</td>
     </tr>`;
   });
 
@@ -5690,15 +5798,6 @@ function matchCommissions(data) {
   });
 
   html += '</table>';
-
-  if (missing.length) {
-    html += `<div style="background:var(--rust-light);border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="font-weight:600;color:var(--rust);margin-bottom:8px">🔴 ${missing.length} client${missing.length>1?'s':''} with ${data.carrier||'this carrier'} not on statement</div>`;
-    missing.forEach(c => {
-      html += `<div style="font-size:13px;padding:4px 0;border-bottom:1px solid rgba(196,80,26,.1)">${c.fullName} · Policy #${c.existingPolicy} · ${c.city}</div>`;
-    });
-    html += '</div>';
-  }
 
   // Save to storage
   saveCommissionHistory(data, totalComm, policies.length);
@@ -6378,12 +6477,36 @@ function resetImporter() {
 function importHandleDrop(e) {
   e.preventDefault();
   document.getElementById('importDrop').classList.remove('drag');
-  const files = Array.from(e.dataTransfer.files).filter(f=>f.type==='application/pdf');
-  if (files.length) importProcessFiles(files);
+  importRouteFiles(Array.from(e.dataTransfer.files));
 }
 function importHandleFiles(fl) {
-  const files = Array.from(fl).filter(f=>f.type==='application/pdf');
-  if (files.length) importProcessFiles(files);
+  importRouteFiles(Array.from(fl));
+}
+
+async function importRouteFiles(files) {
+  if (impProcessing || !files.length) return;
+  const reportFiles = [], archiveFiles = [];
+  for (const file of files) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['xlsx','xls','csv'].includes(ext)) { reportFiles.push(file); continue; }
+    if (ext !== 'pdf') continue;
+    const namedLikeReport = /commission|statement|policy|summary|lapse|production|book|report/i.test(file.name);
+    let textLooksLikeReport = false;
+    try {
+      const preview = await smartReadPdfPages(file,2);
+      textLooksLikeReport = smartLooksLikeCarrierReportText(preview.pages.join('\n'));
+    } catch (_) {}
+    (namedLikeReport || textLooksLikeReport ? reportFiles : archiveFiles).push(file);
+  }
+
+  if (archiveFiles.length) await importProcessFiles(archiveFiles);
+  if (reportFiles.length) {
+    if (!archiveFiles.length) document.getElementById('importSection').classList.remove('visible');
+    openCommTracker();
+    await smartHandleFiles(reportFiles);
+    toast(`✓ Routed ${reportFiles.length} carrier report${reportFiles.length===1?'':'s'} to reconciliation`);
+  }
+  if (!reportFiles.length && !archiveFiles.length) toast('Supported files are PDF, Excel, and CSV.');
 }
 
 async function importProcessFiles(files) {
