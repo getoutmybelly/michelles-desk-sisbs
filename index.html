@@ -434,6 +434,39 @@
   .script-dial-btn{width:100%;padding:16px;background:var(--green);color:#fff;border:none;border-radius:12px;font-family:'DM Serif Display',serif;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;margin-bottom:8px;}
   .script-dial-btn:hover{background:#256b43;}
   .script-skip-btn{width:100%;padding:11px;background:#fff;color:var(--muted);border:1.5px solid var(--border);border-radius:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
+  /* POLICY HISTORY CLEANUP */
+  .cleanup-modal{max-width:1080px!important;max-height:92vh!important;border-radius:22px!important;box-shadow:0 28px 80px rgba(20,22,42,.34)!important;}
+  .cleanup-hero{background:linear-gradient(135deg,#17182d 0%,#292b50 62%,#3e416d 100%);color:#fff;padding:24px 26px 22px;position:sticky;top:0;z-index:6;}
+  .cleanup-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;}
+  .cleanup-eyebrow{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:#d9bd6c;margin-bottom:6px;}
+  .cleanup-title{font-family:'DM Serif Display',serif;font-size:27px;line-height:1.12;}
+  .cleanup-sub{max-width:720px;color:rgba(255,255,255,.72);font-size:12px;line-height:1.6;margin-top:7px;}
+  .cleanup-close{width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.12);color:#fff;font-size:19px;cursor:pointer;flex:0 0 auto;}
+  .cleanup-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:18px;}
+  .cleanup-stat{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 12px;}
+  .cleanup-stat strong{display:block;font-family:'DM Serif Display',serif;font-size:22px;line-height:1;color:#fff;}
+  .cleanup-stat span{display:block;font-size:10px;color:rgba(255,255,255,.62);margin-top:5px;}
+  .cleanup-body{padding:22px 24px 4px;background:#fbfaf7;}
+  .cleanup-section{background:#fff;border:1px solid #e5e1d8;border-radius:15px;padding:17px;margin-bottom:16px;box-shadow:0 4px 18px rgba(28,29,48,.04);}
+  .cleanup-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;}
+  .cleanup-section-title{font-size:15px;font-weight:800;color:var(--ink);}
+  .cleanup-section-copy{font-size:11px;color:var(--muted);line-height:1.55;margin-top:3px;max-width:720px;}
+  .cleanup-badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap;}
+  .cleanup-badge.ready{background:#e9f5ee;color:#387159;}.cleanup-badge.history{background:#fff4d8;color:#98731c;}.cleanup-badge.decision{background:#fff0e8;color:#b54d21;}
+  .cleanup-table-wrap{overflow:auto;border:1px solid #ece8df;border-radius:11px;max-height:250px;}
+  .cleanup-table{width:100%;border-collapse:collapse;min-width:720px;}
+  .cleanup-table th{position:sticky;top:0;background:#f3f0e9;text-align:left;padding:9px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#77736d;z-index:1;}
+  .cleanup-table td{padding:10px;font-size:11.5px;border-top:1px solid #f0ede6;vertical-align:top;}
+  .cleanup-source{display:inline-flex;align-items:center;background:#eef5f1;color:#466a5a;border-radius:999px;padding:3px 8px;font-size:10px;font-weight:700;}
+  .cleanup-action{border:none;border-radius:999px;padding:9px 14px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;}
+  .cleanup-action.primary{background:var(--sage);color:#fff;}.cleanup-action.gold{background:var(--gold);color:#fff;}.cleanup-action.ink{background:var(--ink);color:#fff;}.cleanup-action.soft{background:#f2efe9;color:var(--ink);border:1px solid #e2ddd3;}.cleanup-action.danger{background:#fff0ec;color:#b84824;border:1px solid #efc2b5;}.cleanup-action:disabled{opacity:.48;cursor:not-allowed;}
+  .cleanup-groups{display:grid;gap:11px;}.cleanup-group{border:1px solid #e7ded2;border-radius:13px;padding:13px;background:#fffdfa;}
+  .cleanup-group-title{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:800;font-size:13px;}.cleanup-group-copy{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45;}
+  .cleanup-policy-list{display:grid;gap:6px;margin:10px 0;}.cleanup-policy{display:grid;grid-template-columns:28px minmax(150px,1.4fr) repeat(4,minmax(90px,1fr));gap:8px;align-items:center;background:#f6f3ed;border-radius:9px;padding:8px 9px;font-size:10.5px;}.cleanup-policy b{font-size:11.5px;}.cleanup-policy small{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;margin-bottom:1px;}
+  .cleanup-choice-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center;border-top:1px solid #eee8df;padding-top:10px;}.cleanup-select,.cleanup-date-input{border:1px solid #dcd6cb;border-radius:9px;background:#fff;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:11px;padding:8px 9px;}.cleanup-select{min-width:220px;}
+  .cleanup-undated{display:grid;grid-template-columns:minmax(180px,1.3fr) repeat(3,minmax(95px,.8fr)) minmax(250px,1.5fr);gap:9px;align-items:center;padding:10px;border-top:1px solid #eee9e1;font-size:11px;}.cleanup-undated:first-child{border-top:none;}
+  .cleanup-footer{position:sticky;bottom:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 24px;background:rgba(255,255,255,.96);border-top:1px solid #e4dfd5;backdrop-filter:blur(8px);}.cleanup-footer-note{font-size:10.5px;color:var(--muted);line-height:1.45;}
+  @media(max-width:760px){.cleanup-stats{grid-template-columns:1fr 1fr}.cleanup-body{padding:15px 12px 2px}.cleanup-hero{padding:20px 17px}.cleanup-title{font-size:23px}.cleanup-policy{grid-template-columns:24px 1fr 1fr}.cleanup-policy>div:nth-child(n+4){display:none}.cleanup-undated{grid-template-columns:1fr}.cleanup-footer{padding:12px 14px;align-items:flex-end}}
 </style>
 </head>
 <body>
@@ -709,7 +742,7 @@
 </div>
 
 <div class="briefing-overlay" id="backfillOverlay" onclick="if(event.target===this)closeBackfillModal()">
-  <div class="briefing-modal" id="backfillModal" style="max-width:900px"></div>
+  <div class="briefing-modal cleanup-modal" id="backfillModal"></div>
 </div>
 
 <div class="briefing-overlay" id="outcomeOverlay" onclick="if(event.target===this)closeOutcomeModal()">
@@ -819,6 +852,7 @@ const C = {
   CARRIER_PAID_TO_DATE:  84, // CG
   CARRIER_PRODUCT:       85, // CH
   CARRIER_REPORT_PREMIUM:86, // CI — carrier's own stated premium, kept separate from newPremium (what Michelle entered)
+  RELATIONSHIP_RESOLUTION:95, // CR — durable desk:* classification for sale/service/duplicate cleanup
 };
 
 // Standardized status model (color + carrier-side meanings it maps from).
@@ -1008,7 +1042,7 @@ async function fetchUnformattedDateColumns() {
   // never hardcode letters here again. A prior version hardcoded AO/AR/AS from a stale inline
   // comment, one column off from the real AP/AS/AT, which silently read Appt Date from the
   // Premium column instead (hence the "1900" dates that matched premium amounts).
-  const DATE_COL_INDEX = { apptDate: 41, effectiveDate: 44, payDate: 45, writtenDate: C.WRITTEN_DATE };
+  const DATE_COL_INDEX = { leadDate: 9, apptDate: 41, effectiveDate: 44, payDate: 45, writtenDate: C.WRITTEN_DATE, carrierIssueDate: C.CARRIER_ISSUE_DATE };
   const cols = Object.fromEntries(Object.entries(DATE_COL_INDEX).map(([k,idx]) => [k, colToLetter(idx)]));
   const keys = Object.keys(cols);
   const rangesQS = keys.map(k => `ranges=${encodeURIComponent(`${SHEET_TAB}!${cols[k]}1:${cols[k]}5000`)}`).join('&');
@@ -1054,7 +1088,7 @@ function parseRows(rows, dateOverrides) {
       county:          cl(r[6]),
       state:           cl(r[7]),
       zip:             cl(r[8]),
-      leadDate:        fmtDate(r[9]),
+      leadDate:        overrideDate('leadDate', i, fmtDate(r[9])),
       phone:           fmtPhone(r[10]),
       dob:             fmtDate(r[11]),
       age:             cl(r[12]),
@@ -1088,10 +1122,11 @@ function parseRows(rows, dateOverrides) {
       portalFailureReason: cl(r[C.PORTAL_FAILURE_REASON]),
       newPolicyNumber:     cl(r[C.POLICY_NUMBER]),
       statusLog:           cl(r[C.STATUS_LOG]),
-      carrierIssueDate:    fmtDate(r[C.CARRIER_ISSUE_DATE]),
+      carrierIssueDate:    overrideDate('carrierIssueDate', i, fmtDate(r[C.CARRIER_ISSUE_DATE])),
       carrierPaidToDate:   fmtDate(r[C.CARRIER_PAID_TO_DATE]),
       carrierProduct:      cl(r[C.CARRIER_PRODUCT]),
       carrierReportPremium:cl(r[C.CARRIER_REPORT_PREMIUM]),
+      relationshipResolution:cl(r[C.RELATIONSHIP_RESOLUTION]),
       // New due/sent columns
       stopDueRaw:      cl(r[C.STOP_DUE]),
       stopDue:         fmtDate(r[C.STOP_DUE]),
@@ -2606,10 +2641,43 @@ function canonicalCompanyName(name) {
   return raw;
 }
 
+const DESK_RESOLUTION = {
+  new_sale: { tag:'desk:sale:new_sale', label:'New sale', counts:true },
+  additional_coverage: { tag:'desk:sale:additional_coverage', label:'Upsell / additional coverage', counts:true },
+  two_policies_one_sale: { tag:'desk:sale:two_policies_one_sale', label:'Two policies in one sale', counts:true },
+  separate_policy: { tag:'desk:sale:separate_policy', label:'Separate legitimate policy', counts:true },
+  saving_book: { tag:'desk:non_sale:saving_book', label:'Book save / service visit', counts:false },
+  lapse_recovery: { tag:'desk:non_sale:lapse_recovery', label:'Lapse recovery', counts:false },
+  service_other: { tag:'desk:non_sale:service_other', label:'Other service — not a new sale', counts:false },
+};
+
+function getDeskResolution(value) {
+  const match = String(value || '').match(/desk:(?:sale|non_sale):[a-z_]+|desk:duplicate_of:\d+/i);
+  return match ? match[0].toLowerCase() : '';
+}
+function mergeDeskResolution(value, tag) {
+  const retained = String(value || '').split(/\r?\n|\s*;\s*/).map(x=>x.trim()).filter(x=>x && !/^desk:(?:sale|non_sale|duplicate_of):/i.test(x));
+  return [...retained, tag].join('\n');
+}
+function isProductionExcluded(c) {
+  const tag = getDeskResolution(c.relationshipResolution);
+  return tag.startsWith('desk:non_sale:') || tag.startsWith('desk:duplicate_of:');
+}
+function isResolvedRelationship(c) { return !!getDeskResolution(c.relationshipResolution); }
+function normalizePolicyNumber(value) { return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function normalizedClientKey(c) { return String(c.fullName || '').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function normalizedDateKey(value) {
+  const d = value ? new Date(value) : null;
+  return d && !isNaN(d) ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '';
+}
+function htmlSafe(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function jsString(value) { return String(value ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' '); }
+function formatMoneyShort(value) { const amount=parseMoney(value); return amount ? `$${amount.toFixed(2)}/mo` : '—'; }
+
 function computeCarrierEvidenceNumbers() {
   const relationships = new Map();
   allClients.forEach(c => {
-    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || !c.status) return;
+    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || !c.status || getDeskResolution(c.relationshipResolution).startsWith('desk:duplicate_of:')) return;
     const carrier = canonicalCompanyName(c.newCompany);
     const policy = String(c.newPolicyNumber || '').trim().toUpperCase();
     const name = normalizeCarrierMatchName(c.fullName);
@@ -2664,7 +2732,7 @@ function computeCommissionEvidenceNumbers() {
 
 function computeProductionNumbers() {
   // A "sale" = a placed policy: New Company + a real premium figure.
-  const sold = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0);
+  const sold = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0 && !isProductionExcluded(c));
 
   // Written-sales reporting uses ONLY the Written Date — no fallback to Lead/Effective/Pay Date.
   // Those are different business events (lead intake, coverage start, carrier draft) and
@@ -2955,134 +3023,167 @@ async function approveBackfillLegacy() {
   if (document.getElementById('panel_numbers')) renderNumbersPanel();
 }
 
-// Written Date repair v2: never invent a date. Appointment Date is the preferred
-// source; carrier Issue Date is a separately approved and audited fallback.
+// Policy History Cleanup v3. Repeat visits are legitimate. A row is only held for a
+// relationship decision when policy identity or a full policy fingerprint collides.
+// Missing Appointment Date is never, by itself, a reason to strand a historical policy.
 function computeWrittenDateBackfillPreview() {
-  const clean = [], carrierFallback = [], review = [];
+  const ready = [], historical = [], undated = [], relationshipGroups = [];
   const today = new Date(); today.setHours(23,59,59,999);
+  const placed = allClients.filter(c => c.newCompany && parseMoney(c.newPremium) > 0 && !c.writtenDate && !isProductionExcluded(c));
+  const unresolved = placed.filter(c => !isResolvedRelationship(c));
+  const policyBuckets = new Map(), fingerprintBuckets = new Map();
 
-  allClients.forEach(c => {
-    if (!c.newCompany || parseMoney(c.newPremium) <= 0 || c.writtenDate) return;
-    const effDate = c.effectiveDate ? new Date(c.effectiveDate) : null;
-    const effValid = effDate && !isNaN(effDate);
-    const apptDate = c.apptDate ? new Date(c.apptDate) : null;
-    const apptValid = apptDate && !isNaN(apptDate);
-    const base = {
-      client:c.fullName,
-      carrier:canonicalCompanyName(c.newCompany),
-      premium:c.newPremium,
-      apptDate:c.apptDate || '',
-      effectiveDate:c.effectiveDate || '',
-      carrierIssueDate:c.carrierIssueDate || '',
-      sheetRow:c.sheetRow,
-    };
-    const group = clientGroups[c.fullName.toLowerCase().replace(/\s+/g,' ').trim()] || [c];
-    const dupes = group.filter(g => g !== c && canonicalCompanyName(g.newCompany) === canonicalCompanyName(c.newCompany) && parseMoney(g.newPremium) === parseMoney(c.newPremium));
-    const otherPolicyRows = group.filter(g => g !== c && g.newCompany && parseMoney(g.newPremium) > 0);
-    const distinctApptDates = new Set(group.map(g => g.apptDate).filter(Boolean));
-
-    if (apptValid && apptDate.getFullYear() < APPT_DATE_SANITY_FLOOR_YEAR) {
-      review.push({...base,warning:`Appointment Date year looks wrong (${apptDate.getFullYear()})`});
-    } else if (apptValid && apptDate > today) {
-      review.push({...base,warning:'Appointment Date is in the future'});
-    } else if (apptValid && effValid && apptDate > effDate) {
-      review.push({...base,warning:'Appointment Date is after Effective Date'});
-    } else if (dupes.length) {
-      review.push({...base,warning:`Duplicate policy row detected (${dupes.length + 1} matching rows)`});
-    } else if (otherPolicyRows.length && distinctApptDates.size > 1) {
-      review.push({...base,warning:'Multiple appointment dates exist for this client'});
-    } else if (apptValid) {
-      clean.push({...base,proposedWrittenDate:c.apptDate,dateSource:'Appointment Date'});
+  unresolved.forEach(c => {
+    const policy = normalizePolicyNumber(c.newPolicyNumber);
+    if (policy) {
+      const key = `${canonicalCompanyName(c.newCompany).toLowerCase()}|${policy}`;
+      if (!policyBuckets.has(key)) policyBuckets.set(key, []);
+      policyBuckets.get(key).push(c);
     } else {
-      const issueDate = c.carrierIssueDate ? new Date(c.carrierIssueDate) : null;
-      const issueValid = issueDate && !isNaN(issueDate) && issueDate.getFullYear() >= APPT_DATE_SANITY_FLOOR_YEAR && issueDate <= today;
-      const issueEffGapDays = issueValid && effValid ? Math.abs(issueDate - effDate) / 86400000 : 0;
-      if (!issueValid) {
-        review.push({...base,warning:'No usable Appointment Date or carrier Issue Date'});
-      } else if (issueEffGapDays > 120) {
-        review.push({...base,warning:'Carrier Issue Date is more than 120 days from Effective Date — verify the match'});
-      } else {
-        carrierFallback.push({...base,proposedWrittenDate:c.carrierIssueDate,dateSource:'Carrier Issue Date',warning:'Fallback evidence — may be later than the original application date'});
-      }
+      const anchor = normalizedDateKey(c.effectiveDate) || normalizedDateKey(c.carrierIssueDate) || normalizedDateKey(c.apptDate);
+      if (!anchor) return;
+      const key = [normalizedClientKey(c),canonicalCompanyName(c.newCompany).toLowerCase(),parseMoney(c.newPremium).toFixed(2),anchor].join('|');
+      if (!fingerprintBuckets.has(key)) fingerprintBuckets.set(key, []);
+      fingerprintBuckets.get(key).push(c);
     }
   });
-  return {clean,carrierFallback,review};
+
+  const heldRows = new Set();
+  [...policyBuckets.entries(),...fingerprintBuckets.entries()].forEach(([key,rows]) => {
+    if (rows.length < 2) return;
+    rows.forEach(c=>heldRows.add(c.sheetRow));
+    relationshipGroups.push({
+      id:`relationship_${relationshipGroups.length}`,
+      key,
+      kind:normalizePolicyNumber(rows[0].newPolicyNumber)?'policy_number':'policy_fingerprint',
+      rows,
+    });
+  });
+
+  const validDate = value => {
+    const d=value?new Date(value):null;
+    return !!(d && !isNaN(d) && d.getFullYear()>=APPT_DATE_SANITY_FLOOR_YEAR && d<=today);
+  };
+  placed.forEach(c => {
+    if (heldRows.has(c.sheetRow)) return;
+    const base={
+      client:c.fullName, carrier:canonicalCompanyName(c.newCompany), premium:c.newPremium,
+      apptDate:c.apptDate||'', effectiveDate:c.effectiveDate||'', payDate:c.payDate||'', leadDate:c.leadDate||'',
+      carrierIssueDate:c.carrierIssueDate||'', policyNumber:c.newPolicyNumber||'', sheetRow:c.sheetRow,
+    };
+    if (validDate(c.apptDate)) {
+      ready.push({...base,proposedWrittenDate:c.apptDate,dateSource:'Appointment Date'});
+      return;
+    }
+    const evidence = [
+      ['Effective Date',c.effectiveDate],
+      ['Carrier Issue Date',c.carrierIssueDate],
+      ['Pay Date',c.payDate],
+      ['Lead Date',c.leadDate],
+    ].find(([,value])=>validDate(value));
+    if (evidence) historical.push({...base,proposedWrittenDate:evidence[1],dateSource:evidence[0]});
+    else undated.push(base);
+  });
+  return {ready,historical,undated,relationshipGroups,clean:ready,carrierFallback:historical,review:undated};
 }
 
-function renderBackfillModal() {
-  const {clean,carrierFallback,review} = backfillPreviewData;
-  const head = labels => `<thead><tr style="background:var(--cream);position:sticky;top:0">${labels.map(x=>`<th style="text-align:left;padding:7px 8px;font-size:11px;color:var(--muted)">${x}</th>`).join('')}</tr></thead>`;
-  const cell = value => `<td style="padding:7px 8px;font-size:12px">${value || '—'}</td>`;
-  const exactRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.apptDate)}${cell(r.effectiveDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--sage)">${r.proposedWrittenDate}</td></tr>`;
-  const fallbackRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.effectiveDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--gold)">${r.carrierIssueDate}</td>${cell(r.warning)}</tr>`;
-  const reviewRow = r => `<tr style="border-bottom:1px solid var(--cream)">${cell(r.client)}${cell(r.carrier)}${cell(`$${r.premium}/mo`)}${cell(r.apptDate)}${cell(r.carrierIssueDate)}<td style="padding:7px 8px;font-size:12px;font-weight:700;color:var(--rust)">${r.warning}</td></tr>`;
-  const table = (labels,rows,empty) => `<div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px"><table style="width:100%;border-collapse:collapse">${head(labels)}<tbody>${rows.length?rows.join(''):`<tr><td colspan="${labels.length}" style="padding:14px;text-align:center;color:var(--muted);font-size:12px">${empty}</td></tr>`}</tbody></table></div>`;
+function relationshipReasonOptions() {
+  return `<option value="new_sale">New sale</option><option value="additional_coverage">Upsell / additional coverage</option><option value="two_policies_one_sale">Two policies in one sale</option><option value="separate_policy">Separate legitimate policies</option><option value="saving_book">Book save / service — not a sale</option><option value="lapse_recovery">Lapse recovery — not a sale</option><option value="service_other">Other service — not a sale</option>`;
+}
 
-  document.getElementById('backfillModal').innerHTML = `<div style="padding:20px 22px">
-    <div style="font-family:'DM Serif Display',serif;font-size:19px;margin-bottom:4px">🗓️ Repair Missing Written Dates</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Appointment Date is preferred. Carrier Issue Date is shown separately as fallback evidence. Nothing changes until you approve a section.</div>
+function renderCleanupTable(rows) {
+  return `<div class="cleanup-table-wrap"><table class="cleanup-table"><thead><tr><th>Client</th><th>Carrier</th><th>Policy</th><th>Premium</th><th>Date source</th><th>Written Date</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${htmlSafe(r.client)}</b></td><td>${htmlSafe(r.carrier)}</td><td>${htmlSafe(r.policyNumber||'—')}</td><td>${htmlSafe(formatMoneyShort(r.premium))}</td><td><span class="cleanup-source">${htmlSafe(r.dateSource)}</span></td><td><b>${htmlSafe(r.proposedWrittenDate)}</b></td></tr>`).join('')}</tbody></table></div>`;
+}
 
-    <div style="font-weight:700;font-size:14px;color:var(--sage);margin-bottom:6px">✅ ${clean.length} exact Appointment Date match${clean.length===1?'':'es'}</div>
-    ${table(['Client','Carrier','Premium','Appointment Date','Effective Date','Written Date'],clean.map(exactRow),'No exact Appointment Date matches found')}
-    <div style="display:flex;justify-content:flex-end;margin-bottom:18px"><button id="backfillApproveBtn" onclick="approveBackfill()" ${clean.length?'':'disabled'} style="padding:10px 18px;background:${clean.length?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:${clean.length?'pointer':'not-allowed'}">✓ Approve ${clean.length} Exact Date${clean.length===1?'':'s'}</button></div>
-
-    <div style="font-weight:700;font-size:14px;color:var(--gold);margin-bottom:4px">🔎 ${carrierFallback.length} carrier Issue Date fallback${carrierFallback.length===1?'':'s'}</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Use only when the original Appointment Date is unavailable. Every approved row keeps an audit note saying this is a fallback.</div>
-    ${table(['Client','Carrier','Premium','Effective Date','Carrier Issue Date','Why separate'],carrierFallback.map(fallbackRow),'No safe carrier-date fallbacks found')}
-    <div style="display:flex;justify-content:flex-end;margin-bottom:18px"><button id="carrierFallbackApproveBtn" onclick="approveCarrierIssueDateFallbacks()" ${carrierFallback.length?'':'disabled'} style="padding:10px 18px;background:${carrierFallback.length?'var(--gold)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:${carrierFallback.length?'pointer':'not-allowed'}">✓ Approve ${carrierFallback.length} Carrier Fallback${carrierFallback.length===1?'':'s'}</button></div>
-
-    <div style="font-weight:700;font-size:14px;color:var(--rust);margin-bottom:6px">⚠️ ${review.length} need manual review — nothing will be written</div>
-    ${table(['Client','Carrier','Premium','Appointment Date','Carrier Issue Date','Reason'],review.map(reviewRow),'Nothing needs manual review')}
-    <div style="display:flex;justify-content:flex-end;margin-top:18px"><button onclick="closeBackfillModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Done</button></div>
+function renderRelationshipGroup(group) {
+  const first=group.rows[0];
+  const why=group.kind==='policy_number'
+    ? `The same carrier policy number appears on ${group.rows.length} rows. Choose whether these are separate history rows or true duplicates.`
+    : `${group.rows.length} rows share client, carrier, premium, and policy-date evidence. That is a question—not proof of a duplicate.`;
+  return `<div class="cleanup-group">
+    <div class="cleanup-group-title"><span>${htmlSafe(first.fullName)} · ${htmlSafe(canonicalCompanyName(first.newCompany))}</span><span class="cleanup-badge decision">${group.rows.length} related rows</span></div>
+    <div class="cleanup-group-copy">${htmlSafe(why)}</div>
+    <div class="cleanup-policy-list">${group.rows.map((c,index)=>`<label class="cleanup-policy"><input type="radio" name="canonical_${group.id}" value="${c.sheetRow}" ${index===0?'checked':''}><div><small>Sheet row</small><b>#${c.sheetRow}</b></div><div><small>Policy</small>${htmlSafe(c.newPolicyNumber||'Not recorded')}</div><div><small>Premium</small>${htmlSafe(formatMoneyShort(c.newPremium))}</div><div><small>Appointment</small>${htmlSafe(c.apptDate||'—')}</div><div><small>Effective / issue</small>${htmlSafe(c.effectiveDate||c.carrierIssueDate||'—')}</div></label>`).join('')}</div>
+    <div class="cleanup-choice-row">
+      <select class="cleanup-select" id="reason_${group.id}">${relationshipReasonOptions()}</select>
+      <button class="cleanup-action primary" onclick="saveRelationshipGroup('${group.id}','classify')">Save all as selected</button>
+      <button class="cleanup-action danger" onclick="saveRelationshipGroup('${group.id}','duplicate')">Keep selected row; mark the rest duplicate</button>
+    </div>
   </div>`;
 }
 
-async function approveBackfill() {
-  if (!backfillPreviewData?.clean?.length) return;
-  if (!accessToken) { toast('Sign in first'); return; }
-  const rows = backfillPreviewData.clean;
-  if (!confirm(`Write the exact Appointment Date into Written Date for ${rows.length} policies?`)) return;
-  const btn = document.getElementById('backfillApproveBtn');
-  if (btn) { btn.disabled=true; btn.textContent='Writing…'; }
-  try {
-    await writeCellsBatch(rows.map(r=>({row:r.sheetRow,col:C.WRITTEN_DATE,value:r.proposedWrittenDate})));
-    rows.forEach(r=>{ const c=allClients.find(x=>x.sheetRow===r.sheetRow); if(c)c.writtenDate=r.proposedWrittenDate; });
-    toast(`✓ Saved ${rows.length} exact Written Date${rows.length===1?'':'s'}`);
-    backfillPreviewData=computeWrittenDateBackfillPreview(); renderBackfillModal(); renderNumbersPanel();
-  } catch(e) {
-    toast('Could not save — check connection');
-    if(btn){btn.disabled=false;btn.textContent=`✓ Approve ${rows.length} Exact Dates`;}
-  }
+function renderUndatedRow(r) {
+  return `<div class="cleanup-undated"><div><b>${htmlSafe(r.client)}</b><div style="color:var(--muted);font-size:10px">Sheet row ${r.sheetRow}</div></div><div>${htmlSafe(r.carrier)}</div><div>${htmlSafe(r.policyNumber||'No policy #')}</div><div>${htmlSafe(formatMoneyShort(r.premium))}</div><div style="display:flex;flex-wrap:wrap;gap:6px"><input class="cleanup-date-input" type="date" id="manual_date_${r.sheetRow}"><button class="cleanup-action ink" onclick="saveManualWrittenDate(${r.sheetRow})">Use date</button><select class="cleanup-select" id="single_reason_${r.sheetRow}" style="min-width:180px">${relationshipReasonOptions()}</select><button class="cleanup-action soft" onclick="saveSingleRelationshipResolution(${r.sheetRow})">Classify</button></div></div>`;
 }
 
-async function approveCarrierIssueDateFallbacks() {
-  if (!backfillPreviewData?.carrierFallback?.length) return;
+function renderBackfillModal() {
+  const {ready,historical,undated,relationshipGroups}=backfillPreviewData;
+  const unresolvedRows=relationshipGroups.reduce((sum,g)=>sum+g.rows.length,0);
+  const sections=[];
+  if (relationshipGroups.length) sections.push(`<section class="cleanup-section"><div class="cleanup-section-head"><div><div class="cleanup-section-title">Resolve related policy rows</div><div class="cleanup-section-copy">Repeat visits are normal. These are the only rows close enough to need a business decision. Select the row to keep only when they are true duplicates.</div></div><span class="cleanup-badge decision">${relationshipGroups.length} decision${relationshipGroups.length===1?'':'s'}</span></div><div class="cleanup-groups">${relationshipGroups.map(renderRelationshipGroup).join('')}</div></section>`);
+  if (ready.length) sections.push(`<section class="cleanup-section"><div class="cleanup-section-head"><div><div class="cleanup-section-title">Appointment dates ready</div><div class="cleanup-section-copy">These rows have a usable Appointment Date on the policy row itself. Other visits for the same client do not block them.</div></div><button id="backfillApproveBtn" class="cleanup-action primary" onclick="approveBackfill()">Approve ${ready.length}</button></div>${renderCleanupTable(ready)}</section>`);
+  if (historical.length) sections.push(`<section class="cleanup-section"><div class="cleanup-section-head"><div><div class="cleanup-section-title">Historical date evidence</div><div class="cleanup-section-copy">No Appointment Date was required for these older records. The best documented policy date is shown and every approval receives an audit note naming its source.</div></div><button id="historicalApproveBtn" class="cleanup-action gold" onclick="approveHistoricalDateEvidence()">Approve ${historical.length}</button></div>${renderCleanupTable(historical)}</section>`);
+  if (undated.length) sections.push(`<section class="cleanup-section"><div class="cleanup-section-head"><div><div class="cleanup-section-title">No date evidence on file</div><div class="cleanup-section-copy">Enter a known date, or classify the row as service/lapse recovery so it no longer dangles as an uncounted sale.</div></div><span class="cleanup-badge decision">${undated.length} left</span></div><div>${undated.map(renderUndatedRow).join('')}</div></section>`);
+  if (!sections.length) sections.push(`<section class="cleanup-section" style="text-align:center;padding:34px"><div style="font-size:28px;margin-bottom:8px">✓</div><div class="cleanup-section-title">Policy history is clean</div><div class="cleanup-section-copy" style="margin:5px auto 0">Every placed policy has a Written Date or an explicit relationship resolution.</div></section>`);
+
+  document.getElementById('backfillModal').innerHTML=`<div class="cleanup-hero"><div class="cleanup-hero-top"><div><div class="cleanup-eyebrow">Michelle's desk · policy history</div><div class="cleanup-title">Clean history, clear numbers</div><div class="cleanup-sub">Multiple visits can mean a book save, an upsell, lapse recovery, an additional policy, or a genuinely new sale. This cleanup preserves that history and only removes rows Michelle identifies as true duplicates or non-sales.</div></div><button class="cleanup-close" onclick="closeBackfillModal()" aria-label="Close">×</button></div><div class="cleanup-stats"><div class="cleanup-stat"><strong>${ready.length}</strong><span>Appointment dates ready</span></div><div class="cleanup-stat"><strong>${historical.length}</strong><span>Historical evidence ready</span></div><div class="cleanup-stat"><strong>${unresolvedRows}</strong><span>Rows needing relationship decisions</span></div><div class="cleanup-stat"><strong>${undated.length}</strong><span>Rows with no date evidence</span></div></div></div><div class="cleanup-body">${sections.join('')}</div><div class="cleanup-footer"><div class="cleanup-footer-note">Nothing is guessed. Every fallback and classification is saved with a durable audit trail in the Sheet.</div><button class="cleanup-action soft" onclick="closeBackfillModal()">Done</button></div>`;
+}
+
+async function writeApprovedDates(rows, buttonId, exact) {
+  if (!rows.length) return;
   if (!accessToken) { toast('Sign in first'); return; }
-  const rows=backfillPreviewData.carrierFallback;
-  if (!confirm(`Use carrier Issue Date as Written Date for ${rows.length} policies? This is fallback evidence, not the original application date. An audit note will be saved.`)) return;
-  const btn=document.getElementById('carrierFallbackApproveBtn');
-  if(btn){btn.disabled=true;btn.textContent='Writing…';}
+  const label=exact?'Appointment Date':'historical policy evidence';
+  if (!confirm(`Write ${label} into Written Date for ${rows.length} polic${rows.length===1?'y':'ies'}?`)) return;
+  const btn=document.getElementById(buttonId); if(btn){btn.disabled=true;btn.textContent='Saving…';}
   const approvedOn=new Date().toLocaleDateString('en-US');
   const updates=[];
   rows.forEach(r=>{
     const c=allClients.find(x=>x.sheetRow===r.sheetRow);
-    const audit=`Written Date fallback approved from carrier Issue Date ${r.proposedWrittenDate} on ${approvedOn}; not the original application date.`;
     updates.push({row:r.sheetRow,col:C.WRITTEN_DATE,value:r.proposedWrittenDate});
-    updates.push({row:r.sheetRow,col:43,value:[c?.apptNotes,audit].filter(Boolean).join('\n')});
+    if(!exact){const audit=`Historical Written Date approved from ${r.dateSource} ${r.proposedWrittenDate} on ${approvedOn}; original appointment date unavailable.`;updates.push({row:r.sheetRow,col:43,value:[c?.apptNotes,audit].filter(Boolean).join('\n')});}
   });
-  try {
+  try{
     await writeCellsBatch(updates);
-    rows.forEach(r=>{
-      const c=allClients.find(x=>x.sheetRow===r.sheetRow); if(!c)return;
-      const audit=`Written Date fallback approved from carrier Issue Date ${r.proposedWrittenDate} on ${approvedOn}; not the original application date.`;
-      c.writtenDate=r.proposedWrittenDate; c.apptNotes=[c.apptNotes,audit].filter(Boolean).join('\n');
-    });
-    toast(`✓ Saved ${rows.length} carrier fallback${rows.length===1?'':'s'} with audit notes`);
-    backfillPreviewData=computeWrittenDateBackfillPreview(); renderBackfillModal(); renderNumbersPanel();
-  } catch(e) {
-    toast('Could not save — check connection');
-    if(btn){btn.disabled=false;btn.textContent=`✓ Approve ${rows.length} Carrier Fallbacks`;}
+    rows.forEach(r=>{const c=allClients.find(x=>x.sheetRow===r.sheetRow);if(!c)return;c.writtenDate=r.proposedWrittenDate;if(!exact){const audit=`Historical Written Date approved from ${r.dateSource} ${r.proposedWrittenDate} on ${approvedOn}; original appointment date unavailable.`;c.apptNotes=[c.apptNotes,audit].filter(Boolean).join('\n');}});
+    toast(`✓ Saved ${rows.length} Written Date${rows.length===1?'':'s'}`); refreshCleanupViews();
+  }catch(e){toast('Could not save — check connection');if(btn){btn.disabled=false;btn.textContent=`Approve ${rows.length}`;}}
+}
+
+async function approveBackfill(){return writeApprovedDates(backfillPreviewData?.ready||[],'backfillApproveBtn',true);}
+async function approveHistoricalDateEvidence(){return writeApprovedDates(backfillPreviewData?.historical||[],'historicalApproveBtn',false);}
+async function approveCarrierIssueDateFallbacks(){return approveHistoricalDateEvidence();}
+
+function refreshCleanupViews(){backfillPreviewData=computeWrittenDateBackfillPreview();renderBackfillModal();renderNumbersPanel();}
+
+async function saveRelationshipGroup(groupId,mode){
+  const group=backfillPreviewData?.relationshipGroups?.find(g=>g.id===groupId); if(!group)return;
+  if(!accessToken){toast('Sign in first');return;}
+  const updates=[];
+  if(mode==='duplicate'){
+    const chosen=document.querySelector(`input[name="canonical_${groupId}"]:checked`); if(!chosen){toast('Choose the row to keep');return;}
+    const canonical=parseInt(chosen.value,10);
+    group.rows.forEach(c=>{const tag=c.sheetRow===canonical?DESK_RESOLUTION.new_sale.tag:`desk:duplicate_of:${canonical}`;updates.push({row:c.sheetRow,col:C.RELATIONSHIP_RESOLUTION,value:mergeDeskResolution(c.relationshipResolution,tag)});});
+  }else{
+    const key=document.getElementById(`reason_${groupId}`)?.value||'separate_policy'; const resolution=DESK_RESOLUTION[key]||DESK_RESOLUTION.separate_policy;
+    group.rows.forEach(c=>updates.push({row:c.sheetRow,col:C.RELATIONSHIP_RESOLUTION,value:mergeDeskResolution(c.relationshipResolution,resolution.tag)}));
   }
+  try{await writeCellsBatch(updates);updates.forEach(u=>{const c=allClients.find(x=>x.sheetRow===u.row);if(c)c.relationshipResolution=u.value;});toast('✓ Relationship decision saved');refreshCleanupViews();}catch(e){toast('Could not save — check connection');}
+}
+
+async function saveSingleRelationshipResolution(sheetRow){
+  const c=allClients.find(x=>x.sheetRow===sheetRow); if(!c)return;
+  const key=document.getElementById(`single_reason_${sheetRow}`)?.value||'service_other'; const resolution=DESK_RESOLUTION[key]||DESK_RESOLUTION.service_other;
+  if(!accessToken){toast('Sign in first');return;}
+  const value=mergeDeskResolution(c.relationshipResolution,resolution.tag);
+  try{await writeCell(sheetRow,C.RELATIONSHIP_RESOLUTION,value);c.relationshipResolution=value;toast(`✓ Saved: ${resolution.label}`);refreshCleanupViews();}catch(e){toast('Could not save — check connection');}
+}
+
+async function saveManualWrittenDate(sheetRow){
+  const c=allClients.find(x=>x.sheetRow===sheetRow); const input=document.getElementById(`manual_date_${sheetRow}`); if(!c||!input?.value){toast('Choose a date first');return;}
+  if(!accessToken){toast('Sign in first');return;}
+  const d=new Date(`${input.value}T12:00:00`); if(isNaN(d)||d>new Date()){toast('Choose a valid past date');return;}
+  const value=`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`; const audit=`Historical Written Date manually supplied as ${value} on ${new Date().toLocaleDateString('en-US')}.`;
+  try{await writeCellsBatch([{row:sheetRow,col:C.WRITTEN_DATE,value},{row:sheetRow,col:43,value:[c.apptNotes,audit].filter(Boolean).join('\n')}]);c.writtenDate=value;c.apptNotes=[c.apptNotes,audit].filter(Boolean).join('\n');toast('✓ Written Date saved');refreshCleanupViews();}catch(e){toast('Could not save — check connection');}
 }
 
 function buildTripProgramHtml(program, withDate) {
@@ -3147,10 +3248,10 @@ function renderNumbersPanel() {
 
   if (n.missingWrittenDate.length) {
     html += `<div style="background:var(--rust-light);border:1.5px solid var(--rust);border-radius:12px;padding:12px 14px;margin-bottom:14px">
-      <div style="font-weight:700;color:var(--rust);font-size:13px;margin-bottom:4px">⚠️ ${n.missingWrittenDate.length} placed ${n.missingWrittenDate.length===1?'policy has':'policies have'} no Written Date</div>
-      <div style="font-size:12px;color:var(--rust)">These aren't counted as written sales until a Written Date is logged. Review exact Appointment Dates first; carrier Issue Dates are offered separately as audited fallback evidence.</div>
+      <div style="font-weight:700;color:var(--rust);font-size:13px;margin-bottom:4px">${n.missingWrittenDate.length} policy history ${n.missingWrittenDate.length===1?'item needs':'items need'} cleanup</div>
+      <div style="font-size:12px;color:var(--rust)">Old policies can use documented Appointment, Effective, carrier Issue, Pay, or Lead dates. Repeat visits are allowed; true duplicates and service visits get an explicit resolution.</div>
       <div style="margin-top:8px">${n.missingWrittenDate.slice(0,8).map(c => `<span onclick="openGroup('${esc(c.fullName.toLowerCase().replace(/\s+/g,' ').trim())}')" style="display:inline-block;background:#fff;border:1px solid var(--rust);color:var(--rust);border-radius:14px;padding:3px 10px;font-size:11px;font-weight:600;margin:0 6px 6px 0;cursor:pointer">${c.fullName}</span>`).join('')}${n.missingWrittenDate.length>8?`<span style="font-size:11px;color:var(--rust)">+${n.missingWrittenDate.length-8} more</span>`:''}</div>
-      <button onclick="openBackfillModal()" style="margin-top:10px;padding:9px 15px;background:var(--ink);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">🗓️ Review Missing Written Dates</button>
+      <button onclick="openBackfillModal()" style="margin-top:10px;padding:9px 15px;background:var(--ink);color:#fff;border:none;border-radius:20px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">✨ Clean Up Policy History</button>
     </div>`;
   }
 
