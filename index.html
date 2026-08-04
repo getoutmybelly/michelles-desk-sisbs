@@ -3849,6 +3849,15 @@ const CARRIER_ADAPTERS = {
       return { standardizedStatus:'pending_verification', subtype:'unrecognized_status_code' };
     },
   },
+  gerber: {
+    label: 'Gerber Life',
+    sourceType: 'commission-statement',
+    capabilities: { supportsPagination:false, supportsStatusDecode:false, supportsPremium:true, supportsPolicyDetail:true },
+    headerAliases: null, // Gerber's two-tab weekly statement has its own parser below.
+    // A commission statement proves carrier activity and a paid-to date, but it is not a
+    // current full-book status report. Keep the row pending until policy maintenance runs.
+    mapStatus: () => ({ standardizedStatus:'pending_verification', subtype:'commission_evidence_only' }),
+  },
 };
 
 // ── CONNECTOR ENVELOPE CONTRACT ───────────────────────────────────────────────
@@ -4190,7 +4199,7 @@ function renderCarrierReportModal() {
       </tbody></table>
     </div>
 
-    <div style="font-weight:700;font-size:13px;color:var(--muted);margin-bottom:6px">📄 ${match.unmatchedPortal.length} report record${match.unmatchedPortal.length===1?'':'s'} not found in Michelle's Desk</div>
+    <div style="font-weight:700;font-size:13px;color:${match.unmatchedPortal.length?'var(--gold)':'var(--muted)'};margin-bottom:6px">📄 ${match.unmatchedPortal.length} report record${match.unmatchedPortal.length===1?'':'s'} not found in Michelle's Desk${match.unmatchedPortal.length?' — approval will create durable rows':''}</div>
     <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px">
       ${match.unmatchedPortal.map(r => `<div style="padding:6px 8px;border-bottom:1px solid var(--cream)">${r.insuredName || '(no name)'} — ${r.policyNumber||'no policy #'} — ${r.status}</div>`).join('') || `<div style="padding:12px;text-align:center;color:var(--muted)">None</div>`}
     </div>
@@ -4202,7 +4211,7 @@ function renderCarrierReportModal() {
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="closeCarrierReportModal()" style="padding:11px 18px;background:var(--cream);color:var(--ink);border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Close</button>
-      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'pointer':'not-allowed'}">✓ Approve Full Reconciliation (${match.exact.length+match.nameOnly.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0)})</button>
+      <button id="carrierReportApproveBtn" onclick="approveCarrierReportAllMatches()" ${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'':'disabled'} style="padding:11px 20px;background:${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'var(--sage)':'var(--muted)'};color:#fff;border:none;border-radius:22px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:${(match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0))?'pointer':'not-allowed'}">✓ Approve & Retain All Evidence (${match.exact.length+match.nameOnly.length+match.unmatchedPortal.length+(carrierReportPreviewData.fullBook?match.deskNotFound.length:0)})</button>
     </div>
   </div>`;
 
@@ -4215,33 +4224,104 @@ function buildCarrierReportWritePlan(client, record, carrierKey) {
   const now = new Date();
   const nowStr = now.toLocaleString('en-US', { month:'numeric', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
   const statusLabel = (Object.values(POLICY_STATUS).find(s => s.key === mapped.standardizedStatus) || {}).label || mapped.standardizedStatus;
-  const logEntry = `[${nowStr}] ${statusLabel}${mapped.subtype?` (${mapped.subtype})`:''} — carrier said: "${record.status}" — via Carrier Report, Manual Import`;
+  const logEntry = `[${nowStr}] ${record.evidenceOnly?'Commission evidence retained':statusLabel}${mapped.subtype?` (${mapped.subtype})`:''} — carrier said: "${record.status}" — via Carrier Report, Manual Import`;
   const newLog = [logEntry, ...(client.statusLog ? client.statusLog.split('\n').filter(Boolean) : [])].join('\n');
 
   const updates = [
-    { row: client.sheetRow, col: C.STATUS, value: mapped.standardizedStatus },
-    { row: client.sheetRow, col: C.CARRIER_STATUS_TEXT, value: record.status },
-    { row: client.sheetRow, col: C.CARRIER_REASON, value: mapped.subtype || '' },
-    { row: client.sheetRow, col: C.VERIFICATION_SOURCE, value: 'Carrier Report' },
-    { row: client.sheetRow, col: C.LAST_CHECKED, value: nowStr },
-    { row: client.sheetRow, col: C.CHECK_METHOD, value: 'Manual Import' },
     { row: client.sheetRow, col: C.STATUS_LOG, value: newLog },
     { row: client.sheetRow, col: C.CARRIER_ISSUE_DATE, value: record.issueDate },
-    { row: client.sheetRow, col: C.CARRIER_PAID_TO_DATE, value: record.paidToDate },
     { row: client.sheetRow, col: C.CARRIER_PRODUCT, value: record.product },
     { row: client.sheetRow, col: C.CARRIER_REPORT_PREMIUM, value: record.premium },
   ];
+  // Weekly statements may be approved newest-first. Never let an older statement move
+  // Paid To Date backwards after a newer one has already been retained.
+  const existingPaidTo=client.carrierPaidToDate?new Date(client.carrierPaidToDate):null;
+  const reportedPaidTo=record.paidToDate?new Date(record.paidToDate):null;
+  if(record.paidToDate&&(!existingPaidTo||isNaN(existingPaidTo)||!reportedPaidTo||isNaN(reportedPaidTo)||reportedPaidTo>=existingPaidTo)) {
+    updates.push({ row: client.sheetRow, col: C.CARRIER_PAID_TO_DATE, value: record.paidToDate });
+  }
+  if (!record.evidenceOnly || !client.status) updates.push(
+    { row: client.sheetRow, col: C.STATUS, value: mapped.standardizedStatus },
+    { row: client.sheetRow, col: C.CARRIER_STATUS_TEXT, value: record.status },
+    { row: client.sheetRow, col: C.CARRIER_REASON, value: mapped.subtype || '' },
+    { row: client.sheetRow, col: C.VERIFICATION_SOURCE, value: record.evidenceOnly?'Carrier Commission Statement':'Carrier Report' },
+    { row: client.sheetRow, col: C.LAST_CHECKED, value: nowStr },
+    { row: client.sheetRow, col: C.CHECK_METHOD, value: 'Manual Import' },
+  );
   if (record.policyNumber && !client.newPolicyNumber) updates.push({ row: client.sheetRow, col: C.POLICY_NUMBER, value: record.policyNumber });
 
   return {
     updates,
     applyLocal() {
-      client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
-      client.verificationSource = 'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import'; client.statusLog = newLog;
-      client.carrierIssueDate = record.issueDate; client.carrierPaidToDate = record.paidToDate; client.carrierProduct = record.product; client.carrierReportPremium = record.premium;
+      if (!record.evidenceOnly || !client.status) {
+        client.status = mapped.standardizedStatus; client.carrierStatusText = record.status; client.carrierReason = mapped.subtype || '';
+        client.verificationSource = record.evidenceOnly?'Carrier Commission Statement':'Carrier Report'; client.lastChecked = nowStr; client.checkMethod = 'Manual Import';
+      }
+      client.statusLog = newLog;
+      client.carrierIssueDate = record.issueDate;
+      if(updates.some(update=>update.col===C.CARRIER_PAID_TO_DATE))client.carrierPaidToDate=record.paidToDate;
+      client.carrierProduct = record.product; client.carrierReportPremium = record.premium;
       if (record.policyNumber && !client.newPolicyNumber) client.newPolicyNumber = record.policyNumber;
     }
   };
+}
+
+function splitCarrierInsuredName(value) {
+  let name=String(value||'').trim().replace(/\s+/g,' ');
+  if(name.includes(',')){const [last,...rest]=name.split(',');name=`${rest.join(' ').trim()} ${last.trim()}`.trim();}
+  const parts=name.split(' ').filter(Boolean).filter(part=>!['JR','SR','II','III','IV'].includes(part.toUpperCase()));
+  if(!parts.length)return {firstName:'Unknown',lastName:'Carrier Record'};
+  if(parts.length===1)return {firstName:toProperCase(parts[0]),lastName:'Carrier Record'};
+  return {firstName:parts.slice(0,-1).map(toProperCase).join(' '),lastName:toProperCase(parts[parts.length-1])};
+}
+
+function buildCarrierSourceClientRow(record,carrierKey,sourceFile) {
+  const adapter=CARRIER_ADAPTERS[carrierKey]||CARRIER_ADAPTERS.generic;
+  const mapped=adapter.mapStatus(record.status);
+  const person=splitCarrierInsuredName(record.insuredName);
+  const nowStr=new Date().toLocaleString('en-US',{month:'numeric',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+  const row=Array(96).fill(''); // A:CR — includes the durable policy/evidence columns.
+  row[1]=person.firstName; row[2]=person.lastName;
+  row[38]=adapter.label;
+  row[39]=record.faceAmount||'';
+  row[40]=record.premium||'';
+  row[63]=`Carrier-sourced policy row created from ${sourceFile||adapter.label+' report'}. Original client paperwork was not yet in Michelle's Desk.`;
+  row[C.STATUS]=mapped.standardizedStatus;
+  row[C.CARRIER_STATUS_TEXT]=record.status||'Carrier record imported';
+  row[C.CARRIER_REASON]=mapped.subtype||'';
+  row[C.VERIFICATION_SOURCE]=record.evidenceOnly?'Carrier Commission Statement':'Carrier Report';
+  row[C.LAST_CHECKED]=nowStr;
+  row[C.CHECK_METHOD]='Manual Import';
+  row[C.POLICY_NUMBER]=record.policyNumber||'';
+  row[C.STATUS_LOG]=`[${nowStr}] Carrier-sourced row created (${mapped.subtype||mapped.standardizedStatus}) — carrier said: "${record.status||'record imported'}" — source: ${sourceFile||adapter.label}`;
+  row[C.CARRIER_ISSUE_DATE]=record.issueDate||'';
+  row[C.CARRIER_PAID_TO_DATE]=record.paidToDate||'';
+  row[C.CARRIER_PRODUCT]=record.product||'';
+  row[C.CARRIER_REPORT_PREMIUM]=record.premium||'';
+  row[C.RELATIONSHIP_RESOLUTION]='desk:carrier-sourced-policy';
+  return row;
+}
+
+async function currentCarrierPolicyKeys() {
+  const ranges=['U3:U','CD3:CD'].map(range=>`ranges=${encodeURIComponent(`${SHEET_TAB}!${range}`)}`).join('&');
+  const data=await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${ranges}&majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`);
+  const keys=new Set();
+  (data.valueRanges||[]).forEach(range=>(range.values||[]).forEach(row=>{const key=String(row[0]||'').trim().toUpperCase().replace(/\s+/g,'');if(key)keys.add(key);}));
+  return keys;
+}
+
+async function appendUnmatchedCarrierRecords(records,carrierKey,sourceFile,onProgress) {
+  const existing=await currentCarrierPolicyKeys();
+  const pending=[];
+  records.forEach(record=>{const key=String(record.policyNumber||'').trim().toUpperCase().replace(/\s+/g,'');if(!key||existing.has(key))return;existing.add(key);pending.push(record);});
+  let inserted=0;
+  for(let start=0;start<pending.length;start+=40){
+    const chunk=pending.slice(start,start+40);
+    const values=chunk.map(record=>buildCarrierSourceClientRow(record,carrierKey,sourceFile));
+    await smartSheetsRequest(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`${SHEET_TAB}!A:CR`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,{method:'POST',body:JSON.stringify({values})});
+    inserted+=chunk.length;if(onProgress)onProgress(inserted,pending.length);
+  }
+  return {inserted,alreadyPresent:records.length-pending.length};
 }
 
 function buildMissingFromFullReportPlan(client, carrierKey) {
@@ -4323,24 +4403,28 @@ async function approveCarrierReportExactMatches() {
 }
 
 async function approveCarrierReportAllMatches() {
-  const { exact, nameOnly, carrierLabel, deskNotFound } = carrierReportPreviewData.match;
+  const { exact, nameOnly, unmatchedPortal, carrierLabel, deskNotFound } = carrierReportPreviewData.match;
   const matches = [...exact,...nameOnly];
+  const unmatched=[...unmatchedPortal];
   const missing = carrierReportPreviewData.fullBook ? deskNotFound : [];
   const carrierKey = carrierReportPreviewData.carrierKey;
-  if (!matches.length && !missing.length) return;
+  if (!matches.length && !unmatched.length && !missing.length) return;
   if (!accessToken) { toast('Sign in first'); return; }
-  if (!confirm(`Complete the ${carrierLabel} reconciliation?\n\n${matches.length} report matches will receive their carrier status.\n${missing.length} Desk sales absent from this full report will be marked for review—not guessed as lapsed.`)) return;
+  if (!confirm(`Complete the ${carrierLabel} reconciliation?\n\n${matches.length} existing Desk record${matches.length===1?'':'s'} will retain this carrier evidence.\n${unmatched.length} carrier record${unmatched.length===1?'':'s'} not yet in the Desk will be created as durable policy rows.\n${missing.length} Desk sales absent from this full report will be marked for review—not guessed as lapsed.`)) return;
   const btn = document.getElementById('carrierReportApproveBtn');
-  const total=matches.length+missing.length;
+  const total=matches.length+unmatched.length+missing.length;
   btn.disabled=true; btn.textContent=`Updating… 0/${total}`;
   try {
     const matchedDone = await writeCarrierReportMatches(matches,carrierKey,(n)=>btn.textContent=`Updating matches… ${n}/${total}`);
-    const missingDone = await writeMissingFromFullReport(missing,carrierKey,(n)=>btn.textContent=`Recording report exceptions… ${matchedDone+n}/${total}`);
-    const done=matchedDone+missingDone;
+    const created=await appendUnmatchedCarrierRecords(unmatched,carrierKey,carrierReportPreviewData.sourceFile,(n)=>btn.textContent=`Creating missing policy rows… ${matchedDone+n}/${total}`);
+    const missingDone = await writeMissingFromFullReport(missing,carrierKey,(n)=>btn.textContent=`Recording report exceptions… ${matchedDone+created.inserted+n}/${total}`);
+    if(carrierReportPreviewData.commissionData) await persistCommissionStatement(carrierReportPreviewData.commissionData,carrierReportPreviewData.sourceFile||'Gerber commission statement');
+    const done=matchedDone+created.inserted+missingDone;
     carrierReportPreviewData.match.exact=[];
     carrierReportPreviewData.match.nameOnly=[];
+    carrierReportPreviewData.match.unmatchedPortal=[];
     carrierReportPreviewData.match.deskNotFound=[];
-    toast(`✓ Reconciled ${done} Desk relationship${done===1?'':'s'}`);
+    toast(`✓ Reconciled ${done} relationship${done===1?'':'s'} · created ${created.inserted} carrier-sourced row${created.inserted===1?'':'s'}`);
     closeCarrierReportModal();
     await loadFromSheets();
   } catch (e) {
@@ -6236,7 +6320,12 @@ function smartIsoDate(value) {
   if (match) return `${match[1]}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
   const matches = [...text.matchAll(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/g)];
   match = matches[matches.length-1];
-  return match ? `${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}` : '';
+  if(match)return `${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`;
+  const shortMatches=[...text.matchAll(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2})(?!\d)/g)];
+  match=shortMatches[shortMatches.length-1];
+  if(!match)return '';
+  const year=Number(match[3])>=70?`19${match[3]}`:`20${match[3]}`;
+  return `${year}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`;
 }
 
 function smartDisplayIsoDate(iso) {
@@ -6448,6 +6537,78 @@ function smartParseQlCommissionWorkbook(workbook, fileName) {
   };
 }
 
+function smartGerberStatementSheet(workbook) {
+  for(const sheetName of workbook.SheetNames){
+    const rows=XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,defval:'',raw:false});
+    const headerIndex=rows.findIndex(row=>{
+      const headers=row.map(smartHeader);
+      return headers.includes('POLICYNUMBER')&&headers.includes('POLICYHOLDERNAME')&&headers.includes('COMTYPE')&&headers.includes('REASONCODE');
+    });
+    const saysGerber=rows.slice(0,7).some(row=>row.some(value=>/Gerber Life Insurance Company/i.test(String(value||''))));
+    if(saysGerber&&headerIndex>=0)return {sheetName,rows,headerIndex};
+  }
+  return null;
+}
+
+function smartIsGerberCommissionWorkbook(workbook){return !!smartGerberStatementSheet(workbook);}
+
+function smartParseGerberCommissionWorkbook(workbook,fileName) {
+  const found=smartGerberStatementSheet(workbook);
+  if(!found)throw new Error('I could not find the Gerber commission-detail table.');
+  const headers=found.rows[found.headerIndex].map(smartHeader);
+  const objects=found.rows.slice(found.headerIndex+1).map(values=>{const row={};headers.forEach((header,index)=>{if(header)row[header]=values[index];});return row;})
+    .filter(row=>/^\d{8,}$/.test(String(row.POLICYNUMBER||'').trim()));
+  if(!objects.length)throw new Error('I recognized the Gerber statement but found no policy rows.');
+  const topRows=found.rows.slice(0,found.headerIndex);
+  const textForLabel=label=>{const row=topRows.find(values=>values.some(value=>smartHeader(value)===smartHeader(label)));return row?row.map(String).join(' '):'';};
+  const statementDate=smartIsoDate(textForLabel('Period ending'));
+  const period=statementDate?`Week ending ${smartDisplayIsoDate(statementDate)}`:'Gerber weekly statement';
+  const agentLine=textForLabel('Agent');
+  const agentName=agentLine.replace(/^.*?Agent:?\s*/i,'').replace(/^[A-Z0-9-]+\s+/i,'').trim();
+  const byPolicy=new Map(),auditRows=[];
+  objects.forEach((row,index)=>{
+    const policyNumber=String(row.POLICYNUMBER||'').trim();
+    const insuredName=smartCarrierName(row.POLICYHOLDERNAME);
+    const annualPremium=parseMoney(row.ORIGINALANNUALPREMIUM);
+    const modalPremium=annualPremium?Math.round((annualPremium/12)*100)/100:0;
+    const paidToDate=smartDisplayIsoDate(smartIsoDate(row.PAIDTODATE));
+    const issueDate=smartDisplayIsoDate(smartIsoDate(row.ISSUEDATE));
+    const commissionType=String(row.COMTYPE||'Commission').trim();
+    const reasonCode=String(row.REASONCODE||'').trim();
+    const commissionRate=String(row.COMMRATE||'').trim();
+    const amount=parseMoney(row.AMOUNT);
+    if(!byPolicy.has(policyNumber))byPolicy.set(policyNumber,{
+      policyNumber,insuredName,
+      status:`Commission activity${paidToDate?`; carrier paid-to date ${paidToDate}`:''}`,
+      issueDate,paidToDate,product:String(row.PRODUCT||'').trim(),
+      premium:modalPremium,faceAmount:parseMoney(row.ORIGINALFACEAMOUNT),
+      evidenceOnly:true,commissionAmount:0,commissionTypes:new Set(),
+    });
+    const policy=byPolicy.get(policyNumber);policy.commissionAmount+=amount;policy.commissionTypes.add(commissionType);
+    auditRows.push({
+      policyNumber,insuredName,commissionAmount:amount,earnedCommission:amount,
+      commissionType,activity:`${commissionType}${commissionRate?` · ${commissionRate}`:''}${reasonCode?` · reason ${reasonCode}`:''}`,
+      writingAgent:agentName,rowPeriod:period,sourceLine:found.headerIndex+2+index,
+    });
+  });
+  const records=[...byPolicy.values()].map(record=>({...record,commissionType:[...record.commissionTypes].join(' + ')}));
+  const policies=records.map(record=>({policyNumber:record.policyNumber,insuredName:record.insuredName,commissionAmount:record.commissionAmount,commissionType:record.commissionType}));
+  const totalCommission=auditRows.reduce((sum,row)=>sum+row.commissionAmount,0);
+  const summarySheet=workbook.SheetNames.find(name=>name!==found.sheetName);
+  let payment=totalCommission;
+  if(summarySheet){
+    const rows=XLSX.utils.sheet_to_json(workbook.Sheets[summarySheet],{header:1,defval:'',raw:false});
+    const check=rows.find(row=>smartHeader(row[0])==='CHECKAMOUNT');
+    if(check)payment=parseMoney(check[1]);
+  }
+  const commissionData={
+    carrier:'Gerber Life',carrierKey:'gerber',period,statementDate,agentName,sourceFile:fileName,
+    reportKind:'gerber-weekly-commission',policies,auditRows,totalCommission,
+    metrics:{beginningBalance:0,endingBalance:0,payment,earned:totalCommission,grossAdvanceChargeback:0,netPayout:payment},
+  };
+  return {type:'policy',label:`Gerber weekly commission + policy evidence · ${smartDisplayIsoDate(statementDate)}`,count:records.length,records,carrier:'Gerber Life',carrierKeyHint:'gerber',fullBook:false,commissionData};
+}
+
 async function smartParseSpreadsheet(file) {
   const workbook = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true });
   if (smartIsKskjHeaderlessCommissionWorkbook(workbook,file.name)) {
@@ -6458,6 +6619,7 @@ async function smartParseSpreadsheet(file) {
     const data = smartParseQlCommissionWorkbook(workbook,file.name);
     return { type:'commission', label:`LifeShield monthly commission · ${smartDisplayIsoDate(data.statementDate)}`, count:data.policies.length, data };
   }
+  if (smartIsGerberCommissionWorkbook(workbook)) return smartParseGerberCommissionWorkbook(workbook,file.name);
 
   const bookSheet = smartWorkbookSheetName(workbook,'AllBookOfBusiness');
   if (bookSheet) {
@@ -6837,6 +6999,7 @@ function detectKnownCarrierReport(item) {
   if (item.carrierKeyHint === 'lifeshield' || /lifeshield/i.test(String(item.carrier||''))) {
     return { carrierKey:'lifeshield', fullBook:item.fullBook === true };
   }
+  if(item.carrierKeyHint==='gerber'||/gerber/i.test(String(item.carrier||'')))return {carrierKey:'gerber',fullBook:false};
   const pfaPolicyCount = records.filter(r => /^(?:FE|[LP])\d{5,6}$/i.test(String(r.policyNumber||'').trim())).length;
   const pfaCodeCount = records.filter(r => /^(?:A|B|C|N|R|X|1|2|3|L|D|\*)$/i.test(String(r.status||'').trim())).length;
   const statedCarrier = String(item.carrier||'').toLowerCase();
@@ -6886,7 +7049,7 @@ async function smartReviewFile(index) {
     match.carrierLabel = carrierKey === 'pfa'
       ? 'Polish Falcons (PFA)'
       : (item.carrier && item.carrier !== 'Detected carrier' ? item.carrier : 'Detected Carrier');
-    carrierReportPreviewData = { carrierKey, envelope, match, fullBook:detected.fullBook, stats:computeCarrierReportStats(carrierKey,envelope.records), validationWarnings:validation.warnings };
+    carrierReportPreviewData = { carrierKey, envelope, match, fullBook:detected.fullBook, stats:computeCarrierReportStats(carrierKey,envelope.records), validationWarnings:validation.warnings, sourceFile:item.fileName, commissionData:item.commissionData||null };
     renderCarrierReportModal();
     document.getElementById('carrierReportOverlay').classList.add('visible');
   }
