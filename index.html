@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Google auth handled via redirect -->
 <style>
@@ -5927,14 +5928,61 @@ async function uniqueFolderFileName(folder,requested) {
 async function saveLeadPdf(blob,lead,folder) {
   const requested=leadFileName(lead);
   if(folder){const fileName=await uniqueFolderFileName(folder,requested);const handle=await folder.getFileHandle(fileName,{create:true});const writer=await handle.createWritable();await writer.write(blob);await writer.close();return {mode:'folder',fileName};}
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=requested;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);return {mode:'download',fileName:requested};
+  downloadBlobOnce(blob,requested);
+  return {mode:'download',fileName:requested};
 }
 
-function renderFexFinalizeReceipt(containerId,outcome,fileResults,folderUsed) {
+function downloadBlobOnce(blob,fileName) {
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=fileName;a.style.display='none';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+
+function uniqueBatchFileName(requested,usedNames) {
+  const lower=new Set([...usedNames].map(name=>name.toLowerCase()));
+  const stem=requested.toLowerCase().endsWith('.pdf')?requested.slice(0,-4):requested;
+  for(let n=1;n<100;n++){
+    const candidate=n===1?`${stem}.pdf`:`${stem} (${n}).pdf`;
+    if(!lower.has(candidate.toLowerCase())){usedNames.add(candidate);return candidate;}
+  }
+  const fallback=`${stem} ${Date.now()}.pdf`;usedNames.add(fallback);return fallback;
+}
+
+async function saveLeadPdfBatch(blobs,leads,folder) {
+  if(folder){
+    const results=[];
+    for(let i=0;i<leads.length;i++){
+      try{results.push(await saveLeadPdf(blobs[i],leads[i],folder));}
+      catch(e){results.push({error:e.message});}
+    }
+    return {results,folderUsed:true,bundleName:''};
+  }
+  if(blobs.length===1){
+    const result=await saveLeadPdf(blobs[0],leads[0],null);
+    return {results:[result],folderUsed:false,bundleName:''};
+  }
+  if(typeof JSZip==='undefined')throw new Error('The multi-lead PDF packager did not load. Refresh and try again.');
+  const zip=new JSZip(),usedNames=new Set(),results=[];
+  for(let i=0;i<leads.length;i++){
+    const fileName=uniqueBatchFileName(leadFileName(leads[i]),usedNames);
+    zip.file(fileName,blobs[i]);
+    results.push({mode:'zip',fileName});
+  }
+  const bundleName=`Individual Leads ${new Date().toISOString().slice(0,10)} (${leads.length}).zip`;
+  downloadBlobOnce(await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}}),bundleName);
+  return {results,folderUsed:false,bundleName};
+}
+
+function renderFexFinalizeReceipt(containerId,outcome,fileResults,folderUsed,bundleName='') {
   const host=document.getElementById(containerId);if(!host)return;
   host.querySelector('.lead-receipt')?.remove();
-  const items=outcome.items.map((item,index)=>{const file=fileResults[index]||{};const sheetText=item.sheetStatus==='saved'?(item.verified?`Sheet row ${item.sheetRow} · verified`:`Sheet row ${item.sheetRow} · verify warning`):item.sheetStatus==='existing'?`Already in Sheet · row ${item.sheetRow}`:item.message||'Not saved';const sheetClass=item.sheetStatus==='saved'&&item.verified?'lead-receipt-ok':item.sheetStatus==='existing'?'lead-receipt-warn':'lead-receipt-warn';const fileText=file.error?`PDF needs attention: ${file.error}`:file.mode==='folder'?`Filed: ${file.fileName}`:`Downloaded: ${file.fileName}`;return `<div class="lead-receipt-row"><div><b>${htmlSafe([item.lead.firstName,item.lead.lastName].filter(Boolean).join(' '))}</b>${item.lead.spouseName?`<div style="color:var(--muted)">Household: ${htmlSafe(item.lead.spouseName)}</div>`:''}</div><div class="${sheetClass}">${htmlSafe(sheetText)}</div><div class="${file.error?'lead-receipt-warn':'lead-receipt-ok'}">${htmlSafe(fileText)}</div></div>`;}).join('');
-  const receipt=document.createElement('div');receipt.className='lead-receipt';receipt.innerHTML=`<div class="lead-receipt-title">✓ Lead intake finished</div><div class="lead-receipt-copy">Michelle’s Desk checked the Sheet itself. ${folderUsed?'The PDFs were filed directly into the selected Individual Leads folder.':'The browser downloaded the renamed PDFs because no writable folder was selected.'}</div>${items}`;host.appendChild(receipt);
+  const items=outcome.items.map((item,index)=>{const file=fileResults[index]||{};const sheetText=item.sheetStatus==='saved'?(item.verified?`Sheet row ${item.sheetRow} · verified`:`Sheet row ${item.sheetRow} · verification failed`):item.sheetStatus==='existing'?`Already in Sheet · row ${item.sheetRow}`:item.message||'Not saved';const sheetOk=item.sheetStatus==='existing'||(item.sheetStatus==='saved'&&item.verified);const sheetClass=sheetOk?'lead-receipt-ok':'lead-receipt-warn';const fileText=file.error?`PDF needs attention: ${file.error}`:file.mode==='folder'?`Filed: ${file.fileName}`:file.mode==='zip'?`In download pack: ${file.fileName}`:`Downloaded: ${file.fileName}`;return `<div class="lead-receipt-row"><div><b>${htmlSafe([item.lead.firstName,item.lead.lastName].filter(Boolean).join(' '))}</b>${item.lead.spouseName?`<div style="color:var(--muted)">Household: ${htmlSafe(item.lead.spouseName)}</div>`:''}</div><div class="${sheetClass}">${htmlSafe(sheetText)}</div><div class="${file.error?'lead-receipt-warn':'lead-receipt-ok'}">${htmlSafe(fileText)}</div></div>`;}).join('');
+  const allOkay=outcome.allRetained&&fileResults.length===outcome.items.length&&fileResults.every(file=>file&&!file.error);
+  const fileCopy=folderUsed?'Every PDF was filed separately in the selected Individual Leads folder.':bundleName?`One reliable download named “${htmlSafe(bundleName)}” contains every individually named PDF. Open that file to move the PDFs into PDF Expert.`:'The individually named PDF was downloaded.';
+  const receipt=document.createElement('div');receipt.className='lead-receipt';receipt.innerHTML=`<div class="lead-receipt-title">${allOkay?'✓ Lead intake finished':'⚠ Lead intake needs attention'}</div><div class="lead-receipt-copy">Michelle’s Desk checked every expected Sheet row. ${fileCopy}</div>${items}`;host.appendChild(receipt);
+  return allOkay;
 }
 
 async function finalizeFexLeads(containerId,btn) {
@@ -5946,9 +5994,12 @@ async function finalizeFexLeads(containerId,btn) {
   btn.textContent='Saving and verifying…';
   try{
     const outcome=await saveFexLeads(containerId,btn,{quiet:true});
-    const leads=window._fexLeadsState?.[containerId]||[];const fileResults=[];
-    for(let i=0;i<leads.length;i++){try{const blob=await buildLeadPdfBlob(leads[i]._pdfPageIndex??i,containerId);fileResults.push(await saveLeadPdf(blob,leads[i],folder));}catch(e){fileResults.push({error:e.message});}}
-    renderFexFinalizeReceipt(containerId,outcome,fileResults,!!folder);btn.textContent='✓ Finalized and verified';btn.style.background='var(--sage)';toast(`✓ ${leads.length} lead${leads.length===1?'':'s'} finalized`);
+    const leads=window._fexLeadsState?.[containerId]||[];const blobs=[];
+    for(let i=0;i<leads.length;i++)blobs.push(await buildLeadPdfBlob(leads[i]._pdfPageIndex??i,containerId));
+    const fileBatch=await saveLeadPdfBatch(blobs,leads,folder);
+    const allOkay=renderFexFinalizeReceipt(containerId,outcome,fileBatch.results,fileBatch.folderUsed,fileBatch.bundleName);
+    if(!allOkay)throw new Error('One or more leads could not be verified. Review the receipt and retry.');
+    btn.textContent='✓ Finalized and verified';btn.style.background='var(--sage)';toast(`✓ ${leads.length} lead${leads.length===1?'':'s'} finalized`);
   }catch(e){console.error('Finalize lead error',e);btn.disabled=false;btn.textContent='Retry Finalize';toast('Could not finish: '+e.message);}finally{window._fexFinalizeInFlight=false;}
 }
 
@@ -6000,7 +6051,6 @@ async function saveFexLeads(containerId, btn, options={}) {
       if(cl(r[firstCol])&&cl(r[lastCol])&&!existingRowsByKey.has(key))existingRowsByKey.set(key,index+2);
     });
 
-    let nextRow = existing.length + 1;          // deterministic placement — no append() drift
     const today = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
     const rowsToWrite = [], items=[];
 
@@ -6010,7 +6060,12 @@ async function saveFexLeads(containerId, btn, options={}) {
       if (!first || !last) { items.push({lead,sheetStatus:'skipped',message:'First and last name are required'}); continue; }
       if (!phoneDigits && !cl(lead.address)) { items.push({lead,sheetStatus:'skipped',message:'No phone or address'}); continue; }
       const key = leadIdentityKey(first,last,lead.phone,lead.address,lead.zip);
-      if (existingRowsByKey.has(key)) { items.push({lead,sheetStatus:'existing',sheetRow:existingRowsByKey.get(key),verified:true}); continue; }
+      if (existingRowsByKey.has(key)) {
+        const match=existingRowsByKey.get(key);
+        if(typeof match==='number')items.push({lead,sheetStatus:'existing',sheetRow:match,verified:true});
+        else items.push({lead,sheetStatus:'same_batch',sheetRow:null,verified:false,pendingSource:match.pendingItem,message:'Repeated lead in this email; linked to the same Sheet row'});
+        continue;
+      }
       // Confirmed layout: A=Status, then blank(s), D=First, E=Spouse, F=Last, G=Address, H=City,
       // I=County, J=State, K=Zip, L=LeadDate, M=Phone, N=DOB, O=Age
       const values=[
@@ -6018,26 +6073,40 @@ async function saveFexLeads(containerId, btn, options={}) {
         cl(lead.address), cl(lead.city), cl(lead.county) || guessCounty(lead.city),
         cl(lead.state) || 'IL', cl(lead.zip), today, cl(lead.phone), cl(lead.dob), cl(lead.age)
       ];
-      const sheetRow=nextRow+rowsToWrite.length;
-      rowsToWrite.push(values);items.push({lead,sheetStatus:'saved',sheetRow,verified:false,key});existingRowsByKey.set(key,sheetRow);
+      rowsToWrite.push(values);items.push({lead,sheetStatus:'saved',sheetRow:null,verified:false,key});
+      // Prevent a duplicate inside this same email batch without pretending we know its final row yet.
+      existingRowsByKey.set(key,{pendingItem:items[items.length-1]});
     }
 
     if (rowsToWrite.length) {
-      const range = `Leads!A${nextRow}:O${nextRow + rowsToWrite.length - 1}`;
-      const putResp = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
-        { method: 'PUT',
+      // Append is atomic: another browser action cannot claim the rows between our read and write.
+      const appendResp = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent('Leads!A:O')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        { method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: rowsToWrite }) }
       );
-      if (!putResp.ok) { const e = await putResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Write failed (HTTP ${putResp.status})`); }
+      if (!appendResp.ok) { const e = await appendResp.json().catch(()=>({})); throw new Error(e?.error?.message || `Write failed (HTTP ${appendResp.status})`); }
+      const appendData=await appendResp.json();
+      const updatedRange=appendData?.updates?.updatedRange||'';
+      const rowMatch=updatedRange.match(/![A-Z]+(\d+):[A-Z]+(\d+)$/i);
+      if(!rowMatch)throw new Error('The Sheet accepted the leads but did not return their row numbers. Refresh before retrying.');
+      const firstWrittenRow=Number(rowMatch[1]),lastWrittenRow=Number(rowMatch[2]);
+      if(lastWrittenRow-firstWrittenRow+1!==rowsToWrite.length)throw new Error('The Sheet did not confirm every lead row. Refresh before retrying.');
+      const savedItems=items.filter(item=>item.sheetStatus==='saved');
+      savedItems.forEach((item,index)=>{item.sheetRow=firstWrittenRow+index;});
+      items.filter(item=>item.sheetStatus==='same_batch').forEach(item=>{
+        item.sheetStatus='existing';item.sheetRow=item.pendingSource?.sheetRow||null;item.verified=!!item.sheetRow;
+        delete item.pendingSource;
+      });
+      const range=`Leads!A${firstWrittenRow}:O${lastWrittenRow}`;
 
       // Read the exact rows back. Michelle should never have to open the Sheet to check
       // whether the transfer worked; the app verifies first/last/phone itself.
       const verifyResp=await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(range)}`,{headers:{Authorization:`Bearer ${accessToken}`}});
       if(!verifyResp.ok){const e=await verifyResp.json().catch(()=>({}));throw new Error(e?.error?.message||`Saved, but verification read failed (HTTP ${verifyResp.status})`);}
       const verifiedRows=(await verifyResp.json()).values||[];
-      items.filter(item=>item.sheetStatus==='saved').forEach((item,index)=>{
+      savedItems.forEach((item,index)=>{
         const row=verifiedRows[index]||[];
         const actual=leadIdentityKey(row[firstCol],row[lastCol],row[phoneCol],row[addressCol],row[zipCol]);
         item.verified=actual===item.key;
@@ -6045,7 +6114,8 @@ async function saveFexLeads(containerId, btn, options={}) {
     }
 
     const savedN = rowsToWrite.length;
-    const outcome={savedN,items,verified:items.filter(x=>x.sheetStatus==='saved').every(x=>x.verified)};
+    const allRetained=items.length===leads.length&&items.every(item=>item.sheetStatus==='existing'||(item.sheetStatus==='saved'&&item.verified));
+    const outcome={savedN,items,verified:allRetained,allRetained};
     if(!options.quiet){
       btn.textContent = savedN ? `✓ Saved and verified ${savedN} lead${savedN>1?'s':''}` : 'Already saved';
       btn.style.background = 'var(--sage)';
